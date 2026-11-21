@@ -10,9 +10,9 @@ from tcal.model import Occurrence
 from tcal.ui.calgrid import by_day, month_weeks, occurrence_days, weekday_names
 from tcal.ui.keys import EVENT_BINDINGS
 from tcal.ui.messages import EventSelected
+from tcal.ui.timelayout import is_bar, layout_bars
 from tcal.ui.widgets.base import join_lines
 from tcal.ui.widgets.day_cursor import DayCursorView
-from tcal.ui.widgets.timegrid import is_bar, layout_bars
 
 Chip = Occurrence | int | None  # an event, the count for "+N more", or an empty lane line
 Cells = list[list[Chip]]  # chip lines per day of a week

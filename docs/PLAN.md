@@ -297,3 +297,11 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   offset (no scrollbar), like the time grid. Title: the selected day's month. `selected` works
   with the app's e/x. The view switcher drops the tabs' padding when even the short title does
   not fit (5 tabs at 70 columns).
+
+### UI review notes (feat-revui)
+
+- **R1 Tidy-up (no behaviour change):** the time grid's pure geometry (`TimeScale`, `fit_scale`,
+  `pack_*`, `layout_blocks`/`layout_bars`, `is_bar`, `Block`/`Bar`) moved from
+  `widgets/timegrid.py` to `tcal/ui/timelayout.py` (the month view uses it too, like `calgrid.py`).
+  Views with an event cursor use `keys.EVENT_BINDINGS` (n/p → `action_cycle(step)`, ids unchanged),
+  `CalendarView.cursor_style()` and `base.join_lines()`; `app.calendar(id)` is the one lookup.
