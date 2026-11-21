@@ -363,3 +363,15 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   alarms (offset from start or absolute time; RELATED=END folded in), url)` from `raw`. The detail
   shows `#timezone` (event zone + its times, only when its UTC offset differs from local),
   `#url`, `#people`, `#alarms` ("Alert: 10 min before"; all-day: "1 day before at 09:00").
+
+### Visual polish (feat-g4, QA3 #15–#19, #21)
+
+- **G4 Schedule:** a red now line (`HH:MM ●───`) sits in today's group before the first timed
+  event starting after now (`build_rows(..., current)`, `schedule_view.now()` is the test seam;
+  redrawn each minute); today's ended events are dimmed. While the schedule is shown, a list
+  (re)start on an empty day moves `state.day` to the first day listed, so status/title match;
+  H onto empty days loads earlier days instead of showing the same list again. A day header is
+  never drawn on the last row. Time grid: titles word-wrap over the lines the time doesn't need
+  (`_wrap`); `▲/▼ N` markers move one row in off the cursor/now row. Month chips/bars end cut
+  titles with `…` (`widgets.base.fit`, shared with the grid). "Other calendars" is a rule with
+  the title at the border title's column (the failing-feed marker is QA3 #5, not here).
