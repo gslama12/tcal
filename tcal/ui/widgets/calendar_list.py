@@ -12,7 +12,8 @@ OTHER = "Other calendars"
 
 class CalendarList(TcalWidget, can_focus=True):
     """ "My calendars": one row per calendar, a checkbox in its color and its name;
-    subscribed feeds follow under an "Other calendars" heading (like Google).
+    subscribed feeds follow under an "Other calendars" heading (like Google), drawn
+    as a rule with the title where the border title stands.
 
     j/k move the cursor, space/enter or a click toggles the calendar's
     visibility via ``app.toggle_calendar`` (hidden ones are in
@@ -47,8 +48,12 @@ class CalendarList(TcalWidget, can_focus=True):
         rows = []
         calendars = iter(enumerate(self.ordered()))
         for line in self.lines():
-            if isinstance(line, str):
-                rows.append(Text(line, style=Style(color=p.foreground2)))
+            if isinstance(line, str):  # a blank, or the heading styled like the border title
+                rule = "─" * max(0, self.content_size.width - len(line) - 2) if line else ""
+                title = Style(color=p.foreground1)
+                rows.append(
+                    Text.assemble((f" {line} " if line else "", title), (rule, p.background3))
+                )
                 continue
             i, cal = next(calendars)
             shown = cal.id not in hidden

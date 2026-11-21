@@ -150,7 +150,11 @@ async def test_calendar_list_other_calendars(store: Store) -> None:
     async with app.run_test(size=(120, 40)) as pilot:
         cal_list = app.query_one(CalendarList)
         lines = str(cal_list.render()).splitlines()
-        assert lines[-3:] == ["", "Other calendars", "■ Holidays AT"]
+        assert lines[-3] == "" and lines[-1] == "■ Holidays AT"
+        assert (
+            lines[-2].startswith(" Other calendars ─")
+            and len(lines[-2]) == cal_list.content_size.width
+        )
         day = TODAY + timedelta(days=1)
 
         # Click the feed's row (below the heading) to hide it; the heading does nothing.
