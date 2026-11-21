@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 import icalendar
 from conftest import TODAY
 from textual.containers import VerticalScroll
-from textual.widgets import Static
+from textual.widgets import Button, Static
 
 from tcal import ics
 from tcal.model import Calendar, Occurrence
@@ -19,6 +19,7 @@ from tcal.ui.messages import EventSelected
 from tcal.ui.screens import event_detail
 from tcal.ui.screens.event_detail import (
     ConfirmDelete,
+    EditScope,
     EventDetail,
     alarm_text,
     describe_rrule,
@@ -261,3 +262,19 @@ def test_demo_has_an_invitation_an_alarm_and_another_zone(provider) -> None:
     assert invite.organizer == "Maria Lang" and len(invite.attendees) == 4 and invite.url
     assert ics.extras(events["Dentist"]).alarms == (ics.Alarm(timedelta(hours=-1)),)
     assert str(events["Call with New York"].start.tzinfo) == "America/New_York"
+
+
+async def test_scope_dialogs_name_the_instance_and_only_delete_is_red(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        app.query_one("#week", TimeGrid).select(find(app, "Standup")[0])
+        for key, dialog, question, variant in (
+            ("e", EditScope, "Edit “Standup” on Wed 18 Nov?", "primary"),
+            ("x", ConfirmDelete, "Delete “Standup” on Wed 18 Nov?", "error"),
+        ):
+            await pilot.press(key)
+            await pilot.pause()
+            assert isinstance(app.screen, dialog)
+            assert str(app.screen.query_one(Static).render()) == question
+            assert {b.variant for b in app.screen.query("#o, #s").results(Button)} == {variant}
+            await pilot.press("escape")

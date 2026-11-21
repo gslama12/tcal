@@ -19,6 +19,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
+from textual.widgets.button import ButtonVariant
 
 from tcal import ics, tz
 from tcal.model import Occurrence
@@ -190,6 +191,7 @@ class ScopeDialog(ModalScreen[Scope | None]):
         self.recurring = is_recurring(occ)
 
     verb = ""
+    variant: ButtonVariant = "primary"  # of the choice buttons
 
     @property
     def scopes(self) -> list[tuple[str, Scope, str]]:
@@ -198,10 +200,12 @@ class ScopeDialog(ModalScreen[Scope | None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Static(Text(f"{self.verb} “{self.occ.summary}”?", style="bold"))
+            on = f" on {self.occ.start.astimezone(tz.local_zone()):%a %-d %b}"
+            question = f"{self.verb} “{self.occ.summary}”{on if self.recurring else ''}?"
+            yield Static(Text(question, style="bold"))
             with Horizontal(id="buttons"):
                 for key, _, label in self.scopes:
-                    yield Button(label, id=key, variant="error")
+                    yield Button(label, id=key, variant=self.variant)
                 yield Button("Cancel (n)", id="n")
 
     def action_choose(self, key: str) -> None:
@@ -218,6 +222,7 @@ class ConfirmDelete(ScopeDialog):
     """y = delete (o = this event, s = all events for repeating events), n/esc = cancel."""
 
     verb = "Delete"
+    variant = "error"
 
     @property
     def scopes(self) -> list[tuple[str, Scope, str]]:
