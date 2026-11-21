@@ -27,6 +27,7 @@ from tcal.config import Config, ConfigError, load_config
 from tcal.model import Calendar, Occurrence
 from tcal.source import EventSource
 from tcal.ui.keys import binding, keymap
+from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.state import AppState, ViewMode
 from tcal.ui.theme import PALETTES, make_theme
 from tcal.ui.widgets.calendar_list import CalendarList
@@ -186,3 +187,9 @@ class TcalApp(App[None]):
 
     def action_help(self) -> None:
         self.notify("Help: not implemented yet")
+
+    def on_event_selected(self, message: EventSelected) -> None:
+        self.notify(f"Open {message.occurrence.summary!r}: not implemented yet")
+
+    def on_new_event_requested(self, message: NewEventRequested) -> None:
+        self.notify(f"New event at {message.start:%a %H:%M}: not implemented yet")
