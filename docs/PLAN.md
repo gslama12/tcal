@@ -63,7 +63,10 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
   event edits the whole series (v1); deleting offers "this occurrence" (EXDATE) or "series".
 - **D5 Time grid:** default visible range 06:30–24:00; zoom changes rows-per-hour (1..8),
   default chosen to fit the terminal height; `day_start`/`day_end` configurable; scrolling
-  can reveal 00:00–06:30.
+  can reveal 00:00–06:30. The fitted default is a *fractional* rows-per-hour so that
+  `day_start`..`day_end` fills the grid exactly (no empty rows below 24:00); its slot times are
+  shown rounded up to 5 min. +/- step through the whole zoom levels; zoom-out stops before the
+  day gets shorter than the grid.
 - **D6 Keybinds:** vim-like, all configurable in `[keys]` of config.toml (action -> list of keys).
   Defaults: h/j/k/l move cursor, H/L prev/next period, t today, d/w/m/y switch view,
   +/- (or ctrl+up/down) zoom, enter open, a/o new event, e edit, x/dd delete, g goto date,

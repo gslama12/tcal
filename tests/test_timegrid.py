@@ -72,7 +72,9 @@ async def test_week_renders_header_strip_events_and_now_line(app: RecordingApp) 
             assert title in body
         assert "Early run" not in body  # 05:45: above the default range
         now_line = next(line for line in lines if line.startswith("10:15"))
-        assert "━" in now_line
+        xs = grid._columns()
+        assert "─" in now_line[xs[2] : xs[3]]  # today = Wed, clipped to its column
+        assert now_line[xs[3]] == "│" and "─" not in now_line[xs[3] :]
         assert grid.rows_per_hour == 2
         assert grid.cursor_time == at("10:00")  # starts at "now", snapped to the slot
         screenshot = app.export_screenshot()
@@ -109,7 +111,10 @@ async def test_zoom(app: RecordingApp) -> None:
         await pilot.press("plus")
         assert grid.rows_per_hour == 3
         assert grid.cursor_time == at("10:00")  # zoom keeps the cursor time
-        await pilot.press("minus", "minus", "minus")
+        await pilot.press("minus", "minus")
+        assert grid.rows_per_hour == 2  # 1 row/hour would leave empty rows below 24:00
+        await pilot.resize_terminal(140, 30)
+        await pilot.press("minus")
         assert grid.rows_per_hour == 1
         await pilot.press("minus")
         assert grid.rows_per_hour == 1  # lowest zoom
@@ -121,12 +126,38 @@ async def test_auto_zoom_follows_resize(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         grid = app.query_one(WeekView)
         assert grid.rows_per_hour == 2
-        await pilot.resize_terminal(140, 30)
+        for height in (30, 55, 70):
+            await pilot.resize_terminal(140, height)
+            await pilot.pause()
+            # exactly 06:30..24:00: the first grid row starts at 06:30, the last ends at 24:00
+            assert grid.scale.minute_of(grid._top_row()) == 6 * 60 + 30
+            assert grid._top_row() + grid._grid_height() == grid.scale.total_rows
+        await pilot.resize_terminal(140, 12)
         await pilot.pause()
-        assert grid.rows_per_hour == 1
-        await pilot.resize_terminal(140, 70)
-        await pilot.pause()
-        assert grid.rows_per_hour == 3
+        assert grid.rows_per_hour == 1  # too small: smallest zoom, 06:30 row on top
+        assert grid.scale.row_of(6 * 60 + 30) == grid._top_row()
+
+
+async def test_headers_share_one_format(store: Store) -> None:
+    for width, label in ((200, "Wednesday 18"), (140, "Wed 18"), (90, "18")):
+        app = RecordingApp(StoreSource(store), load_config(), today=TODAY)
+        async with app.run_test(size=(width, 45)):
+            line = text(app.query_one(WeekView))[0]
+            assert label in line
+            assert "," not in line  # "Monday, 16 November" only when every column fits it
+
+
+async def test_cursor_slot_has_accent_background(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        grid = app.query_one(WeekView)
+        await pilot.press("j")  # 10:30, an empty slot on Wed
+        row = grid._cursor_row() - grid._top_row() + grid._header_height()
+        backgrounds = {
+            seg.style.bgcolor.name
+            for seg in grid.render_line(row)
+            if seg.style and seg.style.bgcolor and not seg.text.strip()
+        }
+        assert app.palette.primary.lower() in backgrounds
 
 
 async def test_cycle_events_and_open(app: RecordingApp) -> None:
