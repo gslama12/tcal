@@ -47,7 +47,39 @@ TOKYO_NIGHT = Palette(
     primary="#7AA2F7", secondary="#BB9AF7",
 )  # fmt: skip
 
-PALETTES = {"nord": NORD, "tokyo-night": TOKYO_NIGHT}
+GRUVBOX = Palette(
+    background1="#282828", background2="#32302F", background3="#504945",
+    foreground1="#BDAE93", foreground2="#D5C4A1", foreground3="#EBDBB2",
+    red="#FB4934", orange="#FE8019", yellow="#FABD2F", green="#B8BB26",
+    blue="#83A598", purple="#D3869B", magenta="#D3869B", cyan="#8EC07C",
+    primary="#FABD2F", secondary="#83A598",
+)  # fmt: skip
+
+CATPPUCCIN_MOCHA = Palette(
+    background1="#1E1E2E", background2="#181825", background3="#313244",
+    foreground1="#A6ADC8", foreground2="#BAC2DE", foreground3="#CDD6F4",
+    red="#F38BA8", orange="#FAB387", yellow="#F9E2AF", green="#A6E3A1",
+    blue="#89B4FA", purple="#CBA6F7", magenta="#F5C2E7", cyan="#94E2D5",
+    primary="#CBA6F7", secondary="#89B4FA",
+)  # fmt: skip
+
+# Light: background1 is the lightest, foreground3 the darkest.
+CATPPUCCIN_LATTE = Palette(
+    background1="#EFF1F5", background2="#E6E9EF", background3="#CCD0DA",
+    foreground1="#6C6F85", foreground2="#5C5F77", foreground3="#4C4F69",
+    red="#D20F39", orange="#FE640B", yellow="#DF8E1D", green="#40A02B",
+    blue="#1E66F5", purple="#8839EF", magenta="#EA76CB", cyan="#179299",
+    primary="#1E66F5", secondary="#8839EF",
+)  # fmt: skip
+
+PALETTES = {
+    "nord": NORD,
+    "gruvbox": GRUVBOX,
+    "catppuccin-mocha": CATPPUCCIN_MOCHA,
+    "tokyo-night": TOKYO_NIGHT,
+    "catppuccin-latte": CATPPUCCIN_LATTE,
+}
+LIGHT = {"catppuccin-latte"}
 
 
 def make_theme(name: str) -> Theme:
@@ -66,6 +98,6 @@ def make_theme(name: str) -> Theme:
         error=p.red,
         warning=p.yellow,
         success=p.green,
-        dark=True,
+        dark=name not in LIGHT,
         variables=variables,
     )

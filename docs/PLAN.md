@@ -267,3 +267,10 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   per keypress (headless 160x50). `TcalApp` caches `source.occurrences` per day range until
   `refresh_data()` (so any data change must go through it); `recurrence._rules` caches parsed
   rule sets (dateutil `cache=True`) keyed by (rrule, start, exdates).
+
+- **C1 Config UX:** `tcal config path|edit|check`. `edit` seeds a missing file with
+  `commented_defaults()` (every default line commented out). Key conflicts
+  (`config.key_conflicts`: one key in several actions' lists) are not errors — they warn
+  via `check` (non-zero exit) and a startup toast. Themes: nord, gruvbox,
+  catppuccin-mocha, tokyo-night, catppuccin-latte (light: `theme.LIGHT`, `dark=False`);
+  timegrid `_readable` now sorts its text colors by luminance so light palettes work.

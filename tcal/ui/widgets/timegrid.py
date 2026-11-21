@@ -292,10 +292,16 @@ def _style(fg: str, bg: str, bold: bool = False, reverse: bool = False) -> Style
     return Style(color=fg, bgcolor=bg, bold=bold, reverse=reverse)
 
 
-def _readable(hex_color: str, dark: str, light: str) -> str:
-    """``dark`` or ``light`` text, whichever reads better on ``hex_color``."""
+def _readable(hex_color: str, *colors: str) -> str:
+    """The darkest or lightest of ``colors``, whichever reads better on ``hex_color``
+    (order-independent, so light themes work too)."""
+    dark, *_, light = sorted(colors, key=_luma)
+    return dark if _luma(hex_color) > 0.6 else light
+
+
+def _luma(hex_color: str) -> float:
     r, g, b = (int(hex_color.lstrip("#")[i : i + 2], 16) for i in (0, 2, 4))
-    return dark if (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 else light
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255
 
 
 class _Canvas:

@@ -66,7 +66,16 @@ The password is looked up in this order:
 
 The config file is `~/.config/tcal/config.toml` (`$XDG_CONFIG_HOME/tcal/config.toml`, also on
 macOS). It is merged over the [defaults](tcal/default_config.toml), so only write what you
-change. Unknown settings are reported as errors. Example:
+change. Unknown settings are reported as errors.
+
+```sh
+tcal config path     # where the file is ($TCAL_HOME/config.toml if set)
+tcal config edit     # open it in $EDITOR; created with all defaults commented out
+tcal config check    # validate: unknown settings/actions, bad values, unknown theme,
+                     # keys bound to more than one action
+```
+
+Example:
 
 ```toml
 [view]
@@ -80,7 +89,7 @@ default_view = "month"     # day | week | month | year
 interval = 120             # seconds between background syncs
 
 [theme]
-name = "tokyo-night"       # nord | tokyo-night
+name = "tokyo-night"       # nord | gruvbox | catppuccin-mocha | tokyo-night | catppuccin-latte
 
 [keys]                     # action = list of keys; replaces that action's defaults
 quit = ["q", "ctrl+q"]
@@ -89,7 +98,12 @@ next_event = ["ctrl+n"]
 ```
 
 Keys use Textual key names: `"plus"`, `"minus"`, `"slash"`, `"question_mark"`, `"ctrl+up"`,
-`"H"` for shift+h, …
+`"H"` for shift+h, … Overriding an action replaces its whole key list. A key bound to two
+actions only triggers one of them: tcal shows a warning at startup and `tcal config check`
+lists the conflicts.
+
+Themes: `nord` (default), `gruvbox`, `catppuccin-mocha`, `tokyo-night` (dark) and
+`catppuccin-latte` (light).
 
 ### Default keys
 

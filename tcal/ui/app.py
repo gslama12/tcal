@@ -34,7 +34,7 @@ from textual.reactive import reactive
 from textual.widgets import ContentSwitcher
 from textual.worker import Worker, WorkerState
 
-from tcal.config import Config, ConfigError, load_config
+from tcal.config import Config, ConfigError, describe_conflicts, key_conflicts, load_config
 from tcal.model import Calendar, Event, Occurrence
 from tcal.source import EventSource
 from tcal.sync import SyncSummary
@@ -303,6 +303,14 @@ class TcalApp(App[None]):
 
     def on_mount(self) -> None:
         self.set_keymap(keymap(self.config))
+        conflicts = describe_conflicts(key_conflicts(self.config))
+        if conflicts:
+            self.notify(
+                "\n".join(conflicts) + "\n(see `tcal config check`)",
+                title="Conflicting key bindings",
+                severity="warning",
+                timeout=15,
+            )
         self.focus_view()
         if self._sync is not None:
             self.request_sync()

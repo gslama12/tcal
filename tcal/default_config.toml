@@ -20,7 +20,7 @@ past_months = 3                        # sync window before today
 future_months = 12                     # sync window after today
 
 [theme]
-name = "nord"                          # nord | tokyo-night
+name = "nord"                          # nord | gruvbox | catppuccin-mocha | tokyo-night | catppuccin-latte (light)
 
 # action -> list of keys (Textual key names: "plus", "minus", "slash",
 # "question_mark", "ctrl+up", "H" for shift+h, ...). Overriding an action
