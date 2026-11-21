@@ -176,8 +176,8 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **E1 Detail:** `screens/event_detail.py`: `EventDetail(occ)` opens from `on_event_selected`
   (e edit, x delete, esc/q close). `confirm_delete(app, occ)` is the one delete flow (also the
   app's `x`): read-only calendar -> notice; recurring -> o "this occurrence" / s "whole series".
-- **E2 Selection:** `app.selected_occurrence()` = the focused day/week grid's `selected`;
-  month/year views have no event cursor, so `x`/`e` there say "No event selected" / do nothing.
+- **E2 Selection:** `app.selected_occurrence()` = the focused day/week grid's or month view's
+  `selected`; the year view has no event cursor, so `x`/`e` there say "No event selected".
 - **E3 Edit hook:** `TcalApp.edit_occurrence(occ)` opens the event form (`edit_event(occ.event)`);
   both `e` in the detail modal and the app's `edit_event` action call it.
 
@@ -193,3 +193,13 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **F3 Keys:** new `[keys] save = ["ctrl+s"]` (priority) and `cancel = ["escape"]`;
   `binding()` gained `priority`. Test apps that record view messages call `prevent_default()`
   so TcalApp's handlers don't also open the form.
+
+### Month view notes (QA #9–#11)
+
+- **M1 Cursor:** `MonthView.selected` (n/p over the shown chips of the displayed month's days,
+  click on a chip); enter opens it, else the Day view; h/j/k/l drop it. Events hidden behind
+  "+N more" and days of the adjacent months are skipped (selecting those would switch month).
+- **M2 Layout:** `layout_week` packs all-day / ≥24 h events (`timegrid.is_bar`/`layout_bars`)
+  into lanes per week row → one bar across the cells and borders, title once (◂/▸ when it
+  continues); timed chips follow the day's bars. Week rows share the full height (rows differ
+  by ≤1 line); spare columns go to the weekend; no side padding so separators meet the border.
