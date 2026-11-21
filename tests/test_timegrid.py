@@ -1,19 +1,13 @@
 """Day/Week time grid in the running app: navigation, zoom, selection, mouse."""
 
 from datetime import datetime, time, timedelta
-from pathlib import Path
 
 import pytest
-from conftest import TODAY
+from conftest import TODAY, RecordingApp
 from textual import events
-from textual.message import Message
 
-from tcal.config import load_config
-from tcal.source import StoreSource
 from tcal.store import Store
-from tcal.ui import app as app_module
 from tcal.ui import messages, timepaint
-from tcal.ui.app import TcalApp
 from tcal.ui.state import ViewMode
 from tcal.ui.timelayout import sub_columns
 from tcal.ui.widgets import timegrid
@@ -23,32 +17,9 @@ NOW = datetime.combine(TODAY, time(10, 15)).astimezone()
 SIZE = (140, 45)  # week grid: 4 header rows + 35 rows -> 06:30-24:00 at 2 rows/hour
 
 
-class RecordingApp(TcalApp):
-    """TcalApp that records the messages the views post for CRUD."""
-
-    CSS_PATH = str(Path(app_module.__file__).parent / "styles.tcss")
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.posted: list[Message] = []
-
-    def on_event_selected(self, message: messages.EventSelected) -> None:
-        message.prevent_default()  # record only, not TcalApp's handler (opens a screen)
-        self.posted.append(message)
-
-    def on_new_event_requested(self, message: messages.NewEventRequested) -> None:
-        self.posted.append(message)
-        message.prevent_default()
-
-
 @pytest.fixture(autouse=True)
 def fixed_now(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(timegrid, "now", lambda: NOW)
-
-
-@pytest.fixture
-def app(store: Store) -> RecordingApp:
-    return RecordingApp(StoreSource(store), load_config(), today=TODAY)
 
 
 def text(grid: TimeGrid) -> list[str]:
@@ -142,7 +113,7 @@ async def test_auto_zoom_follows_resize(app: RecordingApp) -> None:
 
 async def test_headers_share_one_format(store: Store) -> None:
     for width, label in ((200, "Wednesday 18"), (140, "Wed 18"), (90, "18")):
-        app = RecordingApp(StoreSource(store), load_config(), today=TODAY)
+        app = RecordingApp(store)
         async with app.run_test(size=(width, 45)):
             line = text(app.query_one(WeekView))[0]
             assert label in line

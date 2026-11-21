@@ -44,9 +44,9 @@ def from_ics(
 
 def to_ics(event: Event) -> str:
     """The resource text with ``event`` written into it (a new resource if no ``raw``)."""
-    cal = icalendar.Calendar.from_ical(event.raw) if event.raw else _new_calendar()
+    cal = icalendar.Calendar.from_ical(event.raw) if event.raw else new_calendar()
     if not any(str(c.get("UID")) == event.uid for c in cal.walk("VEVENT")):
-        cal = _new_calendar()  # raw of another event (e.g. a copy with a new uid)
+        cal = new_calendar()  # raw of another event (e.g. a copy with a new uid)
     comp = _find(cal, event.uid, event.recurrence_id)
     if comp is None:
         comp = icalendar.Event()
@@ -137,7 +137,8 @@ def without_instance(event: Event, recurrence_id: datetime) -> Event:
     return replace(event, raw=cal.to_ical().decode())
 
 
-def _new_calendar() -> icalendar.Calendar:
+def new_calendar() -> icalendar.Calendar:
+    """An empty VCALENDAR with tcal's PRODID."""
     cal = icalendar.Calendar()
     cal.add("PRODID", PRODID)
     cal.add("VERSION", "2.0")

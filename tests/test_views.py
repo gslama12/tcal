@@ -1,16 +1,7 @@
 from datetime import date, timedelta
-from pathlib import Path
 
-import pytest
-from conftest import TODAY
-from textual.message import Message
+from conftest import TODAY, RecordingApp
 
-from tcal.config import load_config
-from tcal.source import StoreSource
-from tcal.store import Store
-from tcal.ui import app as app_module
-from tcal.ui.app import TcalApp
-from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.state import ViewMode
 from tcal.ui.widgets.calendar_list import CalendarList
 from tcal.ui.widgets.minical import MiniCal
@@ -19,29 +10,6 @@ from tcal.ui.widgets.view_switcher import ViewSwitcher
 from tcal.ui.widgets.year_view import Layout, YearView
 
 SIZE = (120, 40)
-
-
-class RecordingApp(TcalApp):
-    """TcalApp that records the messages the views post for the CRUD screens."""
-
-    CSS_PATH = str(Path(app_module.__file__).parent / "styles.tcss")
-
-    def __init__(self, store: Store) -> None:
-        super().__init__(StoreSource(store), load_config(), today=TODAY)
-        self.posted: list[Message] = []
-
-    def on_new_event_requested(self, message: NewEventRequested) -> None:
-        self.posted.append(message)
-        message.prevent_default()  # not TcalApp's handler (it opens a screen)
-
-    def on_event_selected(self, message: EventSelected) -> None:
-        message.prevent_default()  # record only, not TcalApp's handler (opens a screen)
-        self.posted.append(message)
-
-
-@pytest.fixture
-def app(store: Store) -> RecordingApp:
-    return RecordingApp(store)
 
 
 def content(widget, x: int, y: int) -> tuple[int, int]:
@@ -102,42 +70,6 @@ async def test_view_switcher_clicks(app: RecordingApp) -> None:
         assert app.state.day == date(2026, 12, 18)
         await pilot.click(ViewSwitcher, offset=content(switcher, x_of("Today"), 0))
         assert app.state.day == date.today()
-
-
-async def test_month_view_navigation(app: RecordingApp) -> None:
-    async with app.run_test(size=SIZE) as pilot:
-        await pilot.press("m", "l", "j")
-        assert app.state.day == TODAY + timedelta(days=8)
-        await pilot.press("k", "k", "k", "k")
-        assert app.state.day == date(2026, 10, 29)  # crossed into October
-        assert app.state.title() == "October 2026"
-        await pilot.press("enter")
-        assert app.state.view is ViewMode.DAY
-
-
-async def test_month_view_clicks(app: RecordingApp) -> None:
-    async with app.run_test(size=SIZE) as pilot:
-        await pilot.press("m")
-        await pilot.pause()
-        view = app.query_one(MonthView)
-        grid = view.grid()
-        week = next(i for i, w in enumerate(grid.weeks) if TODAY in w)
-        x = grid.xs[TODAY.weekday()] + 1
-        y = grid.tops[week] + grid.rule  # TODAY's day-number line
-        first_chip = view.week_cells(grid)[week][TODAY.weekday()][0]
-        await pilot.click(MonthView, offset=content(view, x, y + 1))
-        assert isinstance(app.posted[-1], EventSelected)
-        assert app.posted[-1].occurrence == first_chip
-        await pilot.click(MonthView, offset=content(view, x, y))
-        assert app.state.view is ViewMode.DAY and app.state.day == TODAY
-
-
-async def test_month_view_shows_more(app: RecordingApp) -> None:
-    async with app.run_test(size=SIZE) as pilot:
-        await pilot.press("m")
-        await pilot.pause()
-        rendered = str(app.query_one(MonthView).render())
-        assert "Conference" in rendered and "more" in rendered and "Nov 1" in rendered
 
 
 async def test_year_view(app: RecordingApp) -> None:

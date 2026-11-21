@@ -22,6 +22,7 @@ from textual.widgets import Button, Static
 
 from tcal import ics
 from tcal.model import Occurrence
+from tcal.ui.calgrid import WEEKDAY_NAMES
 from tcal.ui.keys import binding
 
 if TYPE_CHECKING:
@@ -30,15 +31,7 @@ if TYPE_CHECKING:
 Scope = Literal["occurrence", "series"]
 
 FREQS = {"DAILY": "day", "WEEKLY": "week", "MONTHLY": "month", "YEARLY": "year"}
-WEEKDAYS = {
-    "MO": "Mon",
-    "TU": "Tue",
-    "WE": "Wed",
-    "TH": "Thu",
-    "FR": "Fri",
-    "SA": "Sat",
-    "SU": "Sun",
-}
+WEEKDAYS = dict(zip(("MO", "TU", "WE", "TH", "FR", "SA", "SU"), WEEKDAY_NAMES, strict=True))
 
 
 def is_recurring(occ: Occurrence) -> bool:

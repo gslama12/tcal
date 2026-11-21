@@ -20,8 +20,8 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
+from tcal.dates import parse_date
 from tcal.tz import local_midnight, local_zone
-from tcal.ui.screens.goto import parse_date
 
 DEFAULT_DURATION = timedelta(hours=1)
 _GAP = "\0"  # stands for a removed piece, so a date is never read across it

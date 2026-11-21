@@ -46,7 +46,7 @@ tcal/
       event_form.py  modal: create/edit (title, calendar, date, start, end, all-day, location, notes)
       event_detail.py  modal: view event, e=edit, d=delete
       help.py        keybinding list
-      goto.py        jump to date (natural-ish parsing: "tomorrow", "2026-12-24", "fri")
+      goto.py        jump to date prompt (parser: `tcal/dates.py`)
       search.py      search events in cache
 tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
 ```
@@ -417,3 +417,9 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - `timegrid.py` split: drawing → `ui/timepaint.py` (pure, takes a `GridFrame` snapshot),
   `Canvas` → `ui/canvas.py`, `sub_columns` → `timelayout.py`; its private `_readable`/`_luma`
   duplicated `theme.text_on`/`luma` and are gone. Behaviour unchanged.
+
+### Tidy-up (feat-rev2b)
+
+- `tcal/dates.py` holds the pure date helpers: `parse_date` (was in `ui/screens/goto.py`),
+  `add_months` (was in `ui/state.py`; still importable from there), `WEEKDAYS`/`MONTHS`
+  (also used by `config.py`). Quick add and the event form no longer import a UI screen.

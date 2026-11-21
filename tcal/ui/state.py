@@ -5,10 +5,11 @@
 data refresh (sync) with an unchanged state, so it is the one redraw signal.
 """
 
-from calendar import monthrange
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from enum import StrEnum
+
+from tcal.dates import add_months
 
 
 class ViewMode(StrEnum):
@@ -79,10 +80,3 @@ class AppState:
                 return f"{start:%b %Y}" if short else f"{start:%B %Y}"
             case ViewMode.YEAR:
                 return str(start.year)
-
-
-def add_months(d: date, n: int) -> date:
-    """``d`` moved by ``n`` months, clamping the day (31 Jan + 1 -> 28/29 Feb)."""
-    month0 = d.month - 1 + n
-    year, month = d.year + month0 // 12, month0 % 12 + 1
-    return date(year, month, min(d.day, monthrange(year, month)[1]))

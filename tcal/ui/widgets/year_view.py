@@ -6,8 +6,8 @@ from rich.text import Text
 from textual import events
 from textual.app import RenderResult
 
+from tcal.dates import add_months
 from tcal.ui.calgrid import by_day
-from tcal.ui.state import add_months
 from tcal.ui.widgets.base import join_lines
 from tcal.ui.widgets.day_cursor import DayCursorView
 from tcal.ui.widgets.minimonth import WEEKS, WIDTH, day_at, mini_month

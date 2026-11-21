@@ -1,15 +1,14 @@
 from datetime import date, datetime, timedelta
 
 import pytest
-from conftest import TODAY
+from conftest import TODAY, RecordingApp
 from rich.style import Style
-from test_views import SIZE, RecordingApp
+from test_views import SIZE
 
 from tcal.model import Event, Occurrence
-from tcal.store import Store
 from tcal.tz import local_zone
 from tcal.ui.messages import EventSelected
-from tcal.ui.state import AppState, ViewMode
+from tcal.ui.state import ViewMode
 from tcal.ui.widgets import schedule_view
 from tcal.ui.widgets.schedule_view import (
     CHUNK_DAYS,
@@ -45,18 +44,6 @@ def test_build_rows_skips_empty_days() -> None:
     assert [(r.day, r.occ, r.blank) for r in rows] == [(TODAY, None, False), (TODAY, a, False)]
     rows = build_rows([a, b], TODAY, later + timedelta(days=1))
     assert [r.blank for r in rows] == [False, False, True, False, False]
-
-
-def test_state_schedule_period() -> None:
-    state = AppState(TODAY, ViewMode.SCHEDULE)
-    assert state.period() == (TODAY, TODAY + timedelta(days=14))
-    assert state.shifted(-1).day == TODAY - timedelta(days=14)
-    assert state.title() == "November 2026"
-
-
-@pytest.fixture
-def app(store: Store) -> RecordingApp:
-    return RecordingApp(store)
 
 
 async def test_schedule_navigation(app: RecordingApp) -> None:

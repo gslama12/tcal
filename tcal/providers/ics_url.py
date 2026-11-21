@@ -76,9 +76,7 @@ def split_feed(feed: icalendar.Calendar) -> list[str]:
         if not uid or "DTSTART" not in vevent:
             continue
         if uid not in by_uid:
-            cal = by_uid[uid] = icalendar.Calendar()
-            cal.add("PRODID", ics.PRODID)
-            cal.add("VERSION", "2.0")
+            cal = by_uid[uid] = ics.new_calendar()
             for zone in zones:
                 cal.add_component(zone)
         by_uid[uid].add_component(vevent)

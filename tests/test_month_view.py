@@ -1,21 +1,15 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
-import pytest
-from conftest import TODAY
-from test_views import SIZE, RecordingApp
+from conftest import TODAY, RecordingApp
+from test_views import SIZE, content
 
 from tcal.model import Event, Occurrence
-from tcal.store import Store
 from tcal.ui.calgrid import month_weeks, occurrence_days
 from tcal.ui.messages import EventSelected, NewEventRequested
+from tcal.ui.state import ViewMode
 from tcal.ui.widgets.month_view import Grid, MonthView, layout_week
 
 WEEK = month_weeks(2026, 11, 0)[3]  # Mon 16 .. Sun 22 Nov 2026
-
-
-@pytest.fixture
-def app(store: Store) -> RecordingApp:
-    return RecordingApp(store)
 
 
 def occ(summary: str, start: datetime, end: datetime, all_day: bool = False) -> Occurrence:
@@ -59,6 +53,7 @@ async def test_multi_day_bar_title_once(app: RecordingApp) -> None:
         await pilot.pause()
         rendered = str(app.query_one(MonthView).render())
         assert rendered.count("Conference") == 1  # Wed..Fri drawn as one bar
+        assert "more" in rendered and "Nov 1" in rendered
 
 
 async def test_month_event_cursor(app: RecordingApp) -> None:
@@ -128,3 +123,31 @@ async def test_cut_chips_end_with_an_ellipsis(app: RecordingApp) -> None:
         rendered = str(app.query_one(MonthView).render())
         assert "09:00 Stand…" in rendered and "Call m…" in rendered
         assert "09:00 Standu│" not in rendered and "Standup│" not in rendered
+
+
+async def test_month_view_navigation(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("m", "l", "j")
+        assert app.state.day == TODAY + timedelta(days=8)
+        await pilot.press("k", "k", "k", "k")
+        assert app.state.day == date(2026, 10, 29)  # crossed into October
+        assert app.state.title() == "October 2026"
+        await pilot.press("enter")
+        assert app.state.view is ViewMode.DAY
+
+
+async def test_month_view_clicks(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("m")
+        await pilot.pause()
+        view = app.query_one(MonthView)
+        grid = view.grid()
+        week = next(i for i, w in enumerate(grid.weeks) if TODAY in w)
+        x = grid.xs[TODAY.weekday()] + 1
+        y = grid.tops[week] + grid.rule  # TODAY's day-number line
+        first_chip = view.week_cells(grid)[week][TODAY.weekday()][0]
+        await pilot.click(MonthView, offset=content(view, x, y + 1))
+        assert isinstance(app.posted[-1], EventSelected)
+        assert app.posted[-1].occurrence == first_chip
+        await pilot.click(MonthView, offset=content(view, x, y))
+        assert app.state.view is ViewMode.DAY and app.state.day == TODAY
