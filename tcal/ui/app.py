@@ -36,6 +36,7 @@ from textual.worker import Worker, WorkerState
 
 from tcal.config import Config, default_data, describe_conflicts, key_conflicts, load_config
 from tcal.model import Calendar, Event, Occurrence
+from tcal.quickadd import QuickAdd
 from tcal.source import EventSource
 from tcal.sync import SyncSummary
 from tcal.tz import local_midnight, local_zone
@@ -51,6 +52,7 @@ from tcal.ui.screens.event_detail import (
 from tcal.ui.screens.event_form import EventForm
 from tcal.ui.screens.goto import GotoScreen
 from tcal.ui.screens.help import HelpScreen
+from tcal.ui.screens.quick_add import Mode, QuickAddScreen
 from tcal.ui.screens.search import SearchScreen
 from tcal.ui.state import AppState, ViewMode, add_months
 from tcal.ui.sync_status import SyncStatus
@@ -82,6 +84,7 @@ class TcalApp(App[None]):
         binding("view_year", "Year", action="set_view('year')"),
         binding("view_schedule", "Schedule", action="set_view('schedule')"),
         binding("new_event", "New event"),
+        binding("quick_add", "Quick add"),
         binding("edit_event", "Edit event"),
         binding("delete_event", "Delete event"),
         binding("undo", "Undo"),
@@ -215,6 +218,29 @@ class TcalApp(App[None]):
             return
         draft = Event(f"{uuid4()}@tcal", writable[0].id, "", begin, end, all_day)
         self.push_screen(EventForm(draft, writable, new=True), self._form_done)
+
+    def quick_add(self) -> None:
+        """One-line quick add: enter saves the parsed event, tab opens it in the form."""
+        writable = self._writable()
+        if not writable:
+            self.notify("No writable calendar", severity="warning")
+            return
+
+        def done(result: tuple[Mode, QuickAdd] | None) -> None:
+            if result is None:
+                return
+            mode, q = result
+            calendar = next((c for c in writable if c.name == q.calendar), writable[0])
+            event = Event(
+                f"{uuid4()}@tcal", calendar.id, q.summary, q.start, q.end, q.all_day, q.location
+            )
+            if mode == "save":
+                self.save_event(event)
+                self.notify(f"Added “{event.summary}”")
+            else:
+                self.push_screen(EventForm(event, writable, new=True), self._form_done)
+
+        self.push_screen(QuickAddScreen(date.today(), [c.name for c in writable]), done)
 
     def edit_event(self, event: Event) -> None:
         """Open the form for an existing event (a master edits the whole series)."""
@@ -407,6 +433,9 @@ class TcalApp(App[None]):
 
     def action_undo(self) -> None:
         self.undo()
+
+    def action_quick_add(self) -> None:
+        self.quick_add()
 
     def action_goto_date(self) -> None:
         def jump(day: date | None) -> None:

@@ -44,6 +44,7 @@ open = ["enter"]
 next_event = ["n"]                     # day/week/month/schedule: cycle through events in view
 prev_event = ["p"]
 new_event = ["a", "o"]
+quick_add = ["A"]                      # one line: "Lunch fri 12-13 @Cafe #work"
 edit_event = ["e"]
 delete_event = ["x"]
 undo = ["u"]                           # restore the last deleted event

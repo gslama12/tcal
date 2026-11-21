@@ -42,6 +42,7 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
     "Events": [
         ("open", "Open event / new event in empty slot"),
         ("new_event", "New event"),
+        ("quick_add", "Quick add (one line)"),
         ("edit_event", "Edit event"),
         ("delete_event", "Delete event"),
         ("undo", "Undo delete"),

@@ -324,3 +324,14 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   `widgets/timegrid.py` to `tcal/ui/timelayout.py` (the month view uses it too, like `calgrid.py`).
   Views with an event cursor use `keys.EVENT_BINDINGS` (n/p → `action_cycle(step)`, ids unchanged),
   `CalendarView.cursor_style()` and `base.join_lines()`; `app.calendar(id)` is the one lookup.
+
+### Quick add notes (feat-quickadd)
+
+- **QA1 Quick add:** `[keys] quick_add = ["A"]` → `screens/quick_add.QuickAddScreen` (one line +
+  live preview; enter saves via `app.save_event`, tab opens `EventForm` prefilled, esc cancels).
+  Pure parser `tcal/quickadd.parse(text, today, calendar_names) -> QuickAdd` reuses goto's
+  `parse_date` (any run of ≤ 4 words, optional "on"; relative to the real today like G1).
+  Pieces are taken out in order `#cal` (name prefix, writable calendars only; unknown → error in
+  the preview) → `for 2h|90m|1h30` → time range / single time (needs `:mm`, am/pm or `h`; a bare
+  "12" stays text) → date; what's left after a word-initial `@` is the location (so `@` may come
+  before the date/time). No time → all-day (a duration is then ignored); end ≤ start → next day.
