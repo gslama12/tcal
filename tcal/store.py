@@ -248,13 +248,10 @@ class Store:
 
     def _queue(self, kind: OpKind, event: Event) -> None:
         """Queue a create/update; a later edit supersedes an unpushed one (keeping 'create')."""
-        kinds = {
-            r["kind"]
-            for r in self.db.execute(
-                "SELECT kind FROM ops WHERE uid = ? AND kind != 'delete'", (event.uid,)
-            )
-        }
-        if "create" in kinds:
+        unpushed = self.db.execute(
+            "SELECT 1 FROM ops WHERE uid = ? AND kind = 'create'", (event.uid,)
+        ).fetchone()
+        if unpushed:
             kind = "create"
         self.db.execute("DELETE FROM ops WHERE uid = ? AND kind != 'delete'", (event.uid,))
         self.db.execute(

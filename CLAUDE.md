@@ -8,7 +8,7 @@ Architecture and decisions: `docs/PLAN.md` (the contract — record deviations t
 ```sh
 uv sync
 uv run tcal --demo             # TUI with sample data (FakeProvider)
-TCAL_HOME=.tcal uv run tcal    # isolated instance: config/data/cache under ./.tcal
+TCAL_HOME=.tcal uv run tcal    # isolated instance: config and data under ./.tcal
 uv run pytest -q
 uv run ruff check && uv run ruff format --check && uv run mypy
 ```

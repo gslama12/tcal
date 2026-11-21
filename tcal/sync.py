@@ -73,12 +73,10 @@ class SyncEngine:
                 if op.kind == "delete":
                     self.provider.delete_event(event)
                 else:
-                    push = (
-                        self.provider.create_event
-                        if op.kind == "create"
-                        else self.provider.update_event
-                    )
-                    done = push(event)
+                    if op.kind == "create":
+                        done = self.provider.create_event(event)
+                    else:
+                        done = self.provider.update_event(event)
                     self.store.set_remote(event.uid, done.href, done.etag)
                 summary.pushed += 1
             except ConflictError as e:

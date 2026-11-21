@@ -6,8 +6,7 @@ one self-contained directory::
 
     $TCAL_HOME/
         config.toml
-        data/       # tcal.db (SQLite cache)
-        cache/
+        data/       # tcal.db (SQLite cache), demo.db
 
 Lookups happen at call time, never at import time, so tests can point
 ``TCAL_HOME`` at a tmp dir.
@@ -41,12 +40,6 @@ def data_dir() -> Path:
     if home := instance_home():
         return home / "data"
     return _xdg("XDG_DATA_HOME", ".local/share")
-
-
-def cache_dir() -> Path:
-    if home := instance_home():
-        return home / "cache"
-    return _xdg("XDG_CACHE_HOME", ".cache")
 
 
 def database_file() -> Path:
