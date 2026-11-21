@@ -1,10 +1,12 @@
 from datetime import date, datetime, timedelta
 
+import pytest
+
 from tcal.model import Event, Occurrence
 from tcal.ui.calgrid import by_day, month_weeks, occurrence_days, weekday_names
 from tcal.ui.widgets.minimonth import day_at
 from tcal.ui.widgets.month_view import Grid, chips
-from tcal.ui.widgets.year_view import BLOCK_HEIGHT, Layout
+from tcal.ui.widgets.year_view import Layout
 
 
 def occ(start: datetime, end: datetime, all_day: bool = False, name: str = "e") -> Occurrence:
@@ -81,11 +83,44 @@ def test_minimonth_day_at() -> None:
     assert day_at(nov, 0, 6, 0) is None  # weekday initials
 
 
-def test_year_layout() -> None:
-    wide = Layout.build(88, 40, month=10)
-    assert wide.cols == 4 and wide.y0 >= 0
-    assert wide.at(*wide.origin(10)) == (10, 0, 0)
-    narrow = Layout.build(46, 17, month=10)  # 2 columns, only 2 rows fit
-    assert narrow.cols == 2
-    assert narrow.origin(10)[1] == BLOCK_HEIGHT  # November's row is on screen
-    assert narrow.origin(0)[1] < 0  # January scrolled away
+def test_minimonth_day_at_scaled() -> None:
+    nov = date(2026, 11, 1)
+    assert day_at(nov, 0, 6 * 5, 1, cell=5, row_height=2) == date(2026, 11, 1)
+    assert day_at(nov, 0, 2 * 5 + 3, 8, cell=5, row_height=2) == date(2026, 11, 18)
+    assert day_at(nov, 0, 0, 13, cell=5, row_height=2) is None
+
+
+@pytest.mark.parametrize(
+    ("size", "grid"),
+    [((88, 30), (4, 3)), ((66, 40), (3, 4)), ((46, 60), (2, 6)), ((170, 50), (4, 3))],
+)
+def test_year_layout_fits_all_months(size: tuple[int, int], grid: tuple[int, int]) -> None:
+    width, height = size
+    layout = Layout.build(width, height)
+    assert (layout.cols, layout.rows) == grid
+    assert layout.header and layout.vgap >= 1  # a blank line between rows
+    assert_fits(layout, width, height)
+
+
+def test_year_layout_compact() -> None:
+    """Too small for any full grid: weekday initials go first, then the blank lines."""
+    lean = Layout.build(66, 31)
+    assert not lean.header and lean.vgap == 1
+    assert_fits(lean, 66, 31)
+    tight = Layout.build(68, 29)  # QA: 100x35 terminal
+    assert not tight.header and tight.vgap == 0
+    assert_fits(tight, 68, 29)
+
+
+def assert_fits(layout: Layout, width: int, height: int) -> None:
+    for index in range(12):
+        x, y = layout.origin(index)  # all 12 months on screen
+        assert x >= 0 and x + layout.width <= width and y >= 0 and y + layout.height <= height
+        assert layout.at(x, y) == (index, 0, 0)
+
+
+def test_year_layout_scales_up() -> None:
+    big = Layout.build(170, 50)
+    assert big.cell > 3 and big.row_height > 1
+    used = big.cols * big.width + (big.cols - 1) * big.hgap
+    assert used > 170 * 0.8

@@ -24,15 +24,25 @@ def mini_month(
     event_days: Collection[date],
     marked: Collection[date] = (),
     adjacent: bool = True,
+    cell: int = 3,
+    row_height: int = 1,
 ) -> list[Text]:
     """``HEIGHT`` lines of ``WIDTH`` cells for the month of ``month``.
+
+    ``cell`` (day width + 1 space, ≥ 3) and ``row_height`` (lines per week, the
+    number on the first) scale it up to ``7 * cell - 1`` x ``1 + 6 * row_height``.
 
     Today is accented, ``selected`` highlighted, days with events underlined,
     ``marked`` days (e.g. the shown week) get a subtle background and days of
     the adjacent months are dimmed (or left blank with ``adjacent=False``).
     """
     p = palette
-    header = Text(" ".join(f"{name[0]:>2}" for name in weekday_names(week_start)))
+    pad = cell - 1
+
+    def label(text: str) -> str:
+        return f"{text:>2}".center(pad)
+
+    header = Text(" ".join(label(name[0]) for name in weekday_names(week_start)))
     header.stylize(Style(color=p.foreground1, dim=True))
     lines = [header]
     for week in month_weeks(month.year, month.month, week_start, WEEKS):
@@ -55,15 +65,18 @@ def mini_month(
                 )
                 line.append(" ", style=gap)
             if day.month == month.month or adjacent:
-                line.append(f"{day.day:>2}", style=style)
+                line.append(label(str(day.day)), style=style)
             else:
-                line.append("  ")
+                line.append(" " * pad)
         lines.append(line)
+        lines.extend(Text() for _ in range(row_height - 1))
     return lines
 
 
-def day_at(month: date, week_start: int, x: int, y: int) -> date | None:
-    """The day under offset (x, y) of a ``mini_month`` block, or None."""
-    if not (1 <= y < HEIGHT and 0 <= x < WIDTH):
+def day_at(
+    month: date, week_start: int, x: int, y: int, cell: int = 3, row_height: int = 1
+) -> date | None:
+    """The day under offset (x, y) of a ``mini_month`` block (same scale), or None."""
+    if not (1 <= y < 1 + WEEKS * row_height and 0 <= x < 7 * cell - 1):
         return None
-    return month_weeks(month.year, month.month, week_start, WEEKS)[y - 1][x // 3]
+    return month_weeks(month.year, month.month, week_start, WEEKS)[(y - 1) // row_height][x // cell]

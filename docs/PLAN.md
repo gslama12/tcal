@@ -140,6 +140,10 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **V3 Keys:** new `[keys] toggle_calendar = ["space"]` (calendar list; enter works too).
   MiniCal reuses `cursor_*`/`prev_period`/`next_period`/`open` with its own cursor that
   only commits on enter (click commits at once).
+- **V5 Year layout (QA #7):** all 12 months always shown, as 4x3 / 3x4 / 2x6 — whichever
+  gives the largest day cells; cells scale up (`mini_month(cell=, row_height=)`) and the gaps
+  spread to fill the panel, with ≥ 1 blank line between rows. If no grid fits (e.g. 100x35),
+  the weekday initials are dropped first, then the blank lines (no scrolling).
 - **V4 Titles:** kept the scaffold's `AppState.title()` format ("16 – 22 November 2026").
 
 ### Time grid notes (package 3)
