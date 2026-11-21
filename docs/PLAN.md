@@ -324,3 +324,15 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   `widgets/timegrid.py` to `tcal/ui/timelayout.py` (the month view uses it too, like `calgrid.py`).
   Views with an event cursor use `keys.EVENT_BINDINGS` (n/p → `action_cycle(step)`, ids unchanged),
   `CalendarView.cursor_style()` and `base.join_lines()`; `app.calendar(id)` is the one lookup.
+
+### Clipboard & moving (feat-yank)
+
+- **Y1 Keys:** `yank` (y), `paste` (p, P: same action), `duplicate` (D), `move_down/up` (ctrl+j/k,
+  ±15 min, timed events in a time grid only) and `move_left/right` (ctrl+h/l, ±1 day, any view
+  with a selection). To free y/p: **`view_year` is now `Y`, `prev_event` is `N`** (vim's n/N).
+- **Y2 Behaviour:** `tcal/ui/clipboard.py` (`copy_at`, `shifted`). A paste/duplicate is a new
+  one-off event (no RRULE/overrides) keeping the duration, in the source calendar or, if that is
+  read-only, the first writable one; paste goes to the time grid's cursor slot, else the selected
+  day at the event's time of day. Moves check `check_writable`; a series asks `MoveScope`
+  (o this event = `instance_of` shifted / s all events = master shifted, EXDATEs along; existing
+  overrides keep their RECURRENCE-IDs). The copy / moved event stays selected (`_select_moved`).

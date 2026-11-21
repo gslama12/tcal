@@ -142,20 +142,20 @@ async def test_month_view_shows_more(app: RecordingApp) -> None:
 
 async def test_year_view(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        await pilot.press("y", "j", "l")
+        await pilot.press("Y", "j", "l")
         assert app.state.day == TODAY + timedelta(days=8)
         view = app.query_one(YearView)
         layout = Layout.build(*view.content_size)
         x, y = layout.origin(2)  # March title
         await pilot.click(YearView, offset=content(view, x + 1, y))
         assert app.state.view is ViewMode.MONTH and app.state.day == date(2026, 3, 26)
-        await pilot.press("y", "enter")
+        await pilot.press("Y", "enter")
         assert app.state.view is ViewMode.DAY and app.state.day == date(2026, 3, 26)
 
 
 async def test_screenshot_sanity(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        for key, expected in [("m", "Conference"), ("y", "December")]:
+        for key, expected in [("m", "Conference"), ("Y", "December")]:
             await pilot.press(key)
             await pilot.pause()
             svg = app.export_screenshot().replace("&#160;", " ")
@@ -164,7 +164,7 @@ async def test_screenshot_sanity(app: RecordingApp) -> None:
 
 async def test_year_view_compact_click(app: RecordingApp) -> None:
     async with app.run_test(size=(100, 35)) as pilot:
-        await pilot.press("b", "y")  # show the auto-hidden sidebar: a small year view
+        await pilot.press("b", "Y")  # show the auto-hidden sidebar: a small year view
         view = app.query_one(YearView)
         layout = Layout.build(*view.content_size)
         assert not layout.header  # QA #7: too small for weekday initials

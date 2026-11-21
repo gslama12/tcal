@@ -154,6 +154,12 @@ class EditScope(ScopeDialog):
         return [("o", "occurrence", "This event (o)"), ("s", "series", "All events (s)")]
 
 
+class MoveScope(EditScope):
+    """Before moving an instance of a series (ctrl+h/j/k/l): o = this event, s = all events."""
+
+    verb = "Move"
+
+
 class EventDetail(ModalScreen[None]):
     """Read-only view of one occurrence."""
 
