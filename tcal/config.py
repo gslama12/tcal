@@ -4,6 +4,8 @@ Every section is a frozen dataclass so callers get typed, validated values.
 Unknown sections, settings or key actions are errors (they are usually typos).
 """
 
+import json
+import re
 import tomllib
 from dataclasses import dataclass, fields
 from importlib import resources
@@ -133,3 +135,23 @@ def _build(data: dict[str, Any]) -> Config:
         theme=_section(ThemeConfig, data["theme"]),
         keys=dict(keys),
     )
+
+
+def save_apple_id(apple_id: str, path: Path | None = None) -> None:
+    """Set ``[account] apple_id`` in the user config, keeping the rest of the file."""
+    path = path or paths.config_file()
+    text = path.read_text() if path.exists() else ""
+    line = f"apple_id = {json.dumps(apple_id)}"  # a JSON string is a valid TOML basic string
+    header = re.search(r"^\[account\][ \t]*$", text, re.MULTILINE)
+    if header is None:
+        text = text.rstrip("\n") + ("\n\n" if text.strip() else "") + f"[account]\n{line}\n"
+    else:
+        start = header.end()
+        nxt = re.compile(r"^\[", re.MULTILINE).search(text, start)
+        end = nxt.start() if nxt else len(text)
+        body, count = re.subn(
+            r"^apple_id[ \t]*=.*$", lambda _: line, text[start:end], count=1, flags=re.MULTILINE
+        )
+        text = text[:start] + (body if count else f"\n{line}{body}") + text[end:]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)

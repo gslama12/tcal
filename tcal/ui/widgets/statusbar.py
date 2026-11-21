@@ -11,4 +11,5 @@ class StatusBar(TcalWidget):
     """
 
     def render(self) -> RenderResult:
-        return f" {self.tcal.state.view.value.upper()}  ·  ? help  q quit"
+        sync = f"  ·  {self.tcal.sync_status}" if self.tcal.sync_status else ""
+        return f" {self.tcal.state.view.value.upper()}{sync}  ·  ? help  q quit"

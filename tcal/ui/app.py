@@ -12,20 +12,24 @@ Layout::
 
 Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
-``set_view()``, ``toggle_calendar()``, ``refresh_data()``.
+``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``save_event()``,
+``delete_event()``, ``request_sync()``, ``sync_status``.
 """
 
+from collections.abc import Callable
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.widgets import ContentSwitcher
+from textual.worker import Worker, WorkerState
 
 from tcal.config import Config, ConfigError, load_config
-from tcal.model import Calendar, Occurrence
+from tcal.model import Calendar, Event, Occurrence
 from tcal.source import EventSource
+from tcal.sync import SyncSummary
 from tcal.ui.keys import binding, keymap
 from tcal.ui.state import AppState, ViewMode
 from tcal.ui.theme import PALETTES, make_theme
@@ -68,10 +72,18 @@ class TcalApp(App[None]):
     )
 
     def __init__(
-        self, source: EventSource, config: Config | None = None, today: date | None = None
+        self,
+        source: EventSource,
+        config: Config | None = None,
+        today: date | None = None,
+        sync: Callable[[], SyncSummary] | None = None,
     ) -> None:
+        """``sync`` runs one sync (in a worker thread): on startup, every
+        ``[sync] interval``, on the sync key and after edits. None = no syncing."""
         super().__init__()
         self.source = source
+        self._sync = sync
+        self.sync_status = ""  # shown in the status bar
         self.config = config or load_config()
         name = self.config.theme.name
         if name not in PALETTES:
@@ -111,6 +123,41 @@ class TcalApp(App[None]):
         self._calendars = self.source.calendars()
         self.state = self.state
 
+    def save_event(self, event: Event) -> Event:
+        """Create/update an event in the cache, redraw, and push it in the background."""
+        saved = self.source.save_event(event)
+        self.refresh_data()
+        self.request_sync()
+        return saved
+
+    def delete_event(self, uid: str, occurrence: datetime | None = None) -> None:
+        """Delete an event, or one instance of a series: pass the instance's
+        original start (``occ.event.recurrence_id or occ.start``)."""
+        self.source.delete_event(uid, occurrence)
+        self.refresh_data()
+        self.request_sync()
+
+    # ----- sync -----------------------------------------------------------
+
+    def request_sync(self) -> None:
+        """Start a background sync unless one is running (or syncing is off)."""
+        if self._sync is None or any(w.group == "sync" and w.is_running for w in self.workers):
+            return
+        self.sync_status = "syncing…"
+        self.refresh_data()
+        self.run_worker(self._sync, group="sync", thread=True, exit_on_error=False)
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        worker = event.worker
+        if worker.group != "sync" or event.state not in (WorkerState.SUCCESS, WorkerState.ERROR):
+            return
+        if event.state is WorkerState.SUCCESS:
+            self.sync_status = f"synced {datetime.now():%H:%M}"
+        else:
+            self.sync_status = f"sync failed: {worker.error}"
+            self.log.error(f"sync failed: {worker.error!r}")
+        self.refresh_data()
+
     # ----- state changes --------------------------------------------------
 
     def select_date(self, day: date) -> None:
@@ -146,6 +193,9 @@ class TcalApp(App[None]):
     def on_mount(self) -> None:
         self.set_keymap(keymap(self.config))
         self.query_one(f"#{self.state.view.value}").focus()
+        if self._sync is not None:
+            self.request_sync()
+            self.set_interval(self.config.sync.interval, self.request_sync)
 
     # ----- actions --------------------------------------------------------
 
@@ -182,7 +232,9 @@ class TcalApp(App[None]):
         self.notify("Search: not implemented yet")
 
     def action_sync(self) -> None:
-        self.notify("Sync: not implemented yet")
+        if self._sync is None:
+            self.notify("Syncing is off (no account)")
+        self.request_sync()
 
     def action_help(self) -> None:
         self.notify("Help: not implemented yet")

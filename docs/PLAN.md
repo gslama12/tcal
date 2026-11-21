@@ -73,6 +73,10 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
 - **D8 Look:** todooit palette & rounded borders, focused pane gets accent border,
   event blocks use calendar color as background.
 - **D9 Multi-provider later:** everything goes through `providers/base.py`.
+- **D1a (backend):** recurrence is expanded with python-dateutil (`recurrence.py`), not
+  recurring-ical-events (dropped): the cache holds parsed `Event`s, so expanding them
+  directly avoids re-parsing iCalendar on every redraw. Series expand in the wall-clock
+  time of their own zone (DST-safe); UNTIL in any form is handled.
 
 ## Work packages (≈ issues)
 
@@ -98,3 +102,25 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   `refresh_data()` re-fires watchers. The selected day field is `day`.
 - **S4 Time:** model datetimes are tz-aware; all-day events are local midnight → next
   midnight (exclusive). `Occurrence` times are converted to local time.
+
+### Backend notes (package 2)
+
+- **B1 Model:** `Event` gained `exdates` (deleted instances) and `raw` (the resource's
+  iCalendar text, `compare=False`). `ics.to_ics` writes edits into `raw`, so alarms,
+  attendees and server-side overrides survive. Times are stored with their named zone;
+  `tcal/tz.py` gives the DST-aware local zone (`local_zone()`, `local_midnight()`).
+- **B2 Data seam:** `ProviderSource` is gone; `StoreSource(Store)` reads the SQLite cache +
+  `recurrence.expand`. `EventSource` gained `save_event` / `delete_event(uid, occurrence)`.
+  UI code calls `app.save_event(event)` / `app.delete_event(uid, occurrence)` (cache write,
+  redraw, background push). For one instance of a series pass its original start:
+  `occ.event.recurrence_id or occ.start`.
+- **B3 Sync:** `TcalApp(source, config, sync=sync_job(...))` runs the job in a thread worker on
+  start, every `[sync] interval`, on `r` and after edits; `app.sync_status` is shown in the
+  status bar. The worker opens its own `Store` connection (SQLite WAL).
+  Conflicts (412 / etag mismatch): server wins, logged, op dropped. Other errors abort the
+  sync and keep the queue. Moving an event to another calendar = delete there + create here.
+- **B4 iCloud:** `ICloudProvider` (plain WebDAV on the caldav client; discovery by caldav).
+  Calendar ids are collection URLs; VTODO-only lists are skipped; read-only from
+  `current-user-privilege-set`; order from Apple's `calendar-order`.
+- **B5 Demo:** `tcal --demo` syncs a `FakeProvider` into `data/demo.db` (recreated each run)
+  through the same store/sync path; the real cache is never touched.

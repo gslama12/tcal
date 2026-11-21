@@ -1,11 +1,17 @@
+from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 
+import keyring
 import pytest
+from keyring.backend import KeyringBackend
 
+from tcal import paths
 from tcal.config import Config, load_config
 from tcal.providers.fake import FakeProvider
-from tcal.source import ProviderSource
+from tcal.source import StoreSource
+from tcal.store import Store
+from tcal.sync import SyncEngine
 from tcal.ui.app import TcalApp
 
 TODAY = date(2026, 11, 18)  # a Wednesday
@@ -17,6 +23,33 @@ def tcal_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     home = tmp_path / "tcal-home"
     monkeypatch.setenv("TCAL_HOME", str(home))
     return home
+
+
+class MemoryKeyring(KeyringBackend):
+    priority = 1
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.passwords: dict[tuple[str, str], str] = {}
+
+    def get_password(self, service: str, username: str) -> str | None:
+        return self.passwords.get((service, username))
+
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self.passwords[(service, username)] = password
+
+    def delete_password(self, service: str, username: str) -> None:
+        self.passwords.pop((service, username), None)
+
+
+@pytest.fixture(autouse=True)
+def memory_keyring() -> Iterator[MemoryKeyring]:
+    """Never touch the real system keyring."""
+    previous = keyring.get_keyring()
+    backend = MemoryKeyring()
+    keyring.set_keyring(backend)
+    yield backend
+    keyring.set_keyring(previous)
 
 
 @pytest.fixture
@@ -37,8 +70,16 @@ def provider() -> FakeProvider:
 
 
 @pytest.fixture
-def make_app(provider: FakeProvider):
+def store(provider: FakeProvider, tcal_home: Path) -> Iterator[Store]:
+    """The SQLite cache in TCAL_HOME, synced once from ``provider``."""
+    with Store(paths.database_file()) as store:
+        SyncEngine(provider, store, today=TODAY).sync()
+        yield store
+
+
+@pytest.fixture
+def make_app(store: Store):
     def make(config: Config | None = None) -> TcalApp:
-        return TcalApp(ProviderSource(provider), config or load_config(), today=TODAY)
+        return TcalApp(StoreSource(store), config or load_config(), today=TODAY)
 
     return make

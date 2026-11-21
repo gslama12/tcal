@@ -51,3 +51,8 @@ def cache_dir() -> Path:
 
 def database_file() -> Path:
     return data_dir() / "tcal.db"
+
+
+def demo_database_file() -> Path:
+    """The throwaway cache of ``tcal --demo``, separate from the real one."""
+    return data_dir() / "demo.db"
