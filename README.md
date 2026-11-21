@@ -115,10 +115,12 @@ Themes: `nord` (default), `gruvbox`, `catppuccin-mocha`, `tokyo-night` (dark) an
 | `cursor_left` / `cursor_down` / `cursor_up` / `cursor_right` | `h` `j` `k` `l`, arrows | move the cursor |
 | `prev_period` / `next_period` | `H` / `L` | previous / next day, week, month or year |
 | `today` | `t` | jump to today |
-| `view_day` / `view_week` / `view_month` / `view_year` | `d` / `w` / `m` / `y` | switch view |
+| `view_day` / `view_week` / `view_month` / `view_year` | `d` / `w` / `m` / `Y` | switch view |
 | `zoom_in` / `zoom_out` | `+` `ctrl+up` / `-` `ctrl+down` | time-grid zoom |
 | `open` | `enter` | open event / day, or new event on an empty slot |
-| `next_event` / `prev_event` | `n` / `p` | cycle through events in view (day/week) |
+| `next_event` / `prev_event` | `n` / `N` | cycle through events in view (day/week) |
+| `yank` / `paste` / `duplicate` | `y` / `p` `P` / `D` | copy event, paste at cursor slot or day, copy to next day |
+| `move_down` / `move_up` / `move_left` / `move_right` | `ctrl+j` / `ctrl+k` / `ctrl+h` / `ctrl+l` | move event ±15 min (day/week) / ±1 day |
 | `new_event` | `a` `o` | new event |
 | `edit_event` | `e` | edit selected event |
 | `delete_event` | `x` | delete selected event |
