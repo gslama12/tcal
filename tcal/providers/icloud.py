@@ -92,34 +92,36 @@ class ICloudProvider:
         home = self.home_url
         response = _call("PROPFIND", lambda: self.client.propfind(home, PROPFIND_CALENDARS, 1))
         _check(response, "PROPFIND", home, ok=(207,))
-        found: list[tuple[int, int, Calendar]] = []
-        for resp in response.tree.iterfind("d:response", NS):
-            prop = _props(resp)
-            if prop.find("d:resourcetype/c:calendar", NS) is None:
-                continue  # the home itself, inbox/outbox, notifications, subscriptions
-            comps = {
-                c.get("name")
-                for c in prop.iterfind("c:supported-calendar-component-set/c:comp", NS)
-            }
-            if comps and "VEVENT" not in comps:
-                continue  # reminders lists
-            href = self._url(resp.findtext("d:href", "", NS))
-            privileges = {
-                p.tag for p in prop.iterfind("d:current-user-privilege-set/d:privilege/*", NS)
-            }
-            calendar = Calendar(
-                id=href,
-                name=(prop.findtext("d:displayname", "", NS) or "").strip()
-                or href.rstrip("/").rsplit("/", 1)[-1],
-                color=_color(prop.findtext("a:calendar-color", "", NS)),
-                readonly=bool(privileges) and not privileges & WRITE_PRIVILEGES,
-            )
-            order = (prop.findtext("a:calendar-order", "", NS) or "").strip()
-            found.append(
-                (0 if order.isdigit() else 1, int(order or 0) if order.isdigit() else 0, calendar)
-            )
-        found.sort(key=lambda t: (t[0], t[1]))  # stable: unordered ones keep server order
-        return [c for *_, c in found]
+        found = [
+            c for resp in response.tree.iterfind("d:response", NS) if (c := self._calendar(resp))
+        ]
+        found.sort(key=lambda c: c[0])  # stable: unordered ones keep server order
+        return [calendar for _, calendar in found]
+
+    def _calendar(self, resp: Any) -> tuple[tuple[int, int], Calendar] | None:
+        """(sort key from calendar-order, calendar) of a PROPFIND <response>, or None
+        for collections that aren't event calendars."""
+        prop = _props(resp)
+        if prop.find("d:resourcetype/c:calendar", NS) is None:
+            return None  # the home itself, inbox/outbox, notifications, subscriptions
+        comps = {
+            c.get("name") for c in prop.iterfind("c:supported-calendar-component-set/c:comp", NS)
+        }
+        if comps and "VEVENT" not in comps:
+            return None  # reminders lists
+        href = self._url(resp.findtext("d:href", "", NS))
+        privileges = {
+            p.tag for p in prop.iterfind("d:current-user-privilege-set/d:privilege/*", NS)
+        }
+        calendar = Calendar(
+            id=href,
+            name=(prop.findtext("d:displayname", "", NS) or "").strip()
+            or href.rstrip("/").rsplit("/", 1)[-1],
+            color=_color(prop.findtext("a:calendar-color", "", NS)),
+            readonly=bool(privileges) and not privileges & WRITE_PRIVILEGES,
+        )
+        order = (prop.findtext("a:calendar-order", "", NS) or "").strip()
+        return ((0, int(order)) if order.isdigit() else (1, 0)), calendar
 
     def fetch_events(self, calendar: Calendar, start: datetime, end: datetime) -> list[Event]:
         """Every resource with an instance in [start, end), queried one quarter at a time.
