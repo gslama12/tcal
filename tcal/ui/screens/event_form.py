@@ -28,10 +28,10 @@ from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import Button, Checkbox, Input, Label, Select, Static, TextArea
 
+from tcal import dates
 from tcal.model import Calendar, Event
 from tcal.tz import local_midnight, local_zone
 from tcal.ui.keys import binding
-from tcal.ui.screens import goto
 from tcal.ui.screens.event_detail import describe_rrule
 
 REPEATS: dict[str, str | None] = {  # choice -> RRULE
@@ -105,7 +105,7 @@ def repeat_of(rrule: str | None) -> str:
 
 def parse_date(text: str, field: str = "start_date", today: date | None = None) -> date:
     """A date in any form goto understands (relative to ``today``)."""
-    day = goto.parse_date(text, today or date.today())
+    day = dates.parse_date(text, today or date.today())
     if day is None:
         raise FormError(f"Not a date: {text!r} (e.g. 2026-12-24, fri, 24.12.)", field)
     return day

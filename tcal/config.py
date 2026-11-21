@@ -13,11 +13,11 @@ from pathlib import Path
 from typing import Any
 
 from tcal import paths
+from tcal.dates import WEEKDAYS
 
 VIEWS = ("day", "week", "month", "year", "schedule")
 SUBSCRIPTION = "subscription"  # [[subscription]]: a list of tables, not a section
 SUBSCRIPTION_COLOR = "#8FBCBB"
-WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
 
 class ConfigError(ValueError):

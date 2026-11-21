@@ -5,9 +5,10 @@ from rich.text import Text
 from textual import events
 from textual.app import RenderResult
 
+from tcal.dates import add_months
 from tcal.ui.calgrid import by_day, grid_start
 from tcal.ui.keys import binding
-from tcal.ui.state import AppState, ViewMode, add_months
+from tcal.ui.state import AppState, ViewMode
 from tcal.ui.widgets.base import TcalWidget
 from tcal.ui.widgets.minimonth import WEEKS, WIDTH, day_at, mini_month
 
