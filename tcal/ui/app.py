@@ -13,7 +13,7 @@ Layout::
 Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
 ``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``save_event()``,
-``delete_event()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``,
+``delete_event()``, ``undo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``,
 ``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event form),
 ``check_writable()``, ``focus_view()``.
 
@@ -29,6 +29,7 @@ from uuid import uuid4
 from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.keys import format_key
 from textual.reactive import reactive
 from textual.widgets import ContentSwitcher
 from textual.worker import Worker, WorkerState
@@ -80,6 +81,7 @@ class TcalApp(App[None]):
         binding("new_event", "New event"),
         binding("edit_event", "Edit event"),
         binding("delete_event", "Delete event"),
+        binding("undo", "Undo"),
         binding("goto_date", "Go to date"),
         binding("search", "Search"),
         binding("sync", "Sync"),
@@ -109,6 +111,7 @@ class TcalApp(App[None]):
         self._sync = sync
         self.sync_status = SyncStatus()  # shown in the status bar
         self._wide: bool | None = None  # terminal >= SIDEBAR_MIN_WIDTH, None before layout
+        self._undo: list[Event] = []  # rows of the last deleted event
         self.config = config or load_config()
         name = self.config.theme.name
         if name not in PALETTES:
@@ -157,8 +160,22 @@ class TcalApp(App[None]):
 
     def delete_event(self, uid: str, occurrence: datetime | None = None) -> None:
         """Delete an event, or one instance of a series: pass the instance's
-        original start (``occ.event.recurrence_id or occ.start``)."""
-        self.source.delete_event(uid, occurrence)
+        original start (``occ.event.recurrence_id or occ.start``). The undo key restores it."""
+        self._undo = self.source.delete_event(uid, occurrence)
+        self.refresh_data()
+        self.request_sync()
+        if self._undo:
+            undo = format_key(self.config.keys["undo"][0])
+            self.notify(f"Deleted “{self._undo[0].summary}” · {undo} undo")
+
+    def undo(self) -> None:
+        """Restore the last deleted event (once)."""
+        if not self._undo:
+            self.notify("Nothing to undo")
+            return
+        self.source.restore(self._undo)
+        self.notify(f"Restored “{self._undo[0].summary}”")
+        self._undo = []
         self.refresh_data()
         self.request_sync()
 
@@ -336,12 +353,15 @@ class TcalApp(App[None]):
         else:
             self.notify("No event selected")
 
+    def action_undo(self) -> None:
+        self.undo()
+
     def action_goto_date(self) -> None:
         def jump(day: date | None) -> None:
             if day is not None:
                 self.select_date(day)
 
-        self.push_screen(GotoScreen(self.state.day), jump)
+        self.push_screen(GotoScreen(date.today()), jump)
 
     def action_search(self) -> None:
         """Search the cached sync window; picking a result opens its day selected."""

@@ -6,7 +6,7 @@ from rich.table import Table
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import VerticalScroll
+from textual.containers import Vertical, VerticalScroll
 from textual.keys import format_key
 from textual.screen import ModalScreen
 from textual.widgets import Static
@@ -43,7 +43,12 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("new_event", "New event"),
         ("edit_event", "Edit event"),
         ("delete_event", "Delete event"),
+        ("undo", "Undo delete"),
         ("search", "Search events"),
+    ],
+    "Event form": [
+        ("save", "Save"),
+        ("cancel", "Cancel / close dialog"),
     ],
     "App": [
         ("sync", "Sync now"),
@@ -104,13 +109,12 @@ class HelpScreen(ModalScreen[None]):
         self.keys = keys
 
     def compose(self) -> ComposeResult:
-        with VerticalScroll(id="help-panel", can_focus=False):
-            yield KeyTable(self.keys)
-        down, up = (format_key(self.keys[a][0]) for a in ("cursor_down", "cursor_up"))
-        yield Static(f"{down}/{up} scroll  ·  esc close", id="help-hint")
-
-    def on_mount(self) -> None:
-        self.query_one("#help-panel").border_title = "Key Bindings"
+        with Vertical(id="help") as box:
+            box.border_title = "Key bindings"
+            with VerticalScroll(id="help-panel", can_focus=False):
+                yield KeyTable(self.keys)
+            down, up = (format_key(self.keys[a][0]) for a in ("cursor_down", "cursor_up"))
+            yield Static(f"{down}/{up} scroll · esc close", id="help-hint")
 
     def on_key(self, event: events.Key) -> None:
         # The modal owns every key: the app's bindings are for the panes behind it.

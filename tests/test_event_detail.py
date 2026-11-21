@@ -57,6 +57,11 @@ async def test_delete_single_event_from_detail(make_app) -> None:
         await pilot.press("x", "y")
         assert not find(app, "Dentist")
         assert not isinstance(app.screen, (ConfirmDelete, EventDetail))
+        assert any(str(n.message) == "Deleted “Dentist” · u undo" for n in app._notifications)
+        await pilot.press("u")
+        assert find(app, "Dentist")
+        await pilot.press("u")  # only once
+        assert any(str(n.message) == "Nothing to undo" for n in app._notifications)
 
 
 async def test_delete_one_occurrence_with_x_in_view(make_app) -> None:
@@ -80,8 +85,11 @@ async def test_delete_whole_series(make_app) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.post_message(EventSelected(find(app, "Standup")[0]))
         await pilot.pause()
+        before = len(find(app, "Standup", days=30))
         await pilot.press("x", "s")
         assert not find(app, "Standup", days=30)
+        await pilot.press("u")
+        assert len(find(app, "Standup", days=30)) == before
 
 
 async def test_readonly_calendar_cannot_delete(make_app) -> None:

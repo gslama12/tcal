@@ -31,8 +31,14 @@ class EventSource(Protocol):
         (``recurrence_id`` set); returns the stored event."""
         ...
 
-    def delete_event(self, uid: str, occurrence: datetime | None = None) -> None:
-        """Delete the event, or only the instance whose original start is ``occurrence``."""
+    def delete_event(self, uid: str, occurrence: datetime | None = None) -> list[Event]:
+        """Delete the event, or only the instance whose original start is ``occurrence``.
+
+        Returns what ``restore`` needs to undo it."""
+        ...
+
+    def restore(self, rows: list[Event]) -> None:
+        """Undo a ``delete_event`` with the value it returned."""
         ...
 
     def pending_count(self) -> int:
@@ -57,8 +63,11 @@ class StoreSource:
     def save_event(self, event: Event) -> Event:
         return self.store.save_event(event)
 
-    def delete_event(self, uid: str, occurrence: datetime | None = None) -> None:
-        self.store.delete_event(uid, occurrence)
+    def delete_event(self, uid: str, occurrence: datetime | None = None) -> list[Event]:
+        return self.store.delete_event(uid, occurrence)
+
+    def restore(self, rows: list[Event]) -> None:
+        self.store.restore(rows)
 
     def pending_count(self) -> int:
         return self.store.pending_count()

@@ -77,24 +77,26 @@ HelpScreen {
     align: center middle;
     background: $background1 70%;
 
-    & > #help-panel {
+    & > #help {
         width: 70;
         max-width: 90%;
         height: auto;
         max-height: 85%;
         background: $background2;
-        border: $border_type $secondary;
-        border-title-background: $primary;
-        border-title-color: $background1;
-        border-title-align: center;
+        border: $border_type $primary;
+        border-title-color: $foreground1;
         padding: 0 1;
+    }
+
+    #help-panel {
+        height: auto;
+        max-height: 100%;
         scrollbar-size-vertical: 1;
     }
 
-    & > #help-hint {
-        width: 70;
-        max-width: 90%;
-        color: $foreground1 60%;
+    #help-hint {
+        dock: bottom;
+        color: $foreground1;
         text-align: center;
     }
 }

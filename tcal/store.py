@@ -168,12 +168,18 @@ class Store:
             self._queue("create" if event.href is None else "update", event)
         return event
 
-    def delete_event(self, uid: str, occurrence: datetime | None = None) -> None:
+    def delete_event(self, uid: str, occurrence: datetime | None = None) -> list[Event]:
         """Delete a whole event, or with ``occurrence`` (an instance's original
-        start, i.e. its recurrence id) just that instance of a series (EXDATE)."""
+        start, i.e. its recurrence id) just that instance of a series (EXDATE).
+
+        Returns the event's rows as they were, for ``restore`` (undo)."""
+        rows = self.db.execute(
+            "SELECT * FROM events WHERE uid = ? ORDER BY recurrence_id", (uid,)
+        ).fetchall()
+        before = [_event(r) for r in rows]
         master = self.get_event(uid)
         if master is None:
-            return
+            return before
         if occurrence is not None and master.rrule:
             with self.db:
                 self.db.execute(
@@ -182,10 +188,36 @@ class Store:
                 )
                 master = ics.without_instance(master, occurrence)
                 self.save_event(replace(master, exdates=(*master.exdates, occurrence)))
-            return
+            return before
         with self.db:
             self.db.execute("DELETE FROM events WHERE uid = ?", (uid,))
             self._queue_delete(master)
+        return before
+
+    def restore(self, rows: list[Event]) -> None:
+        """Undo ``delete_event``: put back the rows it returned and queue the push.
+
+        The event keeps its server resource if that still exists (an unpushed
+        delete is cancelled; a deleted instance updates the series), otherwise
+        it is created again."""
+        if not rows:
+            return
+        master, *overrides = rows
+        with self.db:
+            unpushed = self.db.execute(
+                "DELETE FROM ops WHERE uid = ? AND kind = 'delete'", (master.uid,)
+            ).rowcount
+            current = self.get_event(master.uid)
+            if current is not None:
+                href, etag = current.href, current.etag
+            elif unpushed:
+                href, etag = master.href, master.etag
+            else:
+                href = etag = None
+            self.db.execute("DELETE FROM events WHERE uid = ?", (master.uid,))
+            for override in overrides:
+                self._put(override)
+            self.save_event(replace(master, href=href, etag=etag))
 
     def set_remote(self, uid: str, href: str | None, etag: str | None) -> None:
         """Record where the server stored ``uid`` after a push."""

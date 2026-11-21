@@ -85,7 +85,15 @@ async def test_goto_prompt_jumps(make_app) -> None:
         assert isinstance(app.screen, GotoScreen)
         await pilot.press(*"24.12.", "enter")
         assert not isinstance(app.screen, GotoScreen)
-        assert app.state.day == date(2026, 12, 24)
+        assert app.state.day == date(date.today().year, 12, 24)
+
+
+async def test_goto_weekday_is_relative_to_today_not_selected_day(make_app) -> None:
+    app = make_app()
+    async with app.run_test() as pilot:
+        app.select_date(date(2020, 2, 10))
+        await pilot.press("g", *"fri", "enter")
+        assert app.state.day == parse_date("fri", date.today())
 
 
 async def test_goto_prompt_keeps_open_on_bad_input_and_cancels(make_app) -> None:
