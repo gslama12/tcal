@@ -3,7 +3,7 @@ from datetime import datetime, time, timedelta
 
 import pytest
 from conftest import TODAY
-from textual.widgets import Input, Select
+from textual.widgets import Checkbox, Input, Select
 
 from tcal.model import Event
 from tcal.tz import local_midnight, local_zone
@@ -126,6 +126,9 @@ async def test_edit_key_on_selected_event_and_readonly(make_app) -> None:
         assert occ is not None
         await pilot.press("e")
         await pilot.pause()
+        if occ.event.rrule:
+            await pilot.press("s")  # all events
+            await pilot.pause()
         assert isinstance(app.screen, EventForm)
         assert app.screen.query_one("#title", Input).value == occ.summary
         await pilot.press("escape")
@@ -139,3 +142,65 @@ async def test_edit_key_on_selected_event_and_readonly(make_app) -> None:
         app.edit_event(holiday.event)
         await pilot.pause()
         assert not isinstance(app.screen, EventForm)
+        assert any(n.message == "Holidays is read-only" for n in app._notifications)
+
+
+def find(app, summary: str = "Standup", day=TODAY):
+    return next(o for o in app.occurrences(day, day + timedelta(1)) if o.summary == summary)
+
+
+async def test_edit_this_event_of_a_series_writes_an_override(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 50)) as pilot:
+        app.edit_occurrence(find(app))
+        await pilot.pause()
+        await pilot.press("o")  # this event
+        await pilot.pause()
+        form = app.screen
+        assert isinstance(form, EventForm) and form.query_one("#repeat").disabled
+        assert form.query_one("#start_date", Input).value == TODAY.isoformat()
+        await type_into(pilot, "#title", "Standup (late)")
+        await type_into(pilot, "#start_time", "11:00")
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        moved = find(app, "Standup (late)")
+        assert (moved.start, moved.end) == (at(11), at(11, 15))
+        assert moved.event.recurrence_id == at(9)
+        tomorrow = find(app, day=TODAY + timedelta(1))
+        assert tomorrow.start == at(9, day=TODAY + timedelta(1))
+        assert not any(o.summary == "Standup" for o in app.occurrences(TODAY, TODAY + timedelta(1)))
+        master = app.source.get_event(moved.event.uid)
+        assert master.rrule and "RECURRENCE-ID" in master.raw
+
+        app.edit_occurrence(moved)  # all events: the master, from an override
+        await pilot.pause()
+        await pilot.press("s")
+        await pilot.pause()
+        assert app.screen.query_one("#title", Input).value == "Standup"
+        assert not app.screen.query_one("#repeat").disabled
+
+
+async def test_error_clears_when_a_field_changes(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 50)) as pilot:
+        app.new_event(at(14))
+        await pilot.pause()
+        await pilot.press("ctrl+s")
+        error = app.screen.query_one("#error")
+        assert "Title is required" in str(error.render())
+        await pilot.press("V")
+        await pilot.pause()
+        assert str(error.render()) == ""
+
+
+@pytest.mark.parametrize("keys", [("m", "a"), ("y", "a"), ("c", "a")])
+async def test_new_event_key_is_timed_at_the_next_hour_off_the_grid(make_app, keys) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.press(*keys)
+        await pilot.pause()
+        form = app.screen
+        assert isinstance(form, EventForm) and not form.query_one("#all_day", Checkbox).value
+        hour = min(datetime.now().hour + 1, 23)
+        assert form.query_one("#start_date", Input).value == TODAY.isoformat()
+        assert form.query_one("#start_time", Input).value == f"{hour:02d}:00"

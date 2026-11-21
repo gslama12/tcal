@@ -22,8 +22,13 @@ class EventSource(Protocol):
         """Occurrences overlapping the local days [start, end), sorted by start."""
         ...
 
+    def get_event(self, uid: str) -> Event | None:
+        """The event (for a series: its master) with ``uid``."""
+        ...
+
     def save_event(self, event: Event) -> Event:
-        """Create or update (a series is edited as a whole); returns the stored event."""
+        """Create or update an event, a series' master or one overridden instance
+        (``recurrence_id`` set); returns the stored event."""
         ...
 
     def delete_event(self, uid: str, occurrence: datetime | None = None) -> None:
@@ -45,6 +50,9 @@ class StoreSource:
     def occurrences(self, start: date, end: date) -> list[Occurrence]:
         lo, hi = local_midnight(start), local_midnight(end)
         return expand(self.store.events_between(lo, hi), lo, hi)
+
+    def get_event(self, uid: str) -> Event | None:
+        return self.store.get_event(uid)
 
     def save_event(self, event: Event) -> Event:
         return self.store.save_event(event)

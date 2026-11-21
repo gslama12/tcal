@@ -59,8 +59,9 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
   No 2FA flow needed. Stored in system keyring via `tcal login`.
 - **D3 Offline-first:** UI only reads the SQLite cache; sync runs in the background and
   refreshes the UI on completion. Edits are written to cache + pending-op queue, then pushed.
-- **D4 Recurring events:** expanded at read time (recurrence.py). Editing a recurring
-  event edits the whole series (v1); deleting offers "this occurrence" (EXDATE) or "series".
+- **D4 Recurring events:** expanded at read time (recurrence.py). Editing or deleting an
+  instance asks "this event" (edit: an override VEVENT with RECURRENCE-ID; delete: EXDATE)
+  or "all events" (the series' master). See F4.
 - **D5 Time grid:** default visible range 06:30–24:00; zoom changes rows-per-hour (1..8),
   default chosen to fit the terminal height; `day_start`/`day_end` configurable; scrolling
   can reveal 00:00–06:30. The fitted default is a *fractional* rows-per-hour so that
@@ -193,3 +194,18 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **F3 Keys:** new `[keys] save = ["ctrl+s"]` (priority) and `cancel = ["escape"]`;
   `binding()` gained `priority`. Test apps that record view messages call `prevent_default()`
   so TcalApp's handlers don't also open the form.
+
+### Form fixes (QA #12, #16, #17, #22)
+
+- **F4 Edit scope:** `app.edit_occurrence(occ)` on a recurring event shows `EditScope`
+  (o this event / s all events; shares `ScopeDialog` with `ConfirmDelete`). "This event" edits
+  `app.instance_of(occ)` — the existing override, or the master copied with `recurrence_id` =
+  the instance start (in the master's zone), no RRULE/EXDATEs; `Store.save_event` writes it into
+  the resource. The form fixes repeat *and calendar* for an instance. "All events" edits the
+  master (new `EventSource.get_event(uid)`). `FakeProvider.fetch_events` now returns every
+  VEVENT of a resource (like CalDAV), so overrides survive a sync.
+- **F5 New event key:** off the time grids (month/year view, sidebar) `a` makes a 1 h timed
+  event at the next round hour (now + 1 h, max 23:00) on the selected day; in a day/week grid it
+  uses the cursor slot. `app.new_event(date)` (all-day) stays for callers.
+- **F6 Notices:** `app.check_writable(calendar_id)` is the one read-only check
+  ("<Calendar> is read-only"), used by edit and delete. Form errors clear on any field change.

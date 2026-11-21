@@ -3,7 +3,8 @@
 ``EventDetail(occ)``: e = edit (``app.edit_occurrence``), x = delete, esc/q = close.
 ``confirm_delete(app, occ)`` is the one delete flow, also used by the ``x`` key
 in the views: read-only calendars only get a notice; a recurring event asks
-"this occurrence" vs "whole series".
+"this occurrence" vs "whole series". ``EditScope`` asks the same before editing
+one instance of a series ("this event" vs "all events").
 """
 
 from datetime import date, timedelta
@@ -22,7 +23,7 @@ from tcal.ui.keys import binding
 if TYPE_CHECKING:
     from tcal.ui.app import TcalApp
 
-DeleteScope = Literal["occurrence", "series"]
+Scope = Literal["occurrence", "series"]
 
 FREQS = {"DAILY": "day", "WEEKLY": "week", "MONTHLY": "month", "YEARLY": "year"}
 WEEKDAYS = {
@@ -81,12 +82,10 @@ def recurrence_text(occ: Occurrence) -> str:
 
 def confirm_delete(app: "TcalApp", occ: Occurrence) -> None:
     """Ask, then delete ``occ`` (or its series) via ``app.delete_event``."""
-    calendar = next((c for c in app.calendars() if c.id == occ.calendar_id), None)
-    if calendar is not None and calendar.readonly:
-        app.notify(f"{calendar.name} is read-only", severity="warning")
+    if not app.check_writable(occ.calendar_id):
         return
 
-    def done(scope: DeleteScope | None) -> None:
+    def done(scope: Scope | None) -> None:
         if scope == "series":
             app.delete_event(occ.event.uid)
         elif scope == "occurrence":
@@ -95,8 +94,8 @@ def confirm_delete(app: "TcalApp", occ: Occurrence) -> None:
     app.push_screen(ConfirmDelete(occ), done)
 
 
-class ConfirmDelete(ModalScreen[DeleteScope | None]):
-    """y = delete (o = this occurrence, s = whole series for repeating events), n/esc = cancel."""
+class ScopeDialog(ModalScreen[Scope | None]):
+    """Asks a question about ``occ``; dismisses with the chosen ``Scope``, None on n/esc."""
 
     BINDINGS = [
         Binding(key, f"choose('{key}')", show=False) for key in ("y", "o", "s", "n", "escape")
@@ -107,16 +106,16 @@ class ConfirmDelete(ModalScreen[DeleteScope | None]):
         self.occ = occ
         self.recurring = is_recurring(occ)
 
+    verb = ""
+
     @property
-    def scopes(self) -> list[tuple[str, DeleteScope, str]]:
+    def scopes(self) -> list[tuple[str, Scope, str]]:
         """(key, result, button label) per choice."""
-        if self.recurring:
-            return [("o", "occurrence", "This occurrence (o)"), ("s", "series", "Whole series (s)")]
-        return [("y", "series", "Delete (y)")]
+        raise NotImplementedError
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Static(Text(f"Delete “{self.occ.summary}”?", style="bold"))
+            yield Static(Text(f"{self.verb} “{self.occ.summary}”?", style="bold"))
             with Horizontal(id="buttons"):
                 for key, _, label in self.scopes:
                     yield Button(label, id=key, variant="error")
@@ -130,6 +129,28 @@ class ConfirmDelete(ModalScreen[DeleteScope | None]):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self.action_choose(event.button.id or "n")
+
+
+class ConfirmDelete(ScopeDialog):
+    """y = delete (o = this occurrence, s = whole series for repeating events), n/esc = cancel."""
+
+    verb = "Delete"
+
+    @property
+    def scopes(self) -> list[tuple[str, Scope, str]]:
+        if self.recurring:
+            return [("o", "occurrence", "This occurrence (o)"), ("s", "series", "Whole series (s)")]
+        return [("y", "series", "Delete (y)")]
+
+
+class EditScope(ScopeDialog):
+    """Before editing an instance of a series: o = this event, s = all events, n/esc = cancel."""
+
+    verb = "Edit"
+
+    @property
+    def scopes(self) -> list[tuple[str, Scope, str]]:
+        return [("o", "occurrence", "This event (o)"), ("s", "series", "All events (s)")]
 
 
 class EventDetail(ModalScreen[None]):

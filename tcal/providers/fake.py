@@ -33,10 +33,12 @@ class FakeProvider:
         return list(self.calendars)
 
     def fetch_events(self, calendar: Calendar, start: datetime, end: datetime) -> list[Event]:
+        """Every VEVENT (master and overrides) of the matching resources."""
         return [
-            e
+            vevent
             for e in self.events.values()
             if e.calendar_id == calendar.id and (e.rrule or (e.start < end and e.end > start))
+            for vevent in ics.from_ics(e.raw or ics.to_ics(e), e.calendar_id, e.href, e.etag)
         ]
 
     def create_event(self, event: Event) -> Event:

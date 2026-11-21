@@ -114,9 +114,6 @@ async def test_month_view_navigation(app: RecordingApp) -> None:
         await pilot.press("k", "k", "k", "k")
         assert app.state.day == date(2026, 10, 29)  # crossed into October
         assert app.state.title() == "October 2026"
-        await pilot.press("a")
-        assert isinstance(app.posted[-1], NewEventRequested)
-        assert app.posted[-1].start == date(2026, 10, 29)
         await pilot.press("enter")
         assert app.state.view is ViewMode.DAY
 
