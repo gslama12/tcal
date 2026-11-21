@@ -68,7 +68,7 @@ async def test_week_renders_header_strip_events_and_now_line(app: RecordingApp) 
         # Default visible range: 06:30 (row 4, unlabelled half hour) .. 23:30 (last row).
         assert lines[5].startswith("07:00") and lines[-2].startswith("23:00")
         body = "\n".join(lines)
-        for title in ("Standup", "Sprint plann", "Dinner", "Late movie", "Haircut"):
+        for title in ("Standup", "Sprint plan…", "Dinner", "Late movie", "Haircut"):
             assert title in body
         assert "Early run" not in body  # 05:45: above the default range
         xs = grid._columns()
@@ -310,7 +310,7 @@ async def test_narrow_columns_collapse_cluster(app: RecordingApp) -> None:
         grid = app.query_one(WeekView)
         group = next(b for b in grid._block_list() if b.group)
         assert [o.summary for o in group.occs] == ["Design review", "1:1 with Alex", "Dentist"]
-        assert any("3 ev" in line for line in text(grid))
+        assert any("Design… +2" in line for line in text(grid))  # first title + count
         await pilot.press("n")  # cycling reaches the events of the collapsed block
         while grid.selected not in group.occs:
             await pilot.press("n")
@@ -332,3 +332,52 @@ async def test_now_line_keeps_event_text(app: RecordingApp) -> None:
         event = row[AXIS + 1 : row.index("Design review") + len("Design review")]
         assert event[0] in " ▌" and event[1:] == "Design review"  # text not covered
         assert "─" in row[row.index("Design review") :]  # the line goes on beside the event
+
+
+async def test_cycle_starts_at_the_cursor(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        grid = app.query_one(WeekView)
+        tue, mon = TODAY - timedelta(days=1), TODAY - timedelta(days=2)
+        await pilot.press("h", "k", "k", "k")  # Tue 08:30, free
+        assert grid.selected is None
+        await pilot.press("n")
+        assert grid.selected is not None and grid.selected.start == at("09:00", tue)
+        await pilot.press("k", "p")  # Tue 08:30 again: the event before is on Monday
+        assert grid.selected is not None and grid.selected.start.date() == mon
+        await pilot.press("h", *["k"] * 30, "p")  # nothing before Mon 00:00: wraps to the end
+        assert grid.selected == sorted(grid._occurrences(), key=grid._stop_key)[-1]
+
+
+async def test_double_click_empty_slot_requests_new_event(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        grid = app.query_one(WeekView)
+        xs, header = grid._columns(), grid._header_height()
+        await pilot.click(WeekView, offset=(xs[4] + 3, 1 + header + 2), times=2)  # Fri 07:30
+        await pilot.pause()
+        assert [type(m) for m in app.posted] == [messages.NewEventRequested]
+        assert isinstance(app.posted[0], messages.NewEventRequested)
+        assert app.posted[0].start == at("07:30", TODAY + timedelta(days=2))
+
+
+async def test_text_is_cut_with_ellipsis_never_mid_number(app: RecordingApp) -> None:
+    async with app.run_test(size=(100, 35)) as pilot:
+        await pilot.pause()
+        body = "\n".join(text(app.query_one(WeekView)))
+        assert "Sprint pla…" in body and "Anna's bir…" in body
+        assert "13:00–15:00" in body and "14:00  14:30" in body  # no "14:00–1"
+        assert "–1 " not in body and "–1│" not in body
+
+
+async def test_markers_and_hour_lines_leave_events_alone(app: RecordingApp) -> None:
+    async with app.run_test(size=(100, 35)) as pilot:
+        await pilot.press(*["plus"] * 6)  # 8 rows/hour: events cross the bottom edge
+        grid = app.query_one(WeekView)
+        xs, lines = grid._columns(), text(grid)
+        for block in grid._block_list():
+            left, right = grid._sub_columns(block, xs)
+            for row in range(max(block.top, grid._top_row()), block.bottom):
+                y = grid._header_height() + row - grid._top_row()
+                if y < len(lines):
+                    assert not {"▲", "▼"} & set(lines[y][left:right])
+                    assert "╌" not in lines[y][right : right + 1] + lines[y][left - 1 : left]
+        assert any("later" in line for line in lines)

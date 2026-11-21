@@ -119,10 +119,10 @@ class _Canvas:
 class TimeGrid(CalendarView):
     """Shared core of DayView / WeekView (``days()`` picks the columns).
 
-    Keys: j/k move the slot cursor, h/l the day, n/p cycle events, enter opens
-    the selected event (``EventSelected``) or requests a new one on an empty
-    slot (``NewEventRequested``), +/- zoom. Mouse: click selects a slot / opens
-    an event, the wheel scrolls.
+    Keys: j/k move the slot cursor, h/l the day, n/p cycle events (from the cursor),
+    enter opens the selected event (``EventSelected``) or requests a new one on an
+    empty slot (``NewEventRequested``), +/- zoom. Mouse: click selects a slot / opens
+    an event, double-click on an empty slot requests a new one, the wheel scrolls.
     """
 
     BINDINGS = [*EVENT_BINDINGS, binding("new_event", "New event")]
@@ -304,21 +304,26 @@ class TimeGrid(CalendarView):
             self.tcal.select_date(day)  # redraws via on_state, keeps the pick
         self._redraw()
 
-    def _stops(self) -> list[Occurrence]:
-        """Events in view in n/p order: by day, all-day bars first, then by start."""
-        days = self._load()[0]
-
-        def key(occ: Occurrence) -> tuple[date, bool, datetime]:
-            return max(occ.start.date(), days[0]), not is_bar(occ), occ.start
-
-        return sorted(self._occurrences(), key=key)
+    def _stop_key(self, occ: Occurrence) -> tuple[date, bool, datetime]:
+        """n/p order: by day, all-day bars first, then by start."""
+        return max(occ.start.date(), self._load()[0][0]), not is_bar(occ), occ.start
 
     def action_cycle(self, step: int) -> None:
-        stops = self._stops()
+        """Select the next (``step`` 1) / previous (-1) event: from the selected one, else
+        from the cursor slot; wraps at the ends."""
+        stops = sorted(self._occurrences(), key=self._stop_key)
         if not stops:
             return
         current = self.selected
-        index = stops.index(current) + step if current in stops else (0 if step > 0 else -1)
+        if current in stops:
+            index = stops.index(current) + step
+        else:
+            here = (self.tcal.state.day, True, self.cursor_time)
+            keys = [self._stop_key(occ) for occ in stops]
+            if step > 0:
+                index = next((i for i, k in enumerate(keys) if k > here), 0)
+            else:
+                index = next((i for i in reversed(range(len(keys))) if keys[i] < here), -1)
         self.select(stops[index % len(stops)])
 
     # ----- actions --------------------------------------------------------
@@ -424,6 +429,8 @@ class TimeGrid(CalendarView):
                 self.tcal.select_date(days[column])
             if block is not None:
                 self._open(block.occ)
+            elif event.chain >= 2:
+                self.post_message(NewEventRequested(self.cursor_time))
             self._redraw()
 
     def _open(self, occ: Occurrence) -> None:
@@ -494,7 +501,8 @@ class TimeGrid(CalendarView):
             if bar.occ == selected:  # accent bar, as for selected blocks
                 before = "▌" if before == " " else before
             after = bar.last == n and bar.occ.end > _midnight(days[-1] + timedelta(days=1))
-            canvas.text(y, x0, x1, f"{before}{_clean(bar.occ.summary)}")
+            title = _fit(_clean(bar.occ.summary), x1 - x0 - 1 - after)
+            canvas.text(y, x0, x1, f"{before}{title}")
             if bar.occ == selected:
                 canvas.text(y, x0, x0 + 1, before, _style(p.foreground3, color, bold=True))
             if after:
@@ -554,16 +562,14 @@ class TimeGrid(CalendarView):
         style = _style(p.foreground2, p.background2)
         for i in range(len(xs) - 1):
             blocks = [b for b in self._block_list() if b.day == i]
-            x0, x1 = xs[i] + 1, xs[i + 1]
-            for y, arrow, word, count in (
-                (header, "▲", "earlier", sum(len(b.occs) for b in blocks if b.bottom <= top)),
-                (
-                    header + bottom - top - 1,
-                    "▼",
-                    "later",
-                    sum(len(b.occs) for b in blocks if b.top >= bottom),
-                ),
+            x1 = xs[i + 1]
+            for row, arrow, word, count in (
+                (top, "▲", "earlier", sum(len(b.occs) for b in blocks if b.bottom <= top)),
+                (bottom - 1, "▼", "later", sum(len(b.occs) for b in blocks if b.top >= bottom)),
             ):
+                # right of the events on the edge row (plus a gap), never over them
+                ends = [self._sub_columns(b, xs)[1] + 1 for b in blocks if b.top <= row < b.bottom]
+                x0, y = max(ends, default=xs[i] + 1), header + row - top
                 if count:
                     label = next(
                         (
@@ -595,18 +601,24 @@ class TimeGrid(CalendarView):
         style = _style(fg, color, bold=selected)
         x0, x1 = self._sub_columns(block, xs)
         pad = " " if x1 - x0 >= 6 or selected else ""
-        title, span = _clean(occ.summary), f"{occ.start:%H:%M}–{occ.end:%H:%M}"
+        width = x1 - x0 - len(pad)
+        title, span = _clean(occ.summary), _span(occ, width)
         if block.group:
-            n = len(block.group)
-            count = next((t for t in (f"{n} events", f"{n} ev") if len(pad + t) <= x1 - x0), f"{n}")
-            texts = [count] + ([title, span] if selected else [])
+            more = f" +{len(block.group) - 1}"
+            label = _fit(title, width - len(more)) + more if width - len(more) >= 2 else ""
+            texts = [label or _fit(f"{len(block.group)}×", width), span]
         elif block.bottom - block.top == 1:
-            texts = [f"{occ.start:%H:%M} {title}" if x1 - x0 >= 12 else title]
+            texts = [_fit(f"{occ.start:%H:%M} {title}" if width >= 11 else title, width)]
         else:
-            texts = [title, span] + ([_clean(occ.event.location)] if occ.event.location else [])
+            location = _clean(occ.event.location)
+            texts = [_fit(t, width) for t in (title, span, location) if t]
+        gaps = [x for x in (x0 - 1, x1) if xs[block.day] < x < xs[block.day + 1]]
         for row in range(first, last):
             y = header + row - top
             canvas.fill(y, x0, x1, style)
+            for x in gaps:  # the gap beside an event stays blank (no hour line)
+                if canvas.chars[y][x] == "╌":
+                    canvas.chars[y][x] = " "
             index = row - first
             if index < len(texts):
                 bold = _style(fg, color, bold=True) if index == 0 else None
@@ -625,6 +637,24 @@ def _midnight(day: date) -> datetime:
 
 def _clean(text: str) -> str:
     return " ".join(text.split())
+
+
+def _fit(text: str, width: int) -> str:
+    """``text`` cut to ``width`` cells, ending with ``…`` when cut."""
+    if cell_len(text) <= width:
+        return text
+    out = ""
+    for ch in text:
+        if cell_len(out + ch) >= width:
+            break
+        out += ch
+    return out.rstrip() + "…" if width > 0 else ""
+
+
+def _span(occ: Occurrence, width: int) -> str:
+    """``HH:MM–HH:MM``, just the start if that doesn't fit, else nothing (digits never cut)."""
+    start, full = f"{occ.start:%H:%M}", f"{occ.start:%H:%M}–{occ.end:%H:%M}"
+    return next((t for t in (full, start) if len(t) <= width), "")
 
 
 class DayView(TimeGrid):
