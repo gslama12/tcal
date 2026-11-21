@@ -4,13 +4,32 @@ Terminal calendar (Python + Textual) that syncs with iCloud via CalDAV.
 Look & feel modelled on todooit; layout modelled on the Google Calendar web app.
 
 > GitHub issues were not available (gh CLI not authenticated), so decisions are
-> tracked here instead. Each work package below = one "issue".
+> tracked here instead. Each work package below = one "issue". Notes are a log: a later
+> note overrides an earlier one (stale details are marked *superseded*).
+
+## Status (2026-11-21)
+
+- **Done:** all six work packages plus QA rounds 1–4. Day/week/month/year/schedule views,
+  sidebar, event CRUD (incl. recurring scopes, repeat ends), detail extras, quick add,
+  yank/paste/duplicate/move, undo stack (20), goto, search, help, iCloud CalDAV sync with
+  offline queue, subscriptions, `tcal login|sync|calendars|doctor|config`, five themes.
+  User docs: README.md (key table from `scripts/keys_table.py`, checked by `tests/test_readme.py`).
+- **Not verified:** everything against a real iCloud account (only the fake server in
+  `tests/icloud_http.py`) — see README "What I need you to test".
+- **Open:** no log file — `logging` warnings from sync (skipped resources) are not visible
+  anywhere (H1); no "this and following" edit scope (H2); no drag & drop (D7); one provider
+  only (D9).
 
 ## Architecture (keep it simple)
 
 ```
 tcal/
-  __main__.py        click CLI: `tcal` (TUI), `tcal login`, `tcal sync`, `tcal --demo`
+  __main__.py        click CLI: `tcal` (TUI, `--demo`), `tcal login|sync|calendars|doctor`,
+                     `tcal config path|edit|check`
+  dates.py           pure date helpers: parse_date (goto, quick add, form), add_months
+  quickadd.py        quick-add one-line parser
+  doctor.py          `tcal doctor` checks
+  ics.py             iCalendar text <-> Event (edits written into Event.raw), extras
   paths.py           XDG paths; TCAL_HOME env var relocates config/data/cache into one dir
   config.py          TOML config (~/.config/tcal/config.toml) merged over defaults:
                      account, theme, keybinds, view settings (day_start "06:30", day_end "24:00",
@@ -26,28 +45,39 @@ tcal/
                      create/update/delete_event(...)
     icloud.py        CalDAV via `caldav` lib, https://caldav.icloud.com, Apple ID + app-specific pw
     fake.py          in-memory provider for tests and `--demo`
+    ics_url.py       read-only `[[subscription]]` feeds (webcal/https)
   sync.py            SyncEngine: push pending ops, then pull window (today -3 months .. +12 months);
                      runs in a Textual worker, periodic (config interval)
   credentials.py     password from: keyring -> `password_cmd` in config -> TCAL_PASSWORD env
+  source.py          EventSource / StoreSource: the UI's only data access
+  tz.py              local zone
   ui/
-    app.py           TcalApp: layout, bindings from config, state (current date, view, cursor)
+    app.py           TcalApp: layout, bindings from config, data seam, sync, actions
+    state.py         immutable AppState (day, view, hidden calendars)
+    keys.py          binding(action): Binding.id == [keys] action
+    editing.py       Editor: form, quick add, yank/paste/duplicate, moves
+    undo.py          UndoHistory; clipboard.py: pure event transforms
+    timelayout.py    time-grid geometry; timepaint.py: pure painting; canvas.py; calgrid.py
+    sync_status.py   SyncStatus for the status bar
     theme.py         palette (todooit look: dark bg1/bg2/bg3, fg1-3, accent colors), Textual Theme
     styles.tcss
     widgets/
       minical.py     small month calendar (sidebar top)
       calendar_list.py  toggleable calendar list with colors (sidebar)
       view_switcher.py  Day | Week | Month | Year tabs + current range title + "Today"
-      timegrid.py    Day & Week views: time axis, default 06:30–24:00, vertical zoom (+/-),
-                     scroll, all-day strip, overlap columns, now-line, slot cursor
+      timegrid.py    Day & Week views: cursor/scroll/zoom/selection/mouse (drawing: timepaint)
       month_view.py  6x7 grid with event chips, "+N more"
       year_view.py   12 mini-months, days with events highlighted
+      schedule_view.py  upcoming events as a list (A1)
+      minimonth.py, day_cursor.py, base.py  shared view helpers
       statusbar.py   mode / sync status / hints (todooit-like bar)
     screens/
       event_form.py  modal: create/edit (title, calendar, date, start, end, all-day, location, notes)
-      event_detail.py  modal: view event, e=edit, d=delete
+      event_detail.py  modal: view event, e=edit, x=delete
       help.py        keybinding list
       goto.py        jump to date prompt (parser: `tcal/dates.py`)
       search.py      search events in cache
+      quick_add.py   one-line quick add with preview
 tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
 ```
 
@@ -69,9 +99,13 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
   shown rounded up to 5 min. +/- step through the whole zoom levels; zoom-out stops before the
   day gets shorter than the grid.
 - **D6 Keybinds:** vim-like, all configurable in `[keys]` of config.toml (action -> list of keys).
-  Defaults: h/j/k/l move cursor, H/L prev/next period, t today, d/w/m/y switch view,
-  +/- (or ctrl+up/down) zoom, enter open, a/o new event, e edit, x/dd delete, g goto date,
-  / search, r sync, c toggle calendar list focus, tab cycle focus, ? help, q quit.
+  Current defaults (`tcal/default_config.toml`, README table): h/j/k/l move cursor,
+  H/L prev/next period, t today, d/w/m/Y/s day/week/month/year/schedule view, +/- (or
+  ctrl+up/down) zoom, enter open, n/N next/prev event, a/o new event, A quick add, e edit,
+  x delete, u undo, y yank, p/P paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too), g goto
+  date, / search, r sync, c focus calendar list, space toggle calendar, tab cycle focus,
+  b sidebar, ? help, q quit, ctrl+s save, esc cancel. (Originally `y` = year view and `dd`
+  delete: see S2, Y1.)
 - **D7 Mouse:** click date in minical, click calendar checkbox, click view tabs,
   click event to open, click slot to select. No drag & drop.
 - **D8 Look:** todooit palette & rounded borders, focused pane gets accent border,
@@ -143,7 +177,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **V2 Shared helpers:** `tcal/ui/calgrid.py` (pure month-grid date math, occurrences per
   day), `widgets/minimonth.py` (small month block for MiniCal + YearView),
   `widgets/day_cursor.py` (`DayCursorView`: h/l ±1 day, j/k ±1 week, enter → Day view).
-  `state.add_months` is now public (was `_add_months`).
+  `state.add_months` is now public (was `_add_months`; *moved to `tcal/dates.py`*, rev2b).
 - **V3 Keys:** new `[keys] toggle_calendar = ["space"]` (calendar list; enter works too).
   MiniCal reuses `cursor_*`/`prev_period`/`next_period`/`open` with its own cursor that
   only commits on enter (click commits at once).
@@ -157,9 +191,9 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 
 - **T1 Messages:** views post `tcal.ui.messages.EventSelected(occurrence)` (enter / click on an
   event) and `NewEventRequested(start)` (enter on an empty slot, `new_event` key while a grid is
-  focused). `TcalApp.on_event_selected` / `on_new_event_requested` are placeholders for CRUD.
+  focused), handled by `TcalApp.on_event_selected` / `on_new_event_requested`.
 - **T2 Keys:** new `[keys]` actions `next_event` (n) / `prev_event` (p) cycle through the events
-  in view (by day, all-day first, then start time).
+  in view (by day, all-day first, then start time). *Superseded: prev is `N` (Y1).*
 - **T3 Zoom:** levels 1, 2, 3, 4, 6, 8 rows/hour (3 = 20-min slots fits ~53-row grids); cursor
   and scroll position are kept in minutes so they survive zoom and resize.
 - **T5 Fit (QA #1/#4–6):** a minute belongs to the row whose start is *nearest* (ties: earlier
@@ -264,7 +298,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   `Store.restore(rows)` puts them back (cancels an unpushed delete op, else re-creates the
   resource; a deleted instance updates the series again). `EventSource.restore` passes it
   through; `app.delete_event` toasts `Deleted "X" · u undo` and `[keys] undo = ["u"]`
-  (`app.undo()`) restores the last delete once.
+  (`app.undo()`) restores the last delete once. *Superseded by the undo stack (Y4).*
 
 ### iCloud hardening (feat-icloud, partial)
 
@@ -296,6 +330,8 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   per keypress (headless 160x50). `TcalApp` caches `source.occurrences` per day range until
   `refresh_data()` (so any data change must go through it); `recurrence._rules` caches parsed
   rule sets (dateutil `cache=True`) keyed by (rrule, start, exdates).
+
+### Config notes (feat-config)
 
 - **C1 Config UX:** `tcal config path|edit|check`. `edit` seeds a missing file with
   `commented_defaults()` (every default line commented out). Key conflicts
@@ -467,7 +503,9 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - Search rows of a series add "· every week on Tue, Thu" (`describe_rrule`).
 - Help: space/shift+space page, home/end and g/G jump (pageup/down already worked).
 
-- **H4 (QA4 #3 #4 #11 #14 #17):** `clipboard.shifted` shifts plain BYDAY weekdays by the
+### Moves, toasts, quick add (feat-h4: QA4 #3, #4, #11, #14, #17)
+
+- **H4:** `clipboard.shifted` shifts plain BYDAY weekdays by the
   days the start moves (an ordinal BYDAY like `2MO` returns None → "Change the days of this
   series in the form"). `app.save_event(event, undo_message)`: moves pass "Undid move of “X”
   (back to Mon 23 11:15)"; deletes toast "Deleted this “X” (Thu 19 09:00)" / "Deleted all “X”
@@ -476,3 +514,10 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   nothing synced yet, new events say "Not synced yet". Quick add reads repeats (`daily`,
   `every <weekday>`, `every weekday`, …; first day on/after the date), bare hours after a
   date, `14.30` (`H.MM` with MM ≤ 12 only when a date is given elsewhere) and `noon`/`midnight`.
+
+### Docs (feat-docs)
+
+- README rewritten (features, commands, setup, config/themes, keys, subscriptions,
+  troubleshooting, test list). The key table is generated by `scripts/keys_table.py` from the
+  default keymap + `help.GROUPS` (so it matches `?`); `tests/test_readme.py` fails when it is
+  stale or an action lacks a help description.
