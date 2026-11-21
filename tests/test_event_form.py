@@ -3,7 +3,7 @@ from datetime import UTC, datetime, time, timedelta
 
 import pytest
 from conftest import TODAY
-from textual.widgets import Checkbox, Input, Select, TextArea
+from textual.widgets import Checkbox, Input, Label, Select, TextArea
 
 from tcal.model import Event
 from tcal.tz import local_midnight, local_zone
@@ -13,7 +13,9 @@ from tcal.ui.screens.event_form import (
     EventForm,
     FormError,
     build_event,
+    parse_date,
     parse_time,
+    show_date,
     values_of,
 )
 from tcal.ui.widgets.timegrid import WeekView
@@ -53,7 +55,7 @@ def test_all_day_end_is_inclusive_in_the_form() -> None:
         "u", "work", "Trip", local_midnight(TODAY), local_midnight(TODAY + timedelta(3)), True
     )
     shown = values_of(event)
-    assert shown.end_date == (TODAY + timedelta(2)).isoformat()
+    assert shown.end_date == show_date(TODAY + timedelta(2))
     timed = build_event(event, shown, replace_values(shown, all_day=False))
     assert (timed.start, timed.end) == (at(9), at(10, day=TODAY + timedelta(2)))
 
@@ -161,7 +163,7 @@ async def test_edit_this_event_of_a_series_writes_an_override(make_app) -> None:
         await pilot.pause()
         form = app.screen
         assert isinstance(form, EventForm) and form.query_one("#repeat").disabled
-        assert form.query_one("#start_date", Input).value == TODAY.isoformat()
+        assert form.query_one("#start_date", Input).value == show_date(TODAY)
         await type_into(pilot, "#title", "Standup (late)")
         await type_into(pilot, "#start_time", "11:00")
         await pilot.press("ctrl+s")
@@ -205,7 +207,7 @@ async def test_new_event_key_is_timed_at_the_next_hour_off_the_grid(make_app, ke
         form = app.screen
         assert isinstance(form, EventForm) and not form.query_one("#all_day", Checkbox).value
         hour = min(datetime.now().hour + 1, 23)
-        assert form.query_one("#start_date", Input).value == TODAY.isoformat()
+        assert form.query_one("#start_date", Input).value == show_date(TODAY)
         assert form.query_one("#start_time", Input).value == f"{hour:02d}:00"
 
 
@@ -314,7 +316,7 @@ def test_a_series_ends_on_a_date_or_after_a_count() -> None:
     until = build_event(event, shown, replace_values(shown, ends="on", ends_value=last.isoformat()))
     end_of_day = local_midnight(last + timedelta(1)) - timedelta(seconds=1)
     assert until.rrule == f"FREQ=WEEKLY;UNTIL={end_of_day.astimezone(UTC):%Y%m%dT%H%M%SZ}"
-    assert values_of(until).ends_value == last.isoformat()  # shown as the local day
+    assert values_of(until).ends_value == show_date(last)  # shown as the local day
     never = build_event(until, values_of(until), replace_values(values_of(until), ends="never"))
     assert never.rrule == "FREQ=WEEKLY"
     with pytest.raises(FormError, match="number of times") as error:
@@ -359,3 +361,53 @@ async def test_ends_row_shows_only_for_a_series(make_app) -> None:
         [event] = [e for e in app.source.store.events_between(at(0), at(0) + timedelta(60))
                    if e.summary == "Yoga"]  # fmt: skip
         assert event.rrule == "FREQ=WEEKLY;COUNT=3"
+
+
+async def test_saved_new_event_is_selected(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 50)) as pilot:
+        app.post_message(NewEventRequested(at(19, day=TODAY + timedelta(3))))
+        await pilot.pause()
+        await pilot.press(*"QA series")
+        app.screen.query_one("#repeat", Select).value = "weekly"
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        selected = app.query_one(WeekView).selected
+        assert selected is not None and selected.summary == "QA series"
+        assert selected.start == at(19, day=TODAY + timedelta(3))
+
+
+async def test_typing_after_edit_appends_to_the_title(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 50)) as pilot:
+        dentist = next(
+            o for o in app.occurrences(TODAY, TODAY + timedelta(1)) if o.summary == "Dentist"
+        )
+        app.edit_event(dentist.event)
+        await pilot.pause()
+        await pilot.press("X")
+        assert app.screen.query_one("#title", Input).value == "DentistX"
+
+
+def test_dates_show_the_weekday_and_read_back() -> None:
+    assert show_date(TODAY) == "Wed 18 Nov 2026"
+    assert parse_date("Wed 18 Nov 2026") == TODAY
+    assert parse_date("Mon, 18 Nov 2026") == TODAY  # the weekday is ignored
+    assert parse_date("fri", today=TODAY) == TODAY + timedelta(2)
+    with pytest.raises(FormError):
+        parse_date("Wed Nov")
+
+
+async def test_ends_after_shows_its_unit(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 50)) as pilot:
+        app.post_message(NewEventRequested(at(14)))
+        await pilot.pause()
+        form = app.screen
+        form.query_one("#repeat", Select).value = "weekly"
+        form.query_one("#ends", Select).value = "after"
+        await pilot.pause()
+        assert form.query_one("#ends_unit", Label).display
+        form.query_one("#ends", Select).value = "on"
+        await pilot.pause()
+        assert not form.query_one("#ends_unit", Label).display

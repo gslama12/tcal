@@ -158,3 +158,22 @@ async def test_background_failure_with_a_cache_stays_quiet(store: Store) -> None
     async with app.run_test() as pilot:
         await _wait_for_sync(app, pilot)
         assert not app._notifications
+
+
+async def test_server_changed_names_the_event_and_its_new_title(
+    provider: FakeProvider, store: Store
+) -> None:
+    app = _synced_app(provider, store)
+    async with app.run_test(size=(140, 45)) as pilot:
+        await _wait_for_sync(app, pilot)
+        uid = _dinner(app).event.uid
+        app.edit_event(_dinner(app).event)
+        await pilot.pause()
+        provider.update_event(replace(provider.events[uid], summary="Dinner server"))
+        app.request_sync()
+        await _wait_for_sync(app, pilot)
+        app.screen.query_one("#title", Input).value = "X"
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        question = str(app.screen.query_one(".question", Static).render())
+        assert question == "“Dinner” was changed on the server (now “Dinner server”)."

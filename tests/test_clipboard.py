@@ -303,3 +303,32 @@ async def test_undo_takes_back_moves_pastes_and_edits_in_turn(make_app) -> None:
         await pilot.pause()
         starts = {o.start for o in named(app, "Standup", TODAY - timedelta(2), 5)}
         assert at(9) in starts and at(9, day=TODAY - timedelta(1)) in starts
+
+
+async def test_undo_selects_the_restored_event(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(140, 50)) as pilot:
+        tue = TODAY - timedelta(1)
+        grid = app.query_one("#week", TimeGrid)
+        grid.select(find(app, "Gym", tue))
+        await pilot.press("ctrl+l", "s")  # all events a day later
+        await pilot.pause()
+        assert app.state.day == TODAY
+        await pilot.press("u")
+        await pilot.pause()
+        assert app.state.day == tue
+        assert grid.selected is not None and grid.selected.start == at(18, day=tue)
+        await pilot.press("ctrl+l")  # the selection is usable right away
+        await pilot.pause()
+        assert isinstance(app.screen, MoveScope)
+
+        await pilot.press("escape", "m")
+        app.select_date(tue)
+        await pilot.pause()
+        month = app.query_one("#month", MonthView)
+        month.select(find(app, "Gym", tue))
+        await pilot.press("ctrl+h", "o")  # one event a day earlier, then undo
+        await pilot.pause()
+        await pilot.press("u")
+        await pilot.pause()
+        assert month.selected is not None and month.selected.start == at(18, day=tue)

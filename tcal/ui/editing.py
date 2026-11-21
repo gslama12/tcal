@@ -99,12 +99,16 @@ class Editor:
 
     def form_done(self, event: Event | None, verb: str = "Saved") -> None:
         """Save a new/edited event and toast "<verb> “X” · u undo"; a hidden calendar
-        it lands in is shown again."""
+        it lands in is shown again. The event is selected (unless all events of a
+        series were edited)."""
         if event is None:
             return
         if event.calendar_id in self.app.state.hidden_calendars:
             self.app.toggle_calendar(event.calendar_id)
-        self.app.save_event(event)
+        series_edit = bool(event.rrule and self.app.source.rows(event.uid))
+        saved = self.app.save_event(event)
+        if not series_edit:  # (that would jump to the series' first event)
+            self.select_event(saved.uid, saved.start)
         self.app.notify(f"{verb} “{event.summary}” · {self.app.undo_hint}")
 
     # ----- clipboard & moving ---------------------------------------------
@@ -132,7 +136,7 @@ class Editor:
         if not writable:
             return
         copy = app.save_event(copy_at(occ, at, writable[0].id))
-        self._select_moved(copy.uid, copy.start)
+        self.select_event(copy.uid, copy.start)
         day = copy.start.date()
         where = "" if writable[0] is calendar else f" · {writable[0].name}"
         app.notify(f"{verb} “{copy.summary}” to {day:%a} {day.day}{where} · {app.undo_hint}")
@@ -157,8 +161,8 @@ class Editor:
                 return
             what = f"all “{occ.summary}” events" if scope == "series" else f"“{occ.summary}”"
             back = short_when(occ.start, occ.all_day)
-            self.app.save_event(moved, f"Undid move of {what} (back to {back})")
-            self._select_moved(occ.event.uid, occ.start + delta)
+            self.app.save_event(moved, f"Undid move of {what} (back to {back})", occ.start)
+            self.select_event(occ.event.uid, occ.start + delta)
             history.move_run = ((occ.event.uid, occ.start + delta), scope)
 
         if not is_recurring(occ) or occ.event.recurrence_id is not None:
@@ -192,7 +196,7 @@ class Editor:
         """The master of ``occ``'s series."""
         return self.app.source.get_event(occ.event.uid) or occ.event
 
-    def _select_moved(self, uid: str, start: datetime) -> None:
+    def select_event(self, uid: str, start: datetime) -> None:
         """Go to the day of event ``uid``'s occurrence at ``start`` and select it in the view."""
         day = start.date()
         self.app.select_date(day)

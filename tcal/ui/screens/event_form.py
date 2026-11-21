@@ -58,6 +58,7 @@ REPEAT_LABELS = {
 }
 ENDS = {"never": "Never", "on": "On date", "after": "After"}  # a series' end: none/UNTIL/COUNT
 DEFAULT_START, DEFAULT_END = time(9), time(10)
+_AFTER_WEEKDAY = re.compile(r"[A-Za-z]{2,},?\s+(\d.*)")  # 'Sat 21 Nov 2026' -> '21 Nov 2026'
 CUSTOM = "custom"  # an RRULE the form can't express; kept unless changed
 
 
@@ -95,9 +96,9 @@ def values_of(event: Event) -> FormValues:
     return FormValues(
         title=event.summary,
         calendar_id=event.calendar_id,
-        start_date=start.date().isoformat(),
+        start_date=show_date(start.date()),
         start_time=f"{start:%H:%M}",
-        end_date=end.date().isoformat(),
+        end_date=show_date(end.date()),
         end_time=f"{end:%H:%M}",
         all_day=event.all_day,
         location=event.location,
@@ -125,7 +126,7 @@ def split_end(rrule: str | None) -> tuple[str, str, str]:
         if key.upper() == "COUNT":
             return rest, "after", value
         if key.upper() == "UNTIL":
-            return rest, "on", until_date(value).isoformat()
+            return rest, "on", show_date(until_date(value))
     return rest, "never", ""
 
 
@@ -147,9 +148,18 @@ def end_rule(values: FormValues, start: datetime, all_day: bool, today: date | N
     return ""
 
 
+def show_date(day: date) -> str:
+    """A date as the form shows it: 'Sat 21 Nov 2026' (``parse_date`` reads it back)."""
+    return f"{day:%a %-d %b %Y}"
+
+
 def parse_date(text: str, field: str = "start_date", today: date | None = None) -> date:
-    """A date in any form goto understands (relative to ``today``)."""
-    day = dates.parse_date(text, today or date.today())
+    """A date in any form goto understands (relative to ``today``), also after a
+    weekday as ``show_date`` writes it (the weekday itself is ignored)."""
+    today = today or date.today()
+    day = dates.parse_date(text, today)
+    if day is None and (m := _AFTER_WEEKDAY.fullmatch(text.strip())):
+        day = dates.parse_date(m[1], today)
     if day is None:
         raise FormError(f"Not a date: {text!r} (e.g. 2026-12-24, fri, 24.12.)", field)
     return day
@@ -258,15 +268,23 @@ class ServerChanged(ModalScreen[bool | None]):
         Binding("escape", "dismiss(None)", show=False),
     ]
 
-    def __init__(self, summary: str, deleted: bool) -> None:
+    def __init__(self, summary: str, now: str | None) -> None:
+        """``summary``: the event's title when the form opened; ``now``: its title on
+        the server (None: deleted)."""
         super().__init__()
         self.summary = summary
-        self.deleted = deleted
+        self.now = now
+        self.deleted = now is None
 
     def compose(self) -> ComposeResult:
-        what = "was deleted" if self.deleted else "changed"
+        if self.now is None:
+            question = f"“{self.summary}” was deleted on the server."
+        elif self.now != self.summary:
+            question = f"“{self.summary}” was changed on the server (now “{self.now}”)."
+        else:
+            question = f"“{self.summary}” was changed on the server."
         with Vertical(id="dialog"):
-            yield Static(f"“{self.summary}” {what} on the server.", classes="question")
+            yield Static(question, classes="question")
             with Horizontal(id="buttons"):
                 yield Button("Save again (o)" if self.deleted else "Overwrite (o)", id="o")
                 yield Button("Discard mine (d)", id="d", variant="error")
@@ -308,7 +326,8 @@ class EventForm(ModalScreen[Event | None]):
             form.border_title = "New event" if self.new else "Edit event"
             if instance or series:
                 form.border_title = "Edit this event" if instance else "Edit all events"
-            yield Input(v.title, placeholder="Title", id="title")
+            # (no select-all on focus: typing after `e` appends, as in vim's `A`)
+            yield Input(v.title, placeholder="Title", id="title", select_on_focus=False)
             yield Select(
                 [(c.name, c.id) for c in self.calendars],
                 value=v.calendar_id,
@@ -343,6 +362,7 @@ class EventForm(ModalScreen[Event | None]):
                     id="ends",
                 )
                 yield Input(v.ends_value, id="ends_value")
+                yield Label("times", id="ends_unit")
             yield Input(v.location, placeholder="Location", id="location")
             yield TextArea(v.notes, placeholder="Notes", id="notes")
             yield Static(id="error")
@@ -396,7 +416,8 @@ class EventForm(ModalScreen[Event | None]):
             elif overwrite is False:
                 self.dismiss(None)
 
-        self.app.push_screen(ServerChanged(event.summary, deleted=not now), done)
+        title = next((r for r in now if r.recurrence_id is None), now[0]).summary if now else None
+        self.app.push_screen(ServerChanged(self.event.summary, title), done)
 
     def action_cancel(self) -> None:
         if not self.edited and self.values() == self.shown:
@@ -438,7 +459,8 @@ class EventForm(ModalScreen[Event | None]):
         self.query_one("#ends_row").display = repeat.value != "none"
         value = self.query_one("#ends_value", Input)
         value.display = ends.value != "never"
-        value.placeholder = "date" if ends.value == "on" else "times"
+        value.placeholder = "date" if ends.value == "on" else "number"
+        self.query_one("#ends_unit").display = ends.value == "after"
 
     @on(Input.Changed, "#start_date, #start_time")
     def _start_changed(self) -> None:
@@ -452,7 +474,7 @@ class EventForm(ModalScreen[Event | None]):
             return
         end += new - self._start
         self._start = new
-        self.query_one("#end_date", Input).value = end.date().isoformat()
+        self.query_one("#end_date", Input).value = show_date(end.date())
         self.query_one("#end_time", Input).value = f"{end:%H:%M}"
 
     def _shown_time(self, side: str) -> datetime | None:

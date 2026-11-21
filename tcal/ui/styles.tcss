@@ -249,6 +249,7 @@ ScopeDialog #buttons, ConfirmDiscard #buttons, ServerChanged #buttons {
 
     Button {
         margin-right: 1;
+        &:focus { text-style: bold underline; }  /* not reverse: readable on any variant */
     }
 }
 
@@ -280,6 +281,7 @@ ScopeDialog #buttons, ConfirmDiscard #buttons, ServerChanged #buttons {
     .time { width: 12; }
     #ends { width: 16; }
     #ends_value { width: 1fr; }
+    #ends_unit { width: auto; padding: 1 1 0 1; color: $foreground1; }
     #notes { height: 5; }
     #error { color: $red; height: auto; padding: 0 1; }
     #note { color: $foreground1; padding: 0 1; }

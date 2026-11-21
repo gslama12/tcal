@@ -16,6 +16,7 @@ class UndoStep:
     uid: str
     rows: list[Event]
     message: str  # the toast after undoing it
+    at: datetime | None = None  # the occurrence (start) to select once it is undone
 
 
 class UndoHistory:

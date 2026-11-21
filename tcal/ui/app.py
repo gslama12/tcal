@@ -206,17 +206,22 @@ class TcalApp(App[None]):
         self._occ_cache.clear()
         self.state = self.state
 
-    def save_event(self, event: Event, undo_message: str = "") -> Event:
+    def save_event(
+        self, event: Event, undo_message: str = "", undo_at: datetime | None = None
+    ) -> Event:
         """Create/update an event in the cache, redraw, and push it in the background.
         The undo key takes it back (and toasts ``undo_message``, default: "Undid edit of
-        “X”" / "Removed “X”")."""
+        “X”" / "Removed “X”"), then selects the occurrence at ``undo_at`` (default: a
+        single event's old start)."""
         before = self.source.rows(event.uid)
         saved = self.source.save_event(event)
         if not undo_message:
             undo_message = (
                 f"Undid edit of “{before[0].summary}”" if before else f"Removed “{event.summary}”"
             )
-        self.history.push(UndoStep(event.uid, before, undo_message))
+        if undo_at is None and len(before) == 1 and not before[0].rrule:
+            undo_at = before[0].start
+        self.history.push(UndoStep(event.uid, before, undo_message, undo_at))
         self.refresh_data()
         self.request_sync()
         return saved
@@ -235,7 +240,8 @@ class TcalApp(App[None]):
                 what = f"this “{first.summary}” ({short_when(occurrence, first.all_day)})"
             else:
                 what = f"all “{first.summary}” events"
-            self.history.push(UndoStep(uid, rows, f"Restored {what}"))
+            at = occurrence if first.rrule else first.start
+            self.history.push(UndoStep(uid, rows, f"Restored {what}", at))
             self.notify(f"Deleted {what} · {self.undo_hint}")
 
     @property
@@ -259,6 +265,8 @@ class TcalApp(App[None]):
             self.source.delete_event(step.uid)
         self.notify(step.message)
         self.refresh_data()
+        if step.at is not None:
+            self.editor.select_event(step.uid, step.at)
         self.request_sync()
 
     # ----- event form (``Editor``) ---------------------------------------
