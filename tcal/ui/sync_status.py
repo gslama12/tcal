@@ -18,12 +18,13 @@ class SyncStatus:
     state: SyncState = SyncState.OFF
     last_sync: datetime | None = None  # last successful sync
     error: str = ""
+    failed_feeds: tuple[str, ...] = ()  # subscriptions the last sync could not fetch
 
     def started(self) -> "SyncStatus":
         return replace(self, state=SyncState.SYNCING, error="")
 
-    def succeeded(self, at: datetime) -> "SyncStatus":
-        return SyncStatus(SyncState.SYNCED, at)
+    def succeeded(self, at: datetime, failed_feeds: tuple[str, ...] = ()) -> "SyncStatus":
+        return SyncStatus(SyncState.SYNCED, at, failed_feeds=failed_feeds)
 
     def failed(self, error: BaseException | None) -> "SyncStatus":
         # Connection errors (socket, requests/niquests, timeouts) are all OSErrors.

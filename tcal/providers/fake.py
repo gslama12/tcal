@@ -3,9 +3,12 @@
 from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from itertools import count
+from zoneinfo import ZoneInfo
+
+import icalendar
 
 from tcal import ics
-from tcal.model import Calendar, Event
+from tcal.model import SUBSCRIPTION_PREFIX, Calendar, Event
 from tcal.providers.base import ConflictError
 from tcal.tz import local_zone
 
@@ -16,6 +19,10 @@ CALENDARS = [
     Calendar("sport", "Sport", "#B48EAD"),
     Calendar("holidays", "Holidays", "#BF616A", readonly=True),
 ]
+
+
+NEW_YORK = ZoneInfo("America/New_York")
+FEED = Calendar(SUBSCRIPTION_PREFIX + "demo", "Team events", "#88C0D0", readonly=True)
 
 
 class FakeProvider:
@@ -67,6 +74,53 @@ class FakeProvider:
         return stored
 
 
+def demo_feed(today: date | None = None) -> FakeProvider:
+    """A read-only "Other calendars" feed for ``tcal --demo`` (no network)."""
+    feed = FakeProvider(demo=False)
+    feed.calendars = [replace(FEED)]
+    day = today or date.today()
+    tz = local_zone()
+    for uid, summary, start, hours, all_day in (
+        ("feed-1", "Team lunch", datetime.combine(day + timedelta(days=1), time(12), tz), 1, False),
+        (
+            "feed-2",
+            "Office party",
+            datetime.combine(day + timedelta(days=6), time(17), tz),
+            3,
+            False,
+        ),
+        ("feed-3", "Hackathon", datetime.combine(day + timedelta(days=8), time(), tz), 48, True),
+    ):
+        event = Event(uid, FEED.id, summary, start, start + timedelta(hours=hours), all_day=all_day)
+        feed._store(event, f"fake://{uid}")
+    return feed
+
+
+def with_extras(
+    event: Event,
+    organizer: str = "",
+    attendees: tuple[tuple[str, str], ...] = (),
+    url: str = "",
+    alarms: tuple[timedelta, ...] = (),
+) -> Event:
+    """``event`` with organizer/attendees (name, PARTSTAT), URL and alarms in its ``raw``."""
+    cal = icalendar.Calendar.from_ical(ics.to_ics(event))
+    comp = next(iter(cal.walk("VEVENT")))
+    mail = lambda name: f"mailto:{name.split()[0].lower()}@example.com"  # noqa: E731
+    if organizer:
+        comp.add("ORGANIZER", mail(organizer), parameters={"CN": organizer})
+    for name, status in attendees:
+        comp.add("ATTENDEE", mail(name), parameters={"CN": name, "PARTSTAT": status})
+    if url:
+        comp.add("URL", url)
+    for trigger in alarms:
+        alarm = icalendar.Alarm()
+        alarm.add("ACTION", "DISPLAY")
+        alarm.add("TRIGGER", trigger)
+        comp.add_component(alarm)
+    return replace(event, raw=cal.to_ical().decode())
+
+
 def demo_events(today: date) -> list[Event]:
     tz = local_zone()
     monday = today - timedelta(days=today.weekday())
@@ -114,7 +168,10 @@ def demo_events(today: date) -> list[Event]:
         # overlapping timed events today
         timed("work", "Design review", today, "10:00", "11:30", location="Room 4"),
         timed("work", "1:1 with Alex", today, "10:30", "11:00"),
-        timed("personal", "Dentist", today, "11:00", "12:00", location="Dr. Huber"),
+        with_extras(
+            timed("personal", "Dentist", today, "11:00", "12:00", location="Dr. Huber"),
+            alarms=(timedelta(hours=-1),),
+        ),
         timed("personal", "Early run", today, "05:45", "06:30"),
         timed("family", "Dinner", today, "19:00", "21:00", description="Book a table"),
         timed("personal", "Late movie", today, "22:30", "23:59"),
@@ -124,6 +181,26 @@ def demo_events(today: date) -> list[Event]:
         timed("work", "Interview", monday + d(3), "14:30", "15:30"),
         timed("personal", "Haircut", today + d(2), "08:00", "08:45"),
         timed("work", "Quarterly review", today + d(9), "09:30", "12:00"),
+        # an invitation, and a call set in another time zone
+        with_extras(
+            timed("work", "Budget planning", today - d(1), "15:00", "16:00", location="Room 2"),
+            organizer="Maria Lang",
+            attendees=(
+                ("Maria Lang", "ACCEPTED"),
+                ("Tom Weber", "TENTATIVE"),
+                ("Lisa Brandt", "DECLINED"),
+                ("Alex Kim", "NEEDS-ACTION"),
+            ),
+            url="https://meet.example.com/budget",
+            alarms=(timedelta(minutes=-10),),
+        ),
+        Event(
+            f"demo-{next(uids)}",
+            "work",
+            "Call with New York",
+            datetime.combine(today + d(2), time(9), NEW_YORK),
+            datetime.combine(today + d(2), time(9, 30), NEW_YORK),
+        ),
         timed("family", "Kids' play", today - d(5), "17:00", "18:00"),
         # all-day and multi-day
         all_day("family", "Anna's birthday", today),

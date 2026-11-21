@@ -187,8 +187,22 @@ EventDetail #dialog > Static {
     margin-bottom: 1;
 }
 
+EventDetail #dialog > #title {
+    dock: top;
+    margin: 0;
+    padding-bottom: 1;
+    background: $background2;
+}
+
 EventDetail #dialog > #hints {
-    margin-bottom: 0;
+    dock: bottom;
+    margin: 0;
+    padding-top: 1;
+    background: $background2;
+}
+
+EventDetail #dialog {
+    scrollbar-size-vertical: 1;
 }
 
 ScopeDialog #buttons, ConfirmDiscard #buttons {

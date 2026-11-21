@@ -304,7 +304,17 @@ class TcalApp(App[None]):
         if worker.group != "sync" or event.state not in (WorkerState.SUCCESS, WorkerState.ERROR):
             return
         if event.state is WorkerState.SUCCESS:
-            self.sync_status = self.sync_status.succeeded(datetime.now())
+            result = worker.result
+            summary = result if isinstance(result, SyncSummary) else SyncSummary()
+            self.sync_status = self.sync_status.succeeded(datetime.now(), tuple(summary.failed))
+            if summary.conflicts:
+                self.notify(
+                    f"{summary.conflicts} local change(s) conflicted with the server"
+                    " and were dropped (server version kept)",
+                    title="Sync",
+                    severity="warning",
+                    timeout=10,
+                )
         else:
             self.sync_status = self.sync_status.failed(worker.error)
             self.log.error(f"sync failed: {worker.error!r}")
