@@ -157,3 +157,15 @@ def test_layout_bars() -> None:
         birthday.event.uid: (2, 3, 1),
         trip.event.uid: (5, 7, 0),
     }
+
+
+def test_overlap_shorter_than_a_row_goes_side_by_side() -> None:
+    # 1 row/hour: 18:30-19:30 and 19:00-21:00 round to touching rows but overlap 30 min.
+    qa, dinner = occ("18:30", "19:30"), occ("19:00", "21:00")
+    a, b = layout_blocks([qa, dinner], [DAY], TimeScale(1))
+    assert a.bottom == b.top  # the rows only touch ...
+    assert {(a.col, a.cols), (b.col, b.cols)} == {(0, 2), (1, 2)}  # ... yet side by side
+    c, d = layout_blocks([qa, occ("19:30", "20:00")], [DAY], TimeScale(1))
+    assert (c.cols, d.cols) == (1, 1)  # back to back stays one column
+    short = layout_blocks([occ("18:00", "18:10"), occ("18:10", "18:40")], [DAY], TimeScale(1))
+    assert [b.cols for b in short] == [2, 2]  # same row, no time overlap: still side by side

@@ -37,11 +37,12 @@ from tcal.ui.timelayout import (
     layout_blocks,
     sub_columns,
 )
-from tcal.ui.timepaint import AXIS, GridFrame, paint
+from tcal.ui.timepaint import AXIS, GridFrame, markers, paint
 from tcal.ui.widgets.base import CalendarView
 
 MAX_LANES = 3  # all-day strip rows shown at most
 SCROLL_ROWS = 2  # rows per mouse-wheel step
+SLOT_MINUTES = 15  # shortest cursor step (rows of 7.5 min are stepped two at a time)
 MIN_EVENT_WIDTH = 4  # narrowest side-by-side event (+ 1-col gap); else the cluster collapses
 HEADER_FORMATS = ("%A, {day} %B", "%A {day}", "%a {day}", "{day}")  # widest first
 
@@ -159,8 +160,22 @@ class TimeGrid(CalendarView):
         limit = max(0, scale.total_rows - self._grid_height())
         return min(max(0, scale.row_of(self._top_min)), limit)
 
+    def _slot_rows(self) -> int:
+        """Rows per cursor step: whole rows of at least ``SLOT_MINUTES``."""
+        scale = self.scale
+        return max(1, int(SLOT_MINUTES // scale.per_row)) if scale.even else 1
+
+    def _snap(self, row: int) -> int:
+        """The cursor row (a slot start) holding ``row``."""
+        return row - row % self._slot_rows()
+
     def _cursor_row(self) -> int:
-        return self.scale.row_of(self._cursor_min)
+        return self._snap(self.scale.row_of(self._cursor_min))
+
+    def _cursor_rows(self) -> range:
+        """The rows the cursor slot covers."""
+        row = self._cursor_row()
+        return range(row, min(row + self._slot_rows(), self.scale.total_rows))
 
     def _columns(self) -> list[int]:
         """x of each day column's divider, plus the right edge."""
@@ -185,10 +200,14 @@ class TimeGrid(CalendarView):
     def selected(self) -> Occurrence | None:
         """The picked event if still under the cursor, else the event at the cursor slot."""
         days = self._load()[0]
-        day, row = days.index(self.tcal.state.day), self._cursor_row()
+        day, rows = days.index(self.tcal.state.day), self._cursor_rows()
         at_cursor = sorted(
-            (b for b in self._block_list() if b.day == day and b.top <= row < b.bottom),
-            key=lambda b: b.col,
+            (
+                b
+                for b in self._block_list()
+                if b.day == day and b.top < rows.stop and rows.start < b.bottom
+            ),
+            key=lambda b: (b.col, b.top),
         )
         picked = self._picked
         if picked is not None and (
@@ -205,16 +224,16 @@ class TimeGrid(CalendarView):
         self._redraw()
 
     def _ensure_visible(self) -> None:
-        scale, row, top, height = (
+        scale, rows, top, height = (
             self.scale,
-            self._cursor_row(),
+            self._cursor_rows(),
             self._top_row(),
             self._grid_height(),
         )
-        if row < top:
-            self._top_min = scale.minute_of(row)
-        elif row >= top + height:
-            self._top_min = scale.minute_of(row - height + 1)
+        if rows.start < top:
+            self._top_min = scale.minute_of(rows.start)
+        elif rows.stop > top + height:
+            self._top_min = scale.minute_of(min(rows.start, rows.stop - height))
 
     def _scroll(self, rows: int) -> None:
         top = max(0, min(self._top_row() + rows, self.scale.total_rows - self._grid_height()))
@@ -259,11 +278,11 @@ class TimeGrid(CalendarView):
     # ----- actions --------------------------------------------------------
 
     def action_cursor_down(self) -> None:
-        row = min(self._cursor_row() + 1, self.scale.total_rows - 1)
+        row = min(self._cursor_row() + self._slot_rows(), self._snap(self.scale.total_rows - 1))
         self._move_cursor(self.scale.minute_of(row))
 
     def action_cursor_up(self) -> None:
-        self._move_cursor(self.scale.minute_of(max(self._cursor_row() - 1, 0)))
+        self._move_cursor(self.scale.minute_of(max(self._cursor_row() - self._slot_rows(), 0)))
 
     def action_cursor_left(self) -> None:
         self._select_day(self.tcal.state.day - timedelta(days=1))
@@ -300,7 +319,11 @@ class TimeGrid(CalendarView):
 
     def _set_zoom(self, choice: list[int | None]) -> None:
         if choice:
-            self._cursor_min = self.scale.minute_of(self._cursor_row())  # keep the shown time
+            # Keep the shown time if it is a quarter hour; a level that can't show it
+            # (:20 at 3 rows/hour) doesn't move it, so zooming back returns to it.
+            shown = self.scale.minute_of(self._cursor_row())
+            if shown % SLOT_MINUTES == 0:
+                self._cursor_min = shown
             self._zoom = choice[0]
             if self._zoom is None:
                 self._top_min = self.tcal.config.view.day_start
@@ -343,6 +366,17 @@ class TimeGrid(CalendarView):
             row = self._top_row() + y - header
             if row >= self.scale.total_rows:
                 return
+            marker = next(
+                (
+                    m
+                    for m in markers(self._frame(), self.size.height)
+                    if m.day == column and m.row == row and m.x0 <= x < m.x1
+                ),
+                None,
+            )
+            if marker is not None:  # scroll to (and select) the first hidden event
+                self.select(marker.hidden[0])
+                return
             block = next(
                 (
                     b
@@ -353,7 +387,7 @@ class TimeGrid(CalendarView):
                 ),
                 None,
             )
-            self._cursor_min = self.scale.minute_of(row)
+            self._cursor_min = self.scale.minute_of(self._snap(row))
             self._picked = None
             if days[column] != self.tcal.state.day:
                 self.tcal.select_date(days[column])
@@ -385,7 +419,7 @@ class TimeGrid(CalendarView):
             bars=bars,
             blocks=self._block_list(),
             day=self.tcal.state.day,
-            cursor_row=self._cursor_row(),
+            cursor_rows=self._cursor_rows(),
             selected=self.selected,
             now=now(),
             header_formats=self.header_formats,
