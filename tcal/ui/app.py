@@ -15,16 +15,18 @@ Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``save_event()``,
 ``delete_event()``, ``undo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``,
 ``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event form),
-``check_writable()``, ``focus_view()``.
+``check_writable()``, ``focus_view()``, ``selected_occurrence()``, ``select_in_view()``.
+
+Editing flows (form, quick add, clipboard, moving) live in ``tcal.ui.editing.Editor``
+(``app.editor``), the undo stack in ``tcal.ui.undo`` (``app.history``).
 
 The sidebar hides itself below ``SIDEBAR_MIN_WIDTH`` columns (and again when focus
 leaves it there); once the user toggles it, that choice wins over resizes.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import date, datetime, time, timedelta
-from uuid import uuid4
 
 from textual import events
 from textual.app import App, ComposeResult
@@ -36,29 +38,20 @@ from textual.worker import Worker, WorkerState
 
 from tcal.config import Config, default_data, describe_conflicts, key_conflicts, load_config
 from tcal.model import Calendar, Event, Occurrence
-from tcal.quickadd import QuickAdd
 from tcal.source import EventSource
 from tcal.sync import SyncSummary
-from tcal.tz import local_midnight, local_zone
-from tcal.ui.clipboard import copy_at, shifted
+from tcal.tz import local_zone
+from tcal.ui.editing import Editor
 from tcal.ui.keys import binding, keymap
 from tcal.ui.messages import EventSelected, NewEventRequested
-from tcal.ui.screens.event_detail import (
-    EditScope,
-    EventDetail,
-    MoveScope,
-    Scope,
-    confirm_delete,
-    is_recurring,
-)
-from tcal.ui.screens.event_form import EventForm
+from tcal.ui.screens.event_detail import EventDetail, confirm_delete
 from tcal.ui.screens.goto import GotoScreen
 from tcal.ui.screens.help import HelpScreen
-from tcal.ui.screens.quick_add import Mode, QuickAddScreen
 from tcal.ui.screens.search import SearchScreen
 from tcal.ui.state import AppState, ViewMode, add_months
 from tcal.ui.sync_status import SyncStatus
 from tcal.ui.theme import PALETTES, make_theme
+from tcal.ui.undo import UndoHistory, UndoStep
 from tcal.ui.widgets.calendar_list import CalendarList
 from tcal.ui.widgets.minical import MiniCal
 from tcal.ui.widgets.month_view import MonthView
@@ -68,19 +61,9 @@ from tcal.ui.widgets.timegrid import DayView, TimeGrid, WeekView
 from tcal.ui.widgets.view_switcher import ViewSwitcher
 from tcal.ui.widgets.year_view import YearView
 
-UNDO_DEPTH = 20  # changes the undo key can take back
-
 SIDEBAR_MIN_WIDTH = 120  # terminal columns below which the sidebar starts hidden
 OCC_CACHE_SIZE = 32  # date ranges whose occurrences are kept until the next data refresh
-
-
-@dataclass(frozen=True)
-class UndoStep:
-    """How to take back one change: ``uid``'s rows before it (empty: it was created)."""
-
-    uid: str
-    rows: list[Event]
-    message: str  # the toast after undoing it
+SELECTING_VIEWS = TimeGrid | MonthView | ScheduleView  # views with a selected event
 
 
 class TcalApp(App[None]):
@@ -138,9 +121,8 @@ class TcalApp(App[None]):
         self.sync_status = SyncStatus()  # shown in the status bar
         self._wide: bool | None = None  # terminal >= SIDEBAR_MIN_WIDTH, None before layout
         self._sidebar_pinned = False  # the user toggled the sidebar: resizes leave it alone
-        self._undo: list[UndoStep] = []  # last change at the end
-        self._yanked: Occurrence | None = None  # the yank key's copy
-        self._move_run: tuple[tuple[str, datetime], Scope] | None = None  # see action_move
+        self.history = UndoHistory()
+        self.editor = Editor(self)
         self.config = config or load_config()
         name = self.config.theme.name
         self._theme_notice = ""
@@ -206,7 +188,7 @@ class TcalApp(App[None]):
         message = (
             f"Undid the change to “{event.summary}”" if before else f"Removed “{event.summary}”"
         )
-        self._push_undo(UndoStep(event.uid, before, message))
+        self.history.push(UndoStep(event.uid, before, message))
         self.refresh_data()
         self.request_sync()
         return saved
@@ -218,97 +200,40 @@ class TcalApp(App[None]):
         self.refresh_data()
         self.request_sync()
         if rows:
-            self._push_undo(UndoStep(uid, rows, f"Restored “{rows[0].summary}”"))
+            self.history.push(UndoStep(uid, rows, f"Restored “{rows[0].summary}”"))
             self.notify(f"Deleted “{rows[0].summary}” · {self.undo_hint}")
 
     @property
     def undo_hint(self) -> str:
         return f"{format_key(self.config.keys['undo'][0])} undo"
 
-    def _push_undo(self, step: UndoStep) -> None:
-        self._undo = [*self._undo[-(UNDO_DEPTH - 1) :], step]
-        self._move_run = None
-
     def undo(self) -> None:
         """Take back the last create, edit, move or delete (up to ``UNDO_DEPTH`` in turn)."""
-        if not self._undo:
+        step = self.history.pop()
+        if step is None:
             self.notify("Nothing to undo")
             return
-        step = self._undo.pop()
         if step.rows:
             self.source.restore(step.rows)
         else:
             self.source.delete_event(step.uid)
-        self._move_run = None
         self.notify(step.message)
         self.refresh_data()
         self.request_sync()
 
-    # ----- event form ---------------------------------------------------
+    # ----- event form (``Editor``) ---------------------------------------
 
     def new_event(self, start: date | datetime) -> None:
         """Open the form for a new event at a time slot (1 h) or on a day (all-day)."""
-        if isinstance(start, datetime):
-            begin, end, all_day = start, start + timedelta(hours=1), False
-        else:
-            begin, end, all_day = local_midnight(start), local_midnight(start + timedelta(1)), True
-        writable = self._writable()
-        if not writable:
-            self.notify("No writable calendar", severity="warning")
-            return
-        draft = Event(
-            f"{uuid4()}@tcal", self._default_calendar(writable).id, "", begin, end, all_day
-        )
-        self.push_screen(EventForm(draft, writable, new=True), self._form_done)
-
-    def quick_add(self) -> None:
-        """One-line quick add: enter saves the parsed event, tab opens it in the form."""
-        writable = self._writable()
-        if not writable:
-            self.notify("No writable calendar", severity="warning")
-            return
-
-        def done(result: tuple[Mode, QuickAdd] | None) -> None:
-            if result is None:
-                return
-            mode, q = result
-            calendar = next((c for c in writable if c.name == q.calendar), default)
-            event = Event(
-                f"{uuid4()}@tcal", calendar.id, q.summary, q.start, q.end, q.all_day, q.location
-            )
-            if mode == "save":
-                self._form_done(event)
-                self.notify(f"Added “{event.summary}”")
-            else:
-                form = EventForm(event, writable, new=True, edited=True)
-                self.push_screen(form, self._form_done)
-
-        default = self._default_calendar(writable)
-        readonly = [c.name for c in self._calendars if c.readonly]
-        names = [c.name for c in writable]
-        self.push_screen(QuickAddScreen(date.today(), names, default.name, readonly), done)
+        self.editor.new_event(start)
 
     def edit_event(self, event: Event) -> None:
         """Open the form for an existing event (a master edits the whole series)."""
-        if self.check_writable(event.calendar_id):
-            self.push_screen(EventForm(event, self._writable(), new=False), self._form_done)
+        self.editor.edit_event(event)
 
     def edit_occurrence(self, occurrence: Occurrence) -> None:
-        """Edit ``occurrence``; for a series ask "this event" (an override with a
-        RECURRENCE-ID) or "all events" (the master)."""
-        if not self.check_writable(occurrence.calendar_id):
-            return
-        if not is_recurring(occurrence):
-            self.edit_event(occurrence.event)
-            return
-
-        def done(scope: Scope | None) -> None:
-            if scope == "occurrence":
-                self.edit_event(instance_of(occurrence))
-            elif scope == "series":
-                self.edit_event(self.source.get_event(occurrence.event.uid) or occurrence.event)
-
-        self.push_screen(EditScope(occurrence), done)
+        """Edit ``occurrence``; a series asks "this event" / "all events" first."""
+        self.editor.edit_occurrence(occurrence)
 
     def check_writable(self, calendar_id: str) -> bool:
         """True if events in ``calendar_id`` can be edited; else show "<name> is read-only"."""
@@ -317,22 +242,6 @@ class TcalApp(App[None]):
             return True
         self.notify(f"{calendar.name} is read-only", severity="warning")
         return False
-
-    def _writable(self) -> list[Calendar]:
-        return [c for c in self._calendars if not c.readonly]
-
-    def _default_calendar(self, writable: list[Calendar]) -> Calendar:
-        """For new events: the first shown calendar of ``writable`` (else the first)."""
-        hidden = self.state.hidden_calendars
-        return next((c for c in writable if c.id not in hidden), writable[0])
-
-    def _form_done(self, event: Event | None) -> None:
-        """Save a new/edited event; a hidden calendar it lands in is shown again."""
-        if event is None:
-            return
-        if event.calendar_id in self.state.hidden_calendars:
-            self.toggle_calendar(event.calendar_id)
-        self.save_event(event)
 
     # ----- sync -----------------------------------------------------------
 
@@ -480,116 +389,56 @@ class TcalApp(App[None]):
     def selected_occurrence(self) -> Occurrence | None:
         """The event selected in the focused day/week/month/schedule view, if any."""
         focused = self.focused
-        views = TimeGrid | MonthView | ScheduleView
-        return focused.selected if isinstance(focused, views) else None
+        return focused.selected if isinstance(focused, SELECTING_VIEWS) else None
+
+    def _selected(self) -> Occurrence | None:
+        """``selected_occurrence()``; None also toasts "No event selected"."""
+        occ = self.selected_occurrence()
+        if occ is None:
+            self.notify("No event selected")
+        return occ
+
+    def select_in_view(self, occ: Occurrence) -> None:
+        """Select ``occ`` (on the selected day) in the current view."""
+        view = self.query_one(f"#{self.state.view.value}")
+        if isinstance(view, SELECTING_VIEWS):
+            view.select(occ)
 
     def action_edit_event(self) -> None:
         """Edit the event selected in the focused day/week/month/schedule view."""
-        if occ := self.selected_occurrence():
+        if occ := self._selected():
             self.edit_occurrence(occ)
-        else:
-            self.notify("No event selected")
 
     def action_delete_event(self) -> None:
-        if occ := self.selected_occurrence():
+        if occ := self._selected():
             confirm_delete(self, occ)
-        else:
-            self.notify("No event selected")
 
     def action_undo(self) -> None:
         self.undo()
 
     def action_quick_add(self) -> None:
-        self.quick_add()
-
-    # ----- clipboard & moving ---------------------------------------------
+        self.editor.quick_add()
 
     def action_yank(self) -> None:
-        if occ := self.selected_occurrence():
-            self._yanked = occ
-            paste = format_key(self.config.keys["paste"][0])
-            self.notify(f"Copied “{occ.summary}” · {paste} paste")
-        else:
-            self.notify("No event selected")
+        if occ := self._selected():
+            self.editor.yank(occ)
 
     def action_paste(self) -> None:
-        """A copy of the yanked event at the time grid's cursor slot, else on the selected day."""
-        if self._yanked is None:
-            self.notify("Nothing copied")
-            return
-        focused = self.focused
-        at = focused.cursor_time if isinstance(focused, TimeGrid) else self.state.day
-        self._save_copy(self._yanked, at, "Pasted")
+        self.editor.paste()
 
     def action_duplicate(self) -> None:
-        if occ := self.selected_occurrence():
-            self._save_copy(occ, occ.start + timedelta(days=1), "Duplicated")
-        else:
-            self.notify("No event selected")
-
-    def _save_copy(self, occ: Occurrence, at: date | datetime, verb: str) -> None:
-        """Save a copy of ``occ`` at ``at`` (its own calendar, or the first writable),
-        select it and toast "<verb> “X” to Sun 22" (+ " · Work" if the calendar differs)."""
-        calendar = self.calendar(occ.calendar_id)
-        writable = [calendar] if calendar and not calendar.readonly else self._writable()
-        if not writable:
-            self.notify("No writable calendar", severity="warning")
-            return
-        copy = self.save_event(copy_at(occ, at, writable[0].id))
-        self._select_moved(copy.uid, copy.start)
-        day = copy.start.date()
-        where = "" if writable[0] is calendar else f" · {writable[0].name}"
-        self.notify(f"{verb} “{copy.summary}” to {day:%a} {day.day}{where} · {self.undo_hint}")
+        if occ := self._selected():
+            self.editor.save_copy(occ, occ.start + timedelta(days=1), "Duplicated")
 
     def action_move(self, minutes: int, days: int) -> None:
-        """Shift the selected event by ``minutes`` (timed events in a time grid) or ``days``.
-        For a series ask "this event" / "all events", as for editing; the answer holds
-        while the same occurrence is moved on (no other change in between). An override
-        just moves."""
-        occ = self.selected_occurrence()
+        """Shift the selected event by ``minutes`` (timed events in a time grid) or ``days``."""
+        occ = self._selected()
         if occ is None:
-            self.notify("No event selected")
             return
         if minutes and (occ.all_day or not isinstance(self.focused, TimeGrid)):
             self.notify("Moving by time works for timed events in the day/week view")
             return
-        if not self.check_writable(occ.calendar_id):
-            return
-        delta = timedelta(days=days, minutes=minutes)
-
-        def done(scope: Scope | None) -> None:
-            if scope is None:
-                return
-            if scope == "series":
-                event = self.source.get_event(occ.event.uid) or occ.event
-            else:
-                event = instance_of(occ) if is_recurring(occ) else occ.event
-            self.save_event(shifted(event, delta))
-            self._select_moved(occ.event.uid, occ.start + delta)
-            self._move_run = ((occ.event.uid, occ.start + delta), scope)
-
-        if not is_recurring(occ) or occ.event.recurrence_id is not None:
-            done("occurrence")
-        elif self._move_run is not None and self._move_run[0] == occ.key:
-            done(self._move_run[1])
-        else:
-            self.push_screen(MoveScope(occ), done)
-
-    def _select_moved(self, uid: str, start: datetime) -> None:
-        """Go to the day of event ``uid``'s occurrence at ``start`` and select it in the view."""
-        day = start.date()
-        self.select_date(day)
-        occ = next(
-            (
-                o
-                for o in self.occurrences(day, day + timedelta(1))
-                if o.event.uid == uid and o.start == start
-            ),
-            None,
-        )
-        view = self.query_one(f"#{self.state.view.value}")
-        if occ is not None and isinstance(view, TimeGrid | MonthView | ScheduleView):
-            view.select(occ)
+        self.editor.move(occ, timedelta(days=days, minutes=minutes))
 
     def action_goto_date(self) -> None:
         def jump(day: date | None) -> None:
@@ -612,10 +461,8 @@ class TcalApp(App[None]):
         if occ is None:
             return
         self.select_date(occ.start.date())
-        view = self.query_one(f"#{self.state.view.value}")
-        view.focus()
-        if isinstance(view, TimeGrid | MonthView | ScheduleView):
-            view.select(occ)
+        self.focus_view()
+        self.select_in_view(occ)
         self.push_screen(EventDetail(occ))
 
     def action_sync(self) -> None:
@@ -631,14 +478,3 @@ class TcalApp(App[None]):
 
     def on_new_event_requested(self, message: NewEventRequested) -> None:
         self.new_event(message.start)
-
-
-def instance_of(occ: Occurrence) -> Event:
-    """The event to edit for just ``occ``: its override, or a new one for the
-    master's instance (RECURRENCE-ID = the instance's start, no RRULE/EXDATEs)."""
-    event = occ.event
-    if event.recurrence_id is not None:
-        return event
-    zone = event.start.tzinfo
-    start, end = occ.start.astimezone(zone), occ.end.astimezone(zone)
-    return replace(event, start=start, end=end, recurrence_id=start, rrule=None, exdates=())

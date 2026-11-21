@@ -13,7 +13,7 @@ from tcal.source import StoreSource
 from tcal.store import Store
 from tcal.sync import SyncEngine, sync_job
 from tcal.tz import local_zone
-from tcal.ui.app import instance_of
+from tcal.ui.clipboard import instance_of
 
 
 def _at(hour: int, days: int = 0) -> datetime:

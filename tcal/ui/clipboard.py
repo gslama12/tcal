@@ -1,4 +1,5 @@
-"""Event copies and moves: yank/paste/duplicate and ctrl+h/j/k/l (pure helpers)."""
+"""Pure event transforms for editing: copies (yank/paste/duplicate), moves
+(ctrl+h/j/k/l) and single instances of a series."""
 
 from dataclasses import replace
 from datetime import date, datetime, timedelta
@@ -44,3 +45,14 @@ def shifted(event: Event, delta: timedelta) -> Event:
         end=event.end + delta,
         exdates=tuple(x + delta for x in event.exdates),
     )
+
+
+def instance_of(occ: Occurrence) -> Event:
+    """The event to edit for just ``occ``: its override, or a new one for the
+    master's instance (RECURRENCE-ID = the instance's start, no RRULE/EXDATEs)."""
+    event = occ.event
+    if event.recurrence_id is not None:
+        return event
+    zone = event.start.tzinfo
+    start, end = occ.start.astimezone(zone), occ.end.astimezone(zone)
+    return replace(event, start=start, end=end, recurrence_id=start, rrule=None, exdates=())

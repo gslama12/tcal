@@ -68,7 +68,7 @@ async def test_paste_in_month_view_uses_the_selected_day(make_app) -> None:
     app = make_app()
     async with app.run_test(size=(140, 50)) as pilot:
         await pilot.press("p")
-        assert app._yanked is None  # nothing to paste yet
+        assert app.editor.yanked is None  # nothing to paste yet
         app.query_one("#week", TimeGrid).select(find(app, "Dinner"))
         await pilot.press("y", "m", "l", "l", "P")
         await pilot.pause()
