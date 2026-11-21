@@ -49,7 +49,7 @@ from tcal.ui.screens.goto import GotoScreen
 from tcal.ui.screens.help import HelpScreen
 from tcal.ui.screens.search import SearchScreen
 from tcal.ui.state import AppState, ViewMode, add_months
-from tcal.ui.sync_status import SyncStatus
+from tcal.ui.sync_status import SyncState, SyncStatus
 from tcal.ui.theme import PALETTES, make_theme
 from tcal.ui.undo import UndoHistory, UndoStep
 from tcal.ui.widgets.calendar_list import CalendarList
@@ -119,6 +119,8 @@ class TcalApp(App[None]):
         self.source = source
         self._sync = sync
         self.sync_status = SyncStatus()  # shown in the status bar
+        self._sync_by_key = False  # the running sync was asked for with the sync key
+        self._error_shown = ""  # the sync error last toasted (not again until it changes)
         self._wide: bool | None = None  # terminal >= SIDEBAR_MIN_WIDTH, None before layout
         self._sidebar_pinned = False  # the user toggled the sidebar: resizes leave it alone
         self.history = UndoHistory()
@@ -216,6 +218,11 @@ class TcalApp(App[None]):
     def undo_hint(self) -> str:
         return f"{format_key(self.config.keys['undo'][0])} undo"
 
+    @property
+    def sync_hint(self) -> str:
+        """The sync key, e.g. "r"."""
+        return format_key(self.config.keys["sync"][0])
+
     def undo(self) -> None:
         """Take back the last create, edit, move or delete (up to ``UNDO_DEPTH`` in turn)."""
         step = self.history.pop()
@@ -278,10 +285,30 @@ class TcalApp(App[None]):
                     severity="warning",
                     timeout=10,
                 )
+            if self._sync_by_key:
+                self.notify("Synced", title="Sync")
+            self._error_shown = ""
         else:
             self.sync_status = self.sync_status.failed(worker.error)
             self.log.error(f"sync failed: {worker.error!r}")
+            self._toast_sync_error()
+        self._sync_by_key = False
         self.refresh_data()
+
+    def _toast_sync_error(self) -> None:
+        """Toast why the sync failed if the user asked for it, or nothing is cached yet
+        (a first run offline); the same error only once in a row."""
+        status = self.sync_status
+        if not self._sync_by_key and (self._calendars or status.error == self._error_shown):
+            return
+        self._error_shown = status.error
+        what = "Couldn't reach iCloud" if status.state is SyncState.OFFLINE else "Sync failed"
+        self.notify(
+            f"{what}: {status.error} · {self.sync_hint} retry · `tcal doctor` checks the setup",
+            title="Sync",
+            severity="warning" if status.state is SyncState.OFFLINE else "error",
+            timeout=15,
+        )
 
     # ----- state changes --------------------------------------------------
 
@@ -477,6 +504,10 @@ class TcalApp(App[None]):
     def action_sync(self) -> None:
         if self._sync is None:
             self.notify("Syncing is off (no account)")
+            return
+        self._sync_by_key = True
+        if self.sync_status.state is SyncState.SYNCING:
+            self.notify("Already syncing…", title="Sync")
         self.request_sync()
 
     def action_help(self) -> None:

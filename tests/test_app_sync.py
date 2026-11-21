@@ -52,3 +52,41 @@ async def test_sync_failure_is_shown(store: Store) -> None:
         await _wait_for_sync(app, pilot)
         assert "sync failed: offline" in str(app.query_one(StatusBar).render())
         assert app.occurrences(TODAY, TODAY + timedelta(days=1))  # cache still shown
+
+
+async def test_first_run_offline_explains_and_retries() -> None:
+    calls = 0
+
+    def unreachable():
+        nonlocal calls
+        calls += 1
+        raise OSError("Network is unreachable")
+
+    def messages(app: TcalApp) -> list[str]:
+        return [str(n.message) for n in app._notifications]
+
+    with Store(paths.database_file()) as store:  # empty cache
+        app = TcalApp(StoreSource(store), load_config(), today=TODAY, sync=unreachable)
+        async with app.run_test() as pilot:
+            await _wait_for_sync(app, pilot)
+            error = "Couldn't reach iCloud: Network is unreachable · r retry"
+            assert sum(m.startswith(error) for m in messages(app)) == 1
+            app.request_sync()  # a background retry with the same error: no new toast
+            await _wait_for_sync(app, pilot)
+            assert sum(m.startswith(error) for m in messages(app)) == 1
+            await pilot.press("a")
+            assert "Not synced yet · r sync" in messages(app)
+            await pilot.press("r")  # the sync key always reports
+            await _wait_for_sync(app, pilot)
+            assert sum(m.startswith(error) for m in messages(app)) == 2
+            assert calls == 3
+
+
+async def test_background_failure_with_a_cache_stays_quiet(store: Store) -> None:
+    def unreachable():
+        raise OSError("Network is unreachable")
+
+    app = TcalApp(StoreSource(store), load_config(), today=TODAY, sync=unreachable)
+    async with app.run_test() as pilot:
+        await _wait_for_sync(app, pilot)
+        assert not app._notifications
