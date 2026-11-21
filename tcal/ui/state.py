@@ -53,21 +53,22 @@ class AppState:
                 new = add_months(self.day, 12 * n)
         return replace(self, day=new)
 
-    def title(self) -> str:
-        """Human title of the current period, e.g. 'November 2026'."""
+    def title(self, short: bool = False) -> str:
+        """Human title of the current period, e.g. 'November 2026'
+        (``short``: abbreviated names, e.g. 'Nov 2026', 'Sat 21 Nov 2026')."""
         start, end = self.period()
         last = end - timedelta(days=1)
         match self.view:
             case ViewMode.DAY:
-                return f"{start:%A, %-d %B %Y}"
+                return f"{start:%a %-d %b %Y}" if short else f"{start:%A, %-d %B %Y}"
             case ViewMode.WEEK:
                 if start.year != last.year:
                     return f"{start:%-d %b %Y} – {last:%-d %b %Y}"
                 if start.month != last.month:
                     return f"{start:%-d %b} – {last:%-d %b %Y}"
-                return f"{start:%-d} – {last:%-d %B %Y}"
+                return f"{start:%-d} – {last:%-d {'%b' if short else '%B'} %Y}"
             case ViewMode.MONTH:
-                return f"{start:%B %Y}"
+                return f"{start:%b %Y}" if short else f"{start:%B %Y}"
             case ViewMode.YEAR:
                 return str(start.year)
 

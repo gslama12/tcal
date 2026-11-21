@@ -14,7 +14,10 @@ Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
 ``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``save_event()``,
 ``delete_event()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``,
-``new_event()``, ``edit_event()`` (open the event form).
+``new_event()``, ``edit_event()`` (open the event form), ``focus_view()``.
+
+The sidebar hides itself below ``SIDEBAR_MIN_WIDTH`` columns; the toggle key
+overrides that until the terminal crosses the threshold again.
 """
 
 from collections.abc import Callable
@@ -22,6 +25,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 from uuid import uuid4
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
@@ -51,6 +55,8 @@ from tcal.ui.widgets.timegrid import DayView, TimeGrid, WeekView
 from tcal.ui.widgets.view_switcher import ViewSwitcher
 from tcal.ui.widgets.year_view import YearView
 
+SIDEBAR_MIN_WIDTH = 120  # terminal columns below which the sidebar starts hidden
+
 
 class TcalApp(App[None]):
     CSS_PATH = "styles.tcss"
@@ -72,6 +78,7 @@ class TcalApp(App[None]):
         binding("sync", "Sync"),
         binding("focus_calendars", "Calendars"),
         binding("focus_next", "Next pane"),
+        binding("toggle_sidebar", "Sidebar"),
         binding("help", "Help"),
         binding("quit", "Quit"),
     ]
@@ -94,6 +101,7 @@ class TcalApp(App[None]):
         self.source = source
         self._sync = sync
         self.sync_status = SyncStatus()  # shown in the status bar
+        self._wide: bool | None = None  # terminal >= SIDEBAR_MIN_WIDTH, None before layout
         self.config = config or load_config()
         name = self.config.theme.name
         if name not in PALETTES:
@@ -210,6 +218,10 @@ class TcalApp(App[None]):
             self.state, hidden_calendars=self.state.hidden_calendars ^ {calendar_id}
         )
 
+    def focus_view(self) -> None:
+        """Focus the main view of the current mode."""
+        self.query_one(f"#{self.state.view.value}").focus()
+
     def watch_state(self, state: AppState) -> None:
         self.query_one("#views", ContentSwitcher).current = state.view.value
 
@@ -231,12 +243,27 @@ class TcalApp(App[None]):
 
     def on_mount(self) -> None:
         self.set_keymap(keymap(self.config))
-        self.query_one(f"#{self.state.view.value}").focus()
+        self.focus_view()
         if self._sync is not None:
             self.request_sync()
             self.set_interval(self.config.sync.interval, self.request_sync)
 
+    def on_resize(self, event: events.Resize) -> None:
+        wide = event.size.width >= SIDEBAR_MIN_WIDTH
+        if wide != self._wide:
+            self._wide = wide
+            self._show_sidebar(wide)
+
+    def _show_sidebar(self, show: bool) -> None:
+        sidebar = self.query_one("#sidebar")
+        sidebar.display = show
+        if not show and self.focused is not None and sidebar in self.focused.ancestors:
+            self.focus_view()
+
     # ----- actions --------------------------------------------------------
+
+    def action_toggle_sidebar(self) -> None:
+        self._show_sidebar(not self.query_one("#sidebar").display)
 
     def action_prev_period(self) -> None:
         self.state = self.state.shifted(-1)
@@ -252,6 +279,7 @@ class TcalApp(App[None]):
         self.query_one(f"#{mode}").focus()
 
     def action_focus_calendars(self) -> None:
+        self._show_sidebar(True)
         self.query_one(CalendarList).focus()
 
     def action_new_event(self) -> None:

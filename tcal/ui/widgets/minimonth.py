@@ -27,9 +27,10 @@ def mini_month(
 ) -> list[Text]:
     """``HEIGHT`` lines of ``WIDTH`` cells for the month of ``month``.
 
-    Today is accented, ``selected`` highlighted, days with events underlined,
-    ``marked`` days (e.g. the shown week) get a subtle background and days of
-    the adjacent months are dimmed (or left blank with ``adjacent=False``).
+    Today is accented, ``selected`` highlighted, days with events bold and
+    bright, days without dimmed, ``marked`` days (e.g. the shown week) get a
+    band background and days of the adjacent months are faint (or left blank
+    with ``adjacent=False``).
     """
     p = palette
     header = Text(" ".join(f"{name[0]:>2}" for name in weekday_names(week_start)))
@@ -38,20 +39,21 @@ def mini_month(
     for week in month_weeks(month.year, month.month, week_start, WEEKS):
         line = Text()
         for i, day in enumerate(week):
-            style = Style(color=p.foreground3)
             if day.month != month.month:
+                style = Style(color=p.background3)
+            elif day in event_days:
+                style = Style(color=p.foreground3, bold=True)
+            else:
                 style = Style(color=p.foreground1, dim=True)
             if day in marked:
-                style += Style(bgcolor=p.background2)
-            if day in event_days:
-                style += Style(underline=True)
+                style += Style(bgcolor=p.background3)
             if day == selected:
-                style += Style(bold=True, color=p.foreground3, bgcolor=p.background3)
+                style += Style(bold=True, color=p.background1, bgcolor=p.foreground1, dim=False)
             if day == today:
                 style += Style(bold=True, color=p.background1, bgcolor=p.primary, dim=False)
             if i:
                 gap = (
-                    Style(bgcolor=p.background2) if day in marked and week[i - 1] in marked else ""
+                    Style(bgcolor=p.background3) if day in marked and week[i - 1] in marked else ""
                 )
                 line.append(" ", style=gap)
             if day.month == month.month or adjacent:

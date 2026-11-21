@@ -22,3 +22,9 @@ def test_titles() -> None:
     assert AppState(date(2026, 11, 18), ViewMode.WEEK).title() == "16 – 22 November 2026"
     assert AppState(date(2026, 12, 30), ViewMode.WEEK).title() == "28 Dec 2026 – 3 Jan 2027"
     assert AppState(date(2026, 11, 18), ViewMode.MONTH).title() == "November 2026"
+
+
+def test_short_titles() -> None:
+    assert AppState(date(2026, 11, 21), ViewMode.DAY).title(short=True) == "Sat 21 Nov 2026"
+    assert AppState(date(2026, 11, 18), ViewMode.WEEK).title(short=True) == "16 – 22 Nov 2026"
+    assert AppState(date(2026, 11, 18), ViewMode.MONTH).title(short=True) == "Nov 2026"

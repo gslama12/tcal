@@ -65,6 +65,7 @@ async def test_minical_keyboard_and_click(app: RecordingApp) -> None:
         # the browsed month (October) is shown: week row 2 is Oct 12..18, column 2 Wed
         await pilot.click(MiniCal, offset=content(minical, 6, 4))
         assert app.state.day == date(2026, 10, 14)
+        assert app.focused is app.query_one(f"#{app.state.view.value}")  # click focuses the view
         await pilot.click(MiniCal, offset=content(minical, 19, 0))  # "›"
         assert minical.cursor == date(2026, 11, 14) and app.state.day == date(2026, 10, 14)
 
@@ -99,12 +100,6 @@ async def test_view_switcher_clicks(app: RecordingApp) -> None:
         assert app.state.day == date(2026, 12, 18)
         await pilot.click(ViewSwitcher, offset=content(switcher, x_of("Today"), 0))
         assert app.state.day == date.today()
-
-
-async def test_view_switcher_compacts_tabs(app: RecordingApp) -> None:
-    async with app.run_test(size=(70, 24)):
-        text = str(app.query_one(ViewSwitcher).render())
-        assert " D │ W │ M │ Y " in text and "Month" not in text
 
 
 async def test_month_view_navigation(app: RecordingApp) -> None:
@@ -166,3 +161,29 @@ async def test_screenshot_sanity(app: RecordingApp) -> None:
             await pilot.pause()
             svg = app.export_screenshot().replace("&#160;", " ")
             assert expected in svg and "My calendars" in svg and "November" in svg
+
+
+async def test_sidebar_toggle_and_auto_hide(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        sidebar = app.query_one("#sidebar")
+        assert sidebar.display
+        app.query_one(MiniCal).focus()
+        await pilot.press("b")
+        assert not sidebar.display and app.focused is app.query_one(f"#{app.state.view.value}")
+        await pilot.press("b")
+        assert sidebar.display
+        await pilot.resize_terminal(100, 35)
+        await pilot.pause()
+        assert not sidebar.display
+        await pilot.press("c")  # focusing the calendar list shows it again
+        assert sidebar.display
+        await pilot.resize_terminal(*SIZE)
+        await pilot.pause()
+        assert sidebar.display
+
+
+async def test_view_switcher_shortens_title_not_tabs(app: RecordingApp) -> None:
+    async with app.run_test(size=(70, 24)) as pilot:
+        await pilot.press("d")
+        text = str(app.query_one(ViewSwitcher).render())
+        assert "Day │ Week │ Month │ Year" in text and "Wed 18 Nov 2026" in text

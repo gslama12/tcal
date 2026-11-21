@@ -36,6 +36,7 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("focus_calendars", "Focus the calendar list"),
         ("toggle_calendar", "Show/hide calendar (in the list)"),
         ("focus_next", "Next pane"),
+        ("toggle_sidebar", "Show/hide the sidebar"),
     ],
     "Events": [
         ("open", "Open event / new event in empty slot"),
