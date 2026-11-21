@@ -247,6 +247,16 @@ class TcalApp(App[None]):
         """The sync key, e.g. "r"."""
         return format_key(self.config.keys["sync"][0])
 
+    def unsynced_hint(self) -> str:
+        """While nothing is cached yet and syncing is on: "Syncing…", or after a failed
+        sync "Not synced yet · r retry" (empty panes show it); else ""."""
+        status = self.sync_status
+        if self._calendars or status.state is SyncState.OFF or status.last_sync:
+            return ""
+        if status.state is SyncState.SYNCING:
+            return "Syncing…"
+        return f"Not synced yet · {self.sync_hint} retry"
+
     def undo(self) -> None:
         """Take back the last create, edit, move or delete (up to ``UNDO_DEPTH`` in turn)."""
         step = self.history.pop()
@@ -495,7 +505,7 @@ class TcalApp(App[None]):
 
     def action_duplicate(self) -> None:
         if occ := self._selected():
-            self.editor.save_copy(occ, occ.start + timedelta(days=1), "Duplicated")
+            self.editor.duplicate(occ)
 
     def action_move(self, minutes: int, days: int) -> None:
         """Shift the selected event by ``minutes`` (timed events in a time grid) or ``days``."""
@@ -517,10 +527,13 @@ class TcalApp(App[None]):
     def action_search(self) -> None:
         """Search the cached sync window; picking a result shows it (``show_occurrence``)."""
         today, window = date.today(), self.config.sync
-        occs = self.occurrences(
-            add_months(today, -window.past_months), add_months(today, window.future_months)
-        )
-        screen = SearchScreen(occs, datetime.now().astimezone(), self.calendar_color)
+
+        def occurrences() -> list[Occurrence]:
+            return self.occurrences(
+                add_months(today, -window.past_months), add_months(today, window.future_months)
+            )
+
+        screen = SearchScreen(occurrences, datetime.now().astimezone(), self.calendar_color)
         self.push_screen(screen, self.show_occurrence)
 
     def show_occurrence(self, occ: Occurrence | None) -> None:

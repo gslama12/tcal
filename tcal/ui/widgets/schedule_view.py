@@ -317,7 +317,8 @@ class ScheduleView(CalendarView):
         visible = self._rows[self._top : self._top + self.content_size.height]
         if not self._rows:
             p = self.tcal.palette
-            return Text(" No upcoming events", style=Style(color=p.foreground1))
+            empty = self.tcal.unsynced_hint() or "No upcoming events"
+            return Text(f" {empty}", style=Style(color=p.foreground1))
         if len(visible) > 1 and visible[-1].header:  # no day header without its events
             visible = visible[:-1]
         lines = [self._line(row, self._top + i) for i, row in enumerate(visible)]

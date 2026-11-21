@@ -49,11 +49,18 @@ class CalendarView(TcalWidget, can_focus=True):
 
     Declares the configurable cursor/zoom/open bindings (``VIEW_BINDINGS``);
     subclasses implement the matching ``action_cursor_left/down/up/right``,
-    ``action_open`` and, where it makes sense, ``action_zoom_in/out``. Moving
-    the cursor across days calls ``self.tcal.select_date(day)``.
+    ``action_open`` and, where it makes sense, ``action_zoom_in/out`` (elsewhere
+    zooming says where it works). Moving the cursor across days calls
+    ``self.tcal.select_date(day)``.
     """
 
     BINDINGS = VIEW_BINDINGS
+
+    def action_zoom_in(self) -> None:
+        self.tcal.notify("Zoom works in the day/week view")
+
+    def action_zoom_out(self) -> None:
+        self.action_zoom_in()
 
     def cursor_style(self) -> Style:
         """Background of the selected day / event row (brighter while focused)."""

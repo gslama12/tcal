@@ -16,6 +16,9 @@ from tcal.tz import local_zone
 from tcal.ui.app import TcalApp
 from tcal.ui.screens.event_detail import EventDetail
 from tcal.ui.screens.event_form import EventForm, ServerChanged
+from tcal.ui.screens.search import ResultList
+from tcal.ui.widgets.calendar_list import CalendarList
+from tcal.ui.widgets.schedule_view import ScheduleView
 from tcal.ui.widgets.statusbar import StatusBar
 
 
@@ -91,6 +94,20 @@ async def test_detail_follows_a_server_change_and_closes_when_deleted(
         )
 
 
+async def test_search_results_follow_a_sync(provider: FakeProvider, store: Store) -> None:
+    app = _synced_app(provider, store)
+    async with app.run_test(size=(140, 45)) as pilot:
+        await _wait_for_sync(app, pilot)
+        uid = _dinner(app).event.uid
+        await pilot.press("slash", *"dinner")
+        provider.update_event(replace(provider.events[uid], summary="Dinner server"))
+        app.request_sync()
+        await _wait_for_sync(app, pilot)
+        results = app.screen.query_one(ResultList)
+        assert results.option_count == 1
+        assert "Dinner server" in str(results.get_option_at_index(0).prompt)
+
+
 async def test_saving_over_a_server_change_asks_first(provider: FakeProvider, store: Store) -> None:
     app = _synced_app(provider, store)
     async with app.run_test(size=(140, 45)) as pilot:
@@ -142,8 +159,12 @@ async def test_first_run_offline_explains_and_retries() -> None:
             app.request_sync()  # a background retry with the same error: no new toast
             await _wait_for_sync(app, pilot)
             assert sum(m.startswith(error) for m in messages(app)) == 1
+            hint = "Not synced yet · r retry"
+            assert str(app.query_one(CalendarList).render()) == hint
+            schedule = app.query_one(ScheduleView)
+            assert str(schedule.render()).strip() == hint
             await pilot.press("a")
-            assert "Not synced yet · r sync" in messages(app)
+            assert hint in messages(app)
             await pilot.press("r")  # the sync key always reports
             await _wait_for_sync(app, pilot)
             assert sum(m.startswith(error) for m in messages(app)) == 2

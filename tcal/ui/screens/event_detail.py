@@ -1,8 +1,9 @@
 """Event detail modal (enter/click on an event) and the delete confirmation.
 
-``EventDetail(occ)``: e = edit (``app.edit_occurrence``), x = delete, j/k scroll,
-esc/q = close; it follows a sync's changes to the event (closes if it's gone) (a read-only calendar's event only hints "esc close"; e/x give a
-notice and keep the detail open).
+``EventDetail(occ)``: e = edit (``app.edit_occurrence``), x = delete, y = yank,
+D = duplicate, j/k scroll, esc/q = close; it follows a sync's changes to the event
+(closes if it's gone). A read-only calendar's event hints only "y copy  esc close";
+e/x give a notice and keep the detail open.
 ``confirm_delete(app, occ)`` is the one delete flow, also used by the ``x`` key
 in the views: read-only calendars only get a notice; a recurring event asks
 "this event" vs "all events". ``EditScope`` asks the same before editing
@@ -248,6 +249,8 @@ class EventDetail(ModalScreen[None]):
     BINDINGS = [
         binding("edit_event", "Edit", action="edit"),
         binding("delete_event", "Delete", action="delete"),
+        binding("yank", "Yank", action="yank"),
+        binding("duplicate", "Duplicate", action="duplicate"),
         binding("cursor_down", action="scroll_body(1)"),
         binding("cursor_up", action="scroll_body(-1)"),
         binding("quit", "Close", action="dismiss"),
@@ -289,7 +292,9 @@ class EventDetail(ModalScreen[None]):
                 if value:
                     yield Static(value, id=widget_id)
             self.hints = (
-                "esc close" if calendar and calendar.readonly else "e edit  x delete  esc close"
+                "y copy  esc close"
+                if calendar and calendar.readonly
+                else "e edit  x delete  y copy  esc close"
             )
             yield Static(Text(self.hints, style=p.foreground1), id="hints")
 
@@ -324,6 +329,13 @@ class EventDetail(ModalScreen[None]):
         if self.tcal.check_writable(self.occ.calendar_id):
             self.dismiss()
             self.tcal.edit_occurrence(self.occ)
+
+    def action_yank(self) -> None:
+        self.tcal.editor.yank(self.occ)
+
+    def action_duplicate(self) -> None:
+        self.dismiss()  # the copy is selected in the view behind
+        self.tcal.editor.duplicate(self.occ)
 
     def action_delete(self) -> None:
         if self.tcal.check_writable(self.occ.calendar_id):

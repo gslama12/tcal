@@ -18,7 +18,6 @@ from tcal.ui.clipboard import copy_at, instance_of, shifted
 from tcal.ui.screens.event_detail import EditScope, MoveScope, Scope, is_recurring, short_when
 from tcal.ui.screens.event_form import EventForm
 from tcal.ui.screens.quick_add import Mode, QuickAddScreen
-from tcal.ui.sync_status import SyncState
 from tcal.ui.widgets.timegrid import TimeGrid
 
 if TYPE_CHECKING:
@@ -123,6 +122,10 @@ class Editor:
         at = focused.cursor_time if isinstance(focused, TimeGrid) else self.app.state.day
         self.save_copy(self.yanked, at, "Pasted")
 
+    def duplicate(self, occ: Occurrence) -> None:
+        """A copy of ``occ`` on the next day."""
+        self.save_copy(occ, occ.start + timedelta(days=1), "Duplicated")
+
     def save_copy(self, occ: Occurrence, at: date | datetime, verb: str) -> None:
         """Save a copy of ``occ`` at ``at`` (its own calendar, or the first writable),
         select it and toast "<verb> “X” to Sun 22" (+ " · Work" if the calendar differs)."""
@@ -171,14 +174,13 @@ class Editor:
     # ----- helpers --------------------------------------------------------
 
     def _writable(self, warn: bool = True) -> list[Calendar]:
-        """The writable calendars; none: warn "No writable calendar" (or "Not synced
-        yet" while nothing has been synced)."""
+        """The writable calendars; none: warn "No writable calendar" (or
+        ``app.unsynced_hint()`` while nothing has been synced)."""
         app = self.app
         writable = [c for c in app.calendars() if not c.readonly]
         if not writable and warn:
-            status = app.sync_status
-            if not app.calendars() and status.state is not SyncState.OFF and not status.last_sync:
-                app.notify(f"Not synced yet · {app.sync_hint} sync", severity="warning")
+            if hint := app.unsynced_hint():
+                app.notify(hint, severity="warning")
             else:
                 app.notify("No writable calendar", severity="warning")
         return writable
