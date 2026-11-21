@@ -730,12 +730,16 @@ class TimeGrid(CalendarView):
                 continue
             color = self.tcal.calendar_color(bar.occ.calendar_id)
             fg = _readable(color, p.background1, p.foreground3)
-            style = _style(fg, color, bold=True, reverse=bar.occ == selected)
+            style = _style(fg, color, bold=True)
             y, x0, x1 = 1 + bar.lane, xs[bar.first] + 1, xs[bar.last]
             canvas.fill(y, x0, x1, style)
             before = "◂" if bar.occ.start.date() < days[0] else " "
+            if bar.occ == selected:  # accent bar, as for selected blocks
+                before = "▌" if before == " " else before
             after = bar.last == n and bar.occ.end > _midnight(days[-1] + timedelta(days=1))
             canvas.text(y, x0, x1, f"{before}{_clean(bar.occ.summary)}")
+            if bar.occ == selected:
+                canvas.text(y, x0, x0 + 1, before, _style(p.foreground3, color, bold=True))
             if after:
                 canvas.text(y, x1 - 1, x1, "▸")
         sep = 1 + rows
@@ -774,22 +778,16 @@ class TimeGrid(CalendarView):
             if row == cursor_row:
                 canvas.fill(y, xs[sel_col] + 1, xs[sel_col + 1], cursor)
             if now_col is not None and row == scale.row_of(now_min):
+                # ● replaces the column's divider (never covered); events drawn later cover
+                # the line, so it never hides their text. The hour label stays.
                 red = Style(color=p.red, bold=True)
-                x0, x1 = xs[now_col] + 1, xs[now_col + 1]
-                for x in range(x0, x1):
-                    canvas.chars[y][x] = "●" if x == x0 else "─"
+                for x in range(xs[now_col], xs[now_col + 1]):
+                    canvas.chars[y][x] = "●" if x == xs[now_col] else "─"
                     canvas.styles[y][x] = canvas.styles[y][x] + red
-                canvas.text(y, 0, AXIS, f"{current:%H:%M}", _style(p.red, p.background1, bold=True))
 
         selected = self.selected
         for block in self._block_list():
             self._draw_block(canvas, xs, block, top, bottom, header, selected)
-        if now_col is not None and top <= scale.row_of(now_min) < bottom:
-            # Events cover the line; the marker stays on the column edge if it is free.
-            y, x0 = header + scale.row_of(now_min) - top, xs[now_col] + 1
-            if canvas.chars[y][x0] == " ":
-                canvas.chars[y][x0] = "●"
-                canvas.styles[y][x0] = canvas.styles[y][x0] + Style(color=p.red, bold=True)
         self._draw_hidden(canvas, xs, top, bottom, header)
 
     def _draw_hidden(
@@ -838,9 +836,9 @@ class TimeGrid(CalendarView):
         occ = selected_occ if selected and selected_occ is not None else block.occ
         color = self.tcal.calendar_color(occ.calendar_id)
         fg = _readable(color, p.background1, p.foreground3)
-        style = _style(fg, color, reverse=selected)
+        style = _style(fg, color, bold=selected)
         x0, x1 = self._sub_columns(block, xs)
-        pad = " " if x1 - x0 >= 6 else ""
+        pad = " " if x1 - x0 >= 6 or selected else ""
         title, span = _clean(occ.summary), f"{occ.start:%H:%M}–{occ.end:%H:%M}"
         if block.group:
             n = len(block.group)
@@ -855,8 +853,10 @@ class TimeGrid(CalendarView):
             canvas.fill(y, x0, x1, style)
             index = row - first
             if index < len(texts):
-                bold = _style(fg, color, bold=True, reverse=selected) if index == 0 else None
+                bold = _style(fg, color, bold=True) if index == 0 else None
                 canvas.text(y, x0, x1, pad + texts[index], bold)
+            if selected:  # Google-like: keep the colour, add a bright accent bar + bold text
+                canvas.text(y, x0, x0 + 1, "▌", _style(p.foreground3, color, bold=True))
 
 
 def _header(fmt: str, day: date) -> str:

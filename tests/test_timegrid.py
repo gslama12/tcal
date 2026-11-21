@@ -71,10 +71,11 @@ async def test_week_renders_header_strip_events_and_now_line(app: RecordingApp) 
         for title in ("Standup", "Sprint plann", "Dinner", "Late movie", "Haircut"):
             assert title in body
         assert "Early run" not in body  # 05:45: above the default range
-        now_line = next(line for line in lines if line.startswith("10:15"))
         xs = grid._columns()
+        now_line = next(line for line in lines if line[xs[2]] == "●")  # on Wed's edge
         assert "─" in now_line[xs[2] : xs[3]]  # today = Wed, clipped to its column
         assert now_line[xs[3]] == "│" and "─" not in now_line[xs[3] :]
+        assert "10:15" not in body and "10:00" in body  # hour labels stay
         assert grid.rows_per_hour == 2
         assert grid.cursor_time == at("10:00")  # starts at "now", snapped to the slot
         screenshot = app.export_screenshot()
@@ -326,7 +327,8 @@ async def test_now_line_keeps_event_text(app: RecordingApp) -> None:
         await pilot.press("d")
         await pilot.pause()
         grid = app.query_one(DayView)
-        row = next(line for line in text(grid) if line.startswith("10:15"))
+        row = next(line for line in text(grid) if line[AXIS] == "●")
+        assert row.startswith("10:00")  # the slot keeps its label; no "10:15" replaces it
         event = row[AXIS + 1 : row.index("Design review") + len("Design review")]
-        assert event == "●Design review"  # only the marker, on the event's edge
+        assert event[0] in " ▌" and event[1:] == "Design review"  # text not covered
         assert "─" in row[row.index("Design review") :]  # the line goes on beside the event
