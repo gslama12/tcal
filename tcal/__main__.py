@@ -133,11 +133,13 @@ def sync() -> None:
 @cli.command()
 def calendars() -> None:
     """List the account's calendars."""
+    from tcal.doctor import calendar_line
+
     provider = connect(_config())
     with _reported("could not list calendars"):
         found = provider.list_calendars()
     for cal in found:
-        click.echo(f"{cal.color}  {cal.name}{'  (read-only)' if cal.readonly else ''}")
+        click.echo(calendar_line(cal))
 
 
 @cli.command()

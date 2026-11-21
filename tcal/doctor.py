@@ -13,6 +13,7 @@ from typing import TypeVar
 from tcal import paths
 from tcal.config import Config
 from tcal.credentials import CredentialsError, find_password
+from tcal.model import Calendar
 from tcal.providers.base import AuthError, ProviderError
 from tcal.providers.icloud import ICloudProvider
 from tcal.recurrence import expand
@@ -25,6 +26,11 @@ APP_PASSWORD_HINT = (
     "iCloud needs an app-specific password, not your Apple ID password: create one at "
     "appleid.apple.com → Sign-In and Security → App-Specific Passwords, then run `tcal login`"
 )
+
+
+def calendar_line(cal: Calendar) -> str:
+    """'#RRGGBB  Name', with '  (read-only)' if so."""
+    return f"{cal.color}  {cal.name}{'  (read-only)' if cal.readonly else ''}"
 
 
 class Failed(Exception):
@@ -101,7 +107,7 @@ def _checks(config: Config, echo: Callable[[str], object], connect: Connect, tod
         raise Failed("calendars", "the account has no event calendars", "create one on iCloud.com")
     echo(f"✓ calendars: {len(calendars)}")
     for cal in calendars:
-        echo(f"    {cal.color}  {cal.name}{'  (read-only)' if cal.readonly else ''}")
+        echo(f"    {calendar_line(cal)}")
 
     first = today - timedelta(days=(today.weekday() - config.view.week_start) % 7)
     start, end = local_midnight(first), local_midnight(first + timedelta(days=7))
