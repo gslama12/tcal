@@ -51,6 +51,7 @@ sync = ["r"]
 focus_calendars = ["c"]
 toggle_calendar = ["space"]           # in the calendar list (enter works too)
 focus_next = ["tab"]
+toggle_sidebar = ["b"]
 help = ["question_mark"]
 quit = ["q"]
 save = ["ctrl+s"]                      # event form

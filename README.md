@@ -111,6 +111,7 @@ Keys use Textual key names: `"plus"`, `"minus"`, `"slash"`, `"question_mark"`, `
 | `focus_calendars` | `c` | focus the calendar list |
 | `toggle_calendar` | `space` | show/hide calendar (in the calendar list; `enter` works too) |
 | `focus_next` | `tab` | cycle focus |
+| `toggle_sidebar` | `b` | show/hide the sidebar (auto-hidden below 120 columns) |
 | `help` | `?` | list all keys |
 | `quit` | `q` | quit |
 | `save` | `ctrl+s` | save the event form |

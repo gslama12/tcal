@@ -96,7 +96,7 @@ class Layout:
 class YearView(DayCursorView):
     """The 12 months of ``state.day``'s year (4x3, 3x4 or 2x6, scaled to the size).
 
-    Today accented, days with events underlined, the selected day highlighted;
+    Today accented, days with events bright (others dimmed), the selected day highlighted;
     h/j/k/l move it, enter opens the Day view. Clicking a day selects it
     (clicking the selected day opens it), clicking a month name opens the Month view.
     """

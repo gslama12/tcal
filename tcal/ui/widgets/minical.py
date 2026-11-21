@@ -18,9 +18,10 @@ class MiniCal(TcalWidget, can_focus=True):
     """Small month calendar at the top of the sidebar.
 
     Shows the month of its own ``cursor`` (follows ``state.day``): today accented,
-    the cursor highlighted, days with events underlined, the shown week marked.
-    When focused, h/j/k/l move the cursor, H/L by a month and enter jumps the
-    main view to it; clicking a day jumps at once, clicking ‹ › browses months.
+    the cursor highlighted, days with events bright (others dimmed), the shown
+    week as a band. When focused, h/j/k/l move the cursor, H/L by a month and
+    enter jumps the main view to it; clicking a day jumps there and focuses the
+    main view, clicking ‹ › browses months.
     """
 
     BINDINGS = [
@@ -73,6 +74,7 @@ class MiniCal(TcalWidget, can_focus=True):
         day = day_at(self.cursor.replace(day=1), self.tcal.state.week_start, offset.x, offset.y - 1)
         if day is not None:
             self.tcal.select_date(day)
+            self.tcal.focus_view()
 
     def action_move(self, days: int) -> None:
         self.cursor += timedelta(days=days)

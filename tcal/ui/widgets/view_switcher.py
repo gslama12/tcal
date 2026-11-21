@@ -19,7 +19,7 @@ class ViewSwitcher(TcalWidget):
     active one highlighted) call the app's actions.
     """
 
-    def _parts(self, compact: bool) -> tuple[list[Part], list[Part]]:
+    def _parts(self, short: bool) -> tuple[list[Part], list[Part]]:
         app, p = self.tcal, self.tcal.palette
         button = Style(color=p.foreground3, bgcolor=p.background3, bold=True)
         arrow = Style(color=p.primary, bold=True)
@@ -29,7 +29,7 @@ class ViewSwitcher(TcalWidget):
             (" ‹ ", arrow, app.action_prev_period),
             (" › ", arrow, app.action_next_period),
             ("  ", Style(), None),
-            (app.state.title(), Style(color=p.foreground3, bold=True), None),
+            (app.state.title(short), Style(color=p.foreground3, bold=True), None),
         ]
         right: list[Part] = []
         for mode in ViewMode:
@@ -41,16 +41,17 @@ class ViewSwitcher(TcalWidget):
                 if active
                 else Style(color=p.foreground1)
             )
-            label = mode.value[0].upper() if compact else mode.value.title()
-            right.append((f" {label} ", style, partial(app.action_set_view, mode.value)))
+            right.append(
+                (f" {mode.value.title()} ", style, partial(app.action_set_view, mode.value))
+            )
         return left, right
 
     def _placed(self) -> list[tuple[int, Part]]:
-        """Every part with its x offset; the tabs are right-aligned (initials if tight)."""
+        """Every part with its x offset; the tabs are right-aligned (a short title if tight)."""
         width = self.content_size.width
-        left, right = self._parts(compact=False)
+        left, right = self._parts(short=False)
         if sum(len(part[0]) for part in left + right) + 2 > width:
-            left, right = self._parts(compact=True)
+            left, right = self._parts(short=True)
         placed, x = [], 0
         for part in left:
             placed.append((x, part))
