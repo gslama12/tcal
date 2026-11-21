@@ -13,7 +13,7 @@ Layout::
 Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
 ``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``save_event()``,
-``delete_event()``, ``request_sync()``, ``sync_status``.
+``delete_event()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``.
 """
 
 from collections.abc import Callable
@@ -32,7 +32,9 @@ from tcal.source import EventSource
 from tcal.sync import SyncSummary
 from tcal.ui.keys import binding, keymap
 from tcal.ui.messages import EventSelected, NewEventRequested
-from tcal.ui.state import AppState, ViewMode
+from tcal.ui.screens.goto import GotoScreen
+from tcal.ui.screens.search import SearchScreen
+from tcal.ui.state import AppState, ViewMode, add_months
 from tcal.ui.theme import PALETTES, make_theme
 from tcal.ui.widgets.calendar_list import CalendarList
 from tcal.ui.widgets.minical import MiniCal
@@ -227,10 +229,30 @@ class TcalApp(App[None]):
         self.notify("Delete event: not implemented yet")
 
     def action_goto_date(self) -> None:
-        self.notify("Go to date: not implemented yet")
+        def jump(day: date | None) -> None:
+            if day is not None:
+                self.select_date(day)
+
+        self.push_screen(GotoScreen(self.state.day), jump)
 
     def action_search(self) -> None:
-        self.notify("Search: not implemented yet")
+        """Search the cached sync window; picking a result opens its day selected."""
+        today, window = date.today(), self.config.sync
+        occs = self.occurrences(
+            add_months(today, -window.past_months), add_months(today, window.future_months)
+        )
+        screen = SearchScreen(occs, datetime.now().astimezone(), self.calendar_color)
+        self.push_screen(screen, self.show_occurrence)
+
+    def show_occurrence(self, occ: Occurrence | None) -> None:
+        """Switch to the day view on ``occ``'s day with ``occ`` selected."""
+        if occ is None:
+            return
+        self.set_view(ViewMode.DAY)
+        self.select_date(occ.start.date())
+        view = self.query_one(DayView)
+        view.focus()
+        view.select(occ)
 
     def action_sync(self) -> None:
         if self._sync is None:

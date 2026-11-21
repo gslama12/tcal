@@ -150,3 +150,11 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   and scroll position are kept in minutes so they survive zoom and resize.
 - **T4 Strip:** all-day events and timed events lasting ≥ 24 h are bars in the all-day strip
   (max 3 lanes, "+N" in the axis for the rest); shorter events crossing midnight are split.
+
+### Goto / search notes (package 5)
+
+- **G1 Goto:** `tcal/ui/screens/goto.py` `parse_date(text, today)`; dates without a year are in
+  today's year, a weekday means the next one after today; `+Ny` works besides d/w/m.
+- **G2 Search:** searches the visible calendars over the sync window (today − past_months ..
+  + future_months); a series is listed once (its next instance). `app.show_occurrence(occ)`
+  opens the day view with `occ` selected via the new public `TimeGrid.select(occ)`.
