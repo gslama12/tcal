@@ -79,17 +79,14 @@ def demo_feed(today: date | None = None) -> FakeProvider:
     feed = FakeProvider(demo=False)
     feed.calendars = [replace(FEED)]
     day = today or date.today()
-    tz = local_zone()
+
+    def at(days: int, hour: int) -> datetime:
+        return datetime.combine(day + timedelta(days=days), time(hour), local_zone())
+
     for uid, summary, start, hours, all_day in (
-        ("feed-1", "Team lunch", datetime.combine(day + timedelta(days=1), time(12), tz), 1, False),
-        (
-            "feed-2",
-            "Office party",
-            datetime.combine(day + timedelta(days=6), time(17), tz),
-            3,
-            False,
-        ),
-        ("feed-3", "Hackathon", datetime.combine(day + timedelta(days=8), time(), tz), 48, True),
+        ("feed-1", "Team lunch", at(1, 12), 1, False),
+        ("feed-2", "Office party", at(6, 17), 3, False),
+        ("feed-3", "Hackathon", at(8, 0), 48, True),
     ):
         event = Event(uid, FEED.id, summary, start, start + timedelta(hours=hours), all_day=all_day)
         feed._store(event, f"fake://{uid}")

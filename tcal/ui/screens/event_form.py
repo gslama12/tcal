@@ -321,27 +321,24 @@ class EventForm(ModalScreen[Event | None]):
     @on(Input.Changed, "#start_date, #start_time")
     def _start_changed(self) -> None:
         """Move the end along with the start (keeping the duration)."""
-        new = self._parsed_start()
+        new = self._shown_time("start")
         if new is None or self._start is None:
             self._start = new or self._start
             return
-        try:
-            end = datetime.combine(
-                parse_date(self.query_one("#end_date", Input).value),
-                parse_time(self.query_one("#end_time", Input).value),
-            )
-        except FormError:
+        end = self._shown_time("end")
+        if end is None:
             return
         end += new - self._start
         self._start = new
         self.query_one("#end_date", Input).value = end.date().isoformat()
         self.query_one("#end_time", Input).value = f"{end:%H:%M}"
 
-    def _parsed_start(self) -> datetime | None:
+    def _shown_time(self, side: str) -> datetime | None:
+        """The ``start``/``end`` date and time fields as a naive datetime, None if invalid."""
         try:
             return datetime.combine(
-                parse_date(self.query_one("#start_date", Input).value),
-                parse_time(self.query_one("#start_time", Input).value),
+                parse_date(self.query_one(f"#{side}_date", Input).value),
+                parse_time(self.query_one(f"#{side}_time", Input).value),
             )
         except FormError:
             return None

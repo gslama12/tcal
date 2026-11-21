@@ -65,11 +65,10 @@ class QuickAddScreen(ModalScreen[tuple[Mode, QuickAdd]]):
         keys = {
             b.binding.id: self.app.get_key_display(b.binding) for b in self.active_bindings.values()
         }
-        self.query_one(
-            Input
-        ).border_subtitle = (
+        hint = (
             f"enter save · {keys.get('focus_next', '')} full form · {keys.get('cancel', '')} cancel"
         )
+        self.query_one(Input).border_subtitle = hint
         self._preview()
 
     def parsed(self) -> QuickAdd:
