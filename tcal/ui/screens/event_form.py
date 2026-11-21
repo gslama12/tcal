@@ -10,6 +10,7 @@ Fields left as shown keep the event's own values (time zone, a custom RRULE).
 Changing the start shifts the end so the duration stays the same. An event with
 ``recurrence_id`` is one instance of a series: repeat and calendar are fixed;
 a master with an RRULE edits all events (the dates shown are the first one's).
+A series can end on a date (UNTIL) or after a number of times (COUNT).
 Dates accept goto's forms (``fri``, ``tomorrow``, ``24.12.``, ISO). An error on
 save is shown below its field, which is marked; it clears when a field changes.
 
@@ -17,7 +18,7 @@ save is shown below its field, which is marked; it clears when a field changes.
 
 import re
 from dataclasses import dataclass, replace
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import cast
 
 from textual import on
@@ -32,7 +33,7 @@ from tcal import dates
 from tcal.model import Calendar, Event
 from tcal.tz import local_midnight, local_zone
 from tcal.ui.keys import binding
-from tcal.ui.screens.event_detail import describe_rrule
+from tcal.ui.screens.event_detail import describe_rrule, until_date
 
 REPEATS: dict[str, str | None] = {  # choice -> RRULE
     "none": None,
@@ -50,6 +51,7 @@ REPEAT_LABELS = {
     "monthly": "Every month",
     "yearly": "Every year",
 }
+ENDS = {"never": "Never", "on": "On date", "after": "After"}  # a series' end: none/UNTIL/COUNT
 DEFAULT_START, DEFAULT_END = time(9), time(10)
 CUSTOM = "custom"  # an RRULE the form can't express; kept unless changed
 
@@ -76,6 +78,8 @@ class FormValues:
     location: str
     notes: str
     repeat: str
+    ends: str  # a key of ENDS
+    ends_value: str  # "on": a date, "after": a number of times
 
 
 def values_of(event: Event) -> FormValues:
@@ -94,13 +98,48 @@ def values_of(event: Event) -> FormValues:
         location=event.location,
         notes=event.description,
         repeat=repeat_of(event.rrule),
+        ends=split_end(event.rrule)[1],
+        ends_value=split_end(event.rrule)[2],
     )
 
 
 def repeat_of(rrule: str | None) -> str:
+    """The REPEATS choice of ``rrule`` (its end aside), CUSTOM if none matches."""
     if not rrule:
         return "none"
-    return next((r for r, rule in REPEATS.items() if rule == rrule.upper()), CUSTOM)
+    rule = split_end(rrule)[0].upper()
+    return next((r for r, known in REPEATS.items() if known == rule), CUSTOM)
+
+
+def split_end(rrule: str | None) -> tuple[str, str, str]:
+    """``rrule`` without COUNT/UNTIL, the ENDS choice and its value as shown."""
+    parts = [p for p in (rrule or "").split(";") if p]
+    rest = ";".join(p for p in parts if p.split("=")[0].upper() not in ("COUNT", "UNTIL"))
+    for part in parts:
+        key, _, value = part.partition("=")
+        if key.upper() == "COUNT":
+            return rest, "after", value
+        if key.upper() == "UNTIL":
+            return rest, "on", until_date(value).isoformat()
+    return rest, "never", ""
+
+
+def end_rule(values: FormValues, start: datetime, all_day: bool, today: date | None) -> str:
+    """The RRULE suffix for the form's "Ends" fields ('' = never)."""
+    text = values.ends_value.strip()
+    if values.ends == "after":
+        if not text.isdigit() or int(text) < 1:
+            raise FormError(f"Not a number of times: {text!r}", "ends_value")
+        return f";COUNT={int(text)}"
+    if values.ends == "on":
+        day = parse_date(text, "ends_value", today)
+        if day < start.astimezone(local_zone()).date():
+            raise FormError("The series can't end before it starts", "ends_value")
+        if all_day:
+            return f";UNTIL={day:%Y%m%d}"
+        last = local_midnight(day + timedelta(days=1)) - timedelta(seconds=1)
+        return f";UNTIL={last.astimezone(UTC):%Y%m%dT%H%M%SZ}"
+    return ""
 
 
 def parse_date(text: str, field: str = "start_date", today: date | None = None) -> date:
@@ -146,8 +185,9 @@ def build_event(
         if _end_fields(values) == _end_fields(shown):
             end = event.end
     rrule = event.rrule
-    if values.repeat != shown.repeat:
-        rrule = REPEATS[values.repeat]
+    if _repeat_fields(values) != _repeat_fields(shown):
+        base = split_end(rrule)[0] if values.repeat == CUSTOM else REPEATS[values.repeat]
+        rrule = base and base + end_rule(values, start, values.all_day, today)
     return replace(
         event,
         summary=title,
@@ -167,6 +207,10 @@ def _start_fields(v: FormValues) -> tuple[str, str]:
 
 def _end_fields(v: FormValues) -> tuple[str, str]:
     return v.end_date.strip(), v.end_time.strip()
+
+
+def _repeat_fields(v: FormValues) -> tuple[str, str, str]:
+    return v.repeat, v.ends, v.ends_value.strip()
 
 
 class AllDay(Checkbox):
@@ -218,7 +262,7 @@ class EventForm(ModalScreen[Event | None]):
         v = self.shown
         repeats = list(REPEAT_LABELS.items())
         if v.repeat == CUSTOM:
-            repeats.append((CUSTOM, describe_rrule(self.event.rrule or "")))
+            repeats.append((CUSTOM, describe_rrule(split_end(self.event.rrule)[0])))
         instance = self.event.recurrence_id is not None  # one instance of a series
         series = not self.new and bool(self.event.rrule)
         # The fields scroll on short terminals; the title (border) and the hint stay put.
@@ -252,6 +296,15 @@ class EventForm(ModalScreen[Event | None]):
                 disabled=instance,
                 id="repeat",
             )
+            with Horizontal(classes="row", id="ends_row"):
+                yield Label("Ends", classes="label")
+                yield Select(
+                    [(label, e) for e, label in ENDS.items()],
+                    value=v.ends,
+                    allow_blank=False,
+                    id="ends",
+                )
+                yield Input(v.ends_value, id="ends_value")
             yield Input(v.location, placeholder="Location", id="location")
             yield TextArea(v.notes, placeholder="Notes", id="notes")
             yield Static(id="error")
@@ -259,6 +312,7 @@ class EventForm(ModalScreen[Event | None]):
 
     def on_mount(self) -> None:
         self._show_times(self.shown.all_day)
+        self._show_ends()
         self.query_one("#title").focus()
 
     def values(self) -> FormValues:
@@ -276,6 +330,8 @@ class EventForm(ModalScreen[Event | None]):
             location=text("location"),
             notes=self.query_one("#notes", TextArea).text,
             repeat=str(self.query_one("#repeat", Select).value),
+            ends=str(self.query_one("#ends", Select).value),
+            ends_value=text("ends_value"),
         )
 
     def action_save(self) -> None:
@@ -318,6 +374,15 @@ class EventForm(ModalScreen[Event | None]):
     @on(Checkbox.Changed, "#all_day")
     def _all_day_changed(self, message: Checkbox.Changed) -> None:
         self._show_times(message.value)
+
+    @on(Select.Changed, "#repeat, #ends")
+    def _show_ends(self) -> None:
+        """The "Ends" row only for a series; its value field only for a date or count."""
+        repeat, ends = self.query_one("#repeat", Select), self.query_one("#ends", Select)
+        self.query_one("#ends_row").display = repeat.value != "none"
+        value = self.query_one("#ends_value", Input)
+        value.display = ends.value != "never"
+        value.placeholder = "date" if ends.value == "on" else "times"
 
     @on(Input.Changed, "#start_date, #start_time")
     def _start_changed(self) -> None:

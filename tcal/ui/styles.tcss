@@ -240,6 +240,8 @@ ScopeDialog #buttons, ConfirmDiscard #buttons {
     .label { width: 6; padding: 1 0 0 1; color: $foreground1; }
     #start_date, #end_date { width: 1fr; }
     .time { width: 12; }
+    #ends { width: 16; }
+    #ends_value { width: 1fr; }
     #notes { height: 5; }
     #error { color: $red; height: auto; padding: 0 1; }
     #note { color: $foreground1; padding: 0 1; }

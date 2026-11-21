@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import pytest
 from conftest import TODAY
@@ -300,3 +300,62 @@ async def test_form_scrolls_at_80x24_with_the_hint_pinned(make_app) -> None:
         assert form.query_one("#form").scroll_y > 0
         assert screen_region.contains_region(notes.region)  # scrolled into view
         assert screen_region.contains_region(hint.region)
+
+
+def test_a_series_ends_on_a_date_or_after_a_count() -> None:
+    event = Event("u", "work", "Gym", at(18), at(19), rrule="FREQ=WEEKLY;COUNT=5")
+    shown = values_of(event)
+    assert (shown.repeat, shown.ends, shown.ends_value) == ("weekly", "after", "5")
+    kept = build_event(event, shown, shown)
+    assert kept.rrule == "FREQ=WEEKLY;COUNT=5"
+    ten = build_event(event, shown, replace_values(shown, ends_value="10"))
+    assert ten.rrule == "FREQ=WEEKLY;COUNT=10"
+    last = TODAY + timedelta(days=14)
+    until = build_event(event, shown, replace_values(shown, ends="on", ends_value=last.isoformat()))
+    end_of_day = local_midnight(last + timedelta(1)) - timedelta(seconds=1)
+    assert until.rrule == f"FREQ=WEEKLY;UNTIL={end_of_day.astimezone(UTC):%Y%m%dT%H%M%SZ}"
+    assert values_of(until).ends_value == last.isoformat()  # shown as the local day
+    never = build_event(until, values_of(until), replace_values(values_of(until), ends="never"))
+    assert never.rrule == "FREQ=WEEKLY"
+    with pytest.raises(FormError, match="number of times") as error:
+        build_event(event, shown, replace_values(shown, ends_value="x"))
+    assert error.value.field == "ends_value"
+    with pytest.raises(FormError, match="end before it starts"):
+        build_event(event, shown, replace_values(shown, ends="on", ends_value="2026-01-01"))
+
+
+def test_all_day_series_ends_on_a_date_and_custom_rules_keep_their_parts() -> None:
+    trip = Event(
+        "u", "work", "Trip", local_midnight(TODAY), local_midnight(TODAY + timedelta(1)), True,
+        rrule="FREQ=MONTHLY",
+    )  # fmt: skip
+    shown = replace_values(values_of(trip), ends="on", ends_value="2027-03-31")
+    assert build_event(trip, values_of(trip), shown).rrule == "FREQ=MONTHLY;UNTIL=20270331"
+    custom = Event("u", "work", "S", at(10), at(11), rrule="FREQ=WEEKLY;BYDAY=MO;COUNT=3")
+    values = values_of(custom)
+    assert values.repeat == "custom"
+    stopped = build_event(custom, values, replace_values(values, ends="never"))
+    assert stopped.rrule == "FREQ=WEEKLY;BYDAY=MO"
+
+
+async def test_ends_row_shows_only_for_a_series(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 50)) as pilot:
+        app.new_event(at(14))
+        await pilot.pause()
+        form = app.screen
+        assert not form.query_one("#ends_row").display
+        form.query_one("#repeat", Select).value = "weekly"
+        await pilot.pause()
+        assert form.query_one("#ends_row").display
+        assert not form.query_one("#ends_value").display  # "Never"
+        form.query_one("#ends", Select).value = "after"
+        await pilot.pause()
+        assert form.query_one("#ends_value").display
+        await pilot.press(*"Yoga")
+        await type_into(pilot, "#ends_value", "3")
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        [event] = [e for e in app.source.store.events_between(at(0), at(0) + timedelta(60))
+                   if e.summary == "Yoga"]  # fmt: skip
+        assert event.rrule == "FREQ=WEEKLY;COUNT=3"
