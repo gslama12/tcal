@@ -40,11 +40,13 @@ from tcal.quickadd import QuickAdd
 from tcal.source import EventSource
 from tcal.sync import SyncSummary
 from tcal.tz import local_midnight, local_zone
+from tcal.ui.clipboard import copy_at, shifted
 from tcal.ui.keys import binding, keymap
 from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.screens.event_detail import (
     EditScope,
     EventDetail,
+    MoveScope,
     Scope,
     confirm_delete,
     is_recurring,
@@ -88,6 +90,13 @@ class TcalApp(App[None]):
         binding("edit_event", "Edit event"),
         binding("delete_event", "Delete event"),
         binding("undo", "Undo"),
+        binding("yank", "Yank"),
+        binding("paste", "Paste"),
+        binding("duplicate", "Duplicate"),
+        binding("move_down", "Later", action="move(15, 0)"),
+        binding("move_up", "Earlier", action="move(-15, 0)"),
+        binding("move_left", "Day earlier", action="move(0, -1)"),
+        binding("move_right", "Day later", action="move(0, 1)"),
         binding("goto_date", "Go to date"),
         binding("search", "Search"),
         binding("sync", "Sync"),
@@ -119,6 +128,7 @@ class TcalApp(App[None]):
         self._wide: bool | None = None  # terminal >= SIDEBAR_MIN_WIDTH, None before layout
         self._sidebar_pinned = False  # the user toggled the sidebar: resizes leave it alone
         self._undo: list[Event] = []  # rows of the last deleted event
+        self._yanked: Occurrence | None = None  # the yank key's copy
         self.config = config or load_config()
         name = self.config.theme.name
         self._theme_notice = ""
@@ -436,6 +446,87 @@ class TcalApp(App[None]):
 
     def action_quick_add(self) -> None:
         self.quick_add()
+
+    # ----- clipboard & moving ---------------------------------------------
+
+    def action_yank(self) -> None:
+        if occ := self.selected_occurrence():
+            self._yanked = occ
+            paste = format_key(self.config.keys["paste"][0])
+            self.notify(f"Copied “{occ.summary}” · {paste} paste")
+        else:
+            self.notify("No event selected")
+
+    def action_paste(self) -> None:
+        """A copy of the yanked event at the time grid's cursor slot, else on the selected day."""
+        if self._yanked is None:
+            self.notify("Nothing copied")
+            return
+        focused = self.focused
+        at = focused.cursor_time if isinstance(focused, TimeGrid) else self.state.day
+        self._save_copy(self._yanked, at)
+
+    def action_duplicate(self) -> None:
+        if occ := self.selected_occurrence():
+            self._save_copy(occ, occ.start + timedelta(days=1))
+        else:
+            self.notify("No event selected")
+
+    def _save_copy(self, occ: Occurrence, at: date | datetime) -> None:
+        """Save a copy of ``occ`` at ``at`` (its own calendar, or the first writable) and select it."""
+        calendar = self.calendar(occ.calendar_id)
+        writable = [calendar] if calendar and not calendar.readonly else self._writable()
+        if not writable:
+            self.notify("No writable calendar", severity="warning")
+            return
+        copy = self.save_event(copy_at(occ, at, writable[0].id))
+        self._select_moved(copy.uid, copy.start)
+
+    def action_move(self, minutes: int, days: int) -> None:
+        """Shift the selected event by ``minutes`` (timed events in a time grid) or ``days``;
+        for a series ask "this event" / "all events", as for editing."""
+        occ = self.selected_occurrence()
+        if occ is None:
+            self.notify("No event selected")
+            return
+        if minutes and (occ.all_day or not isinstance(self.focused, TimeGrid)):
+            self.notify("Moving by time works for timed events in the day/week view")
+            return
+        if not self.check_writable(occ.calendar_id):
+            return
+        delta = timedelta(days=days, minutes=minutes)
+
+        def move(event: Event) -> None:
+            self.save_event(shifted(event, delta))
+            self._select_moved(occ.event.uid, occ.start + delta)
+
+        if not is_recurring(occ):
+            move(occ.event)
+            return
+
+        def done(scope: Scope | None) -> None:
+            if scope == "occurrence":
+                move(instance_of(occ))
+            elif scope == "series":
+                move(self.source.get_event(occ.event.uid) or occ.event)
+
+        self.push_screen(MoveScope(occ), done)
+
+    def _select_moved(self, uid: str, start: datetime) -> None:
+        """Go to the day of event ``uid``'s occurrence at ``start`` and select it in the view."""
+        day = start.date()
+        self.select_date(day)
+        occ = next(
+            (
+                o
+                for o in self.occurrences(day, day + timedelta(1))
+                if o.event.uid == uid and o.start == start
+            ),
+            None,
+        )
+        view = self.query_one(f"#{self.state.view.value}")
+        if occ is not None and isinstance(view, TimeGrid | MonthView | ScheduleView):
+            view.select(occ)
 
     def action_goto_date(self) -> None:
         def jump(day: date | None) -> None:

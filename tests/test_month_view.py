@@ -70,9 +70,9 @@ async def test_month_event_cursor(app: RecordingApp) -> None:
         first = view.selected
         assert first is not None and app.selected_occurrence() == first
         assert app.state.day == max(first.start.date(), view.grid().weeks[0][0])
-        await pilot.press("n", "p")
+        await pilot.press("n", "N")
         assert view.selected == first
-        await pilot.press("p")  # wraps to the last shown event
+        await pilot.press("N")  # wraps to the last shown event
         assert view.selected is not None and view.selected.start > first.start
         await pilot.press("enter")
         assert isinstance(app.posted[-1], EventSelected)

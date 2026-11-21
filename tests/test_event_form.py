@@ -196,7 +196,7 @@ async def test_error_clears_when_a_field_changes(make_app) -> None:
         assert str(error.render()) == ""
 
 
-@pytest.mark.parametrize("keys", [("m", "a"), ("y", "a"), ("c", "a")])
+@pytest.mark.parametrize("keys", [("m", "a"), ("Y", "a"), ("c", "a")])
 async def test_new_event_key_is_timed_at_the_next_hour_off_the_grid(make_app, keys) -> None:
     app = make_app()
     async with app.run_test(size=(120, 50)) as pilot:

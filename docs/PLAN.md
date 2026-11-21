@@ -335,3 +335,15 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   the preview) → `for 2h|90m|1h30` → time range / single time (needs `:mm`, am/pm or `h`; a bare
   "12" stays text) → date; what's left after a word-initial `@` is the location (so `@` may come
   before the date/time). No time → all-day (a duration is then ignored); end ≤ start → next day.
+
+### Clipboard & moving (feat-yank)
+
+- **Y1 Keys:** `yank` (y), `paste` (p, P: same action), `duplicate` (D), `move_down/up` (ctrl+j/k,
+  ±15 min, timed events in a time grid only) and `move_left/right` (ctrl+h/l, ±1 day, any view
+  with a selection). To free y/p: **`view_year` is now `Y`, `prev_event` is `N`** (vim's n/N).
+- **Y2 Behaviour:** `tcal/ui/clipboard.py` (`copy_at`, `shifted`). A paste/duplicate is a new
+  one-off event (no RRULE/overrides) keeping the duration, in the source calendar or, if that is
+  read-only, the first writable one; paste goes to the time grid's cursor slot, else the selected
+  day at the event's time of day. Moves check `check_writable`; a series asks `MoveScope`
+  (o this event = `instance_of` shifted / s all events = master shifted, EXDATEs along; existing
+  overrides keep their RECURRENCE-IDs). The copy / moved event stays selected (`_select_moved`).

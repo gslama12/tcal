@@ -171,7 +171,7 @@ async def test_cycle_events_and_open(app: RecordingApp) -> None:
         await pilot.press("n", "n")  # Late movie, then the next day's all-day event
         assert grid.selected is not None and grid.selected.summary == "Deadline: taxes"
         assert app.state.day == TODAY + timedelta(days=1)
-        await pilot.press("p", "p", "p", "p")  # back over Late movie, Dinner, Dentist
+        await pilot.press("N", "N", "N", "N")  # back over Late movie, Dinner, Dentist
         assert grid.selected is not None and grid.selected.summary == "1:1 with Alex"
         await pilot.press("enter")
         await pilot.pause()
@@ -342,9 +342,9 @@ async def test_cycle_starts_at_the_cursor(app: RecordingApp) -> None:
         assert grid.selected is None
         await pilot.press("n")
         assert grid.selected is not None and grid.selected.start == at("09:00", tue)
-        await pilot.press("k", "p")  # Tue 08:30 again: the event before is on Monday
+        await pilot.press("k", "N")  # Tue 08:30 again: the event before is on Monday
         assert grid.selected is not None and grid.selected.start.date() == mon
-        await pilot.press("h", *["k"] * 30, "p")  # nothing before Mon 00:00: wraps to the end
+        await pilot.press("h", *["k"] * 30, "N")  # nothing before Mon 00:00: wraps to the end
         assert grid.selected == sorted(grid._occurrences(), key=grid._stop_key)[-1]
 
 

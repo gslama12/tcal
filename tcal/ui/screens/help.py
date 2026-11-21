@@ -46,6 +46,13 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("edit_event", "Edit event"),
         ("delete_event", "Delete event"),
         ("undo", "Undo delete"),
+        ("yank", "Copy (yank) event"),
+        ("paste", "Paste copy at cursor slot / selected day"),
+        ("duplicate", "Duplicate event to the next day"),
+        ("move_up", "Move event 15 min earlier (time grid)"),
+        ("move_down", "Move event 15 min later (time grid)"),
+        ("move_left", "Move event one day earlier"),
+        ("move_right", "Move event one day later"),
         ("search", "Search events"),
     ],
     "Event form": [
