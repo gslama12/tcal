@@ -1,7 +1,8 @@
 """One-line bar at the bottom in todooit's style.
 
 Left: view-mode badge; middle: selected date; right: sync status, pending
-edits (if any) and the help key.
+edits (if any) and the help key. When narrow, "↑N pending" becomes "↑N" and
+then the date is dropped, so the help key stays readable.
 """
 
 from time import monotonic
@@ -32,19 +33,31 @@ class StatusBar(TcalWidget):
         badge = Text(f" {state.view.value.upper()} ", style=f"bold {p.background1} on {p.primary}")
         day = Text(f"{state.day:%a %-d %b %Y}", style=p.foreground2)
 
-        right = Text()
-        right.append_text(self._sync_text())
-        if pending := self.tcal.source.pending_count():
-            right.append(f"  ↑{pending} pending", style=p.yellow)
+        pending = self.tcal.source.pending_count()
         help_key = format_key(self.tcal.config.keys["help"][0])
-        right.append("  ")
-        right.append(f" {help_key} help ", style=f"{p.background1} on {p.secondary}")
-
-        # The date is centred on the bar, unless the sides leave too little room.
         width = self.size.width
-        left_gap = max(1, (width - day.cell_len) // 2 - badge.cell_len)
+        # Too narrow: shorten "↑N pending" to "↑N", then drop the date, before cutting.
+        for short, dated in ((False, True), (True, True), (True, False)):
+            right = self._right(pending, help_key, short)
+            if badge.cell_len + 1 + (day.cell_len + 1) * dated + right.cell_len <= width:
+                break
+        if not dated:
+            return Text.assemble(badge, " " * (width - badge.cell_len - right.cell_len), right)
+        # The date is centred on the bar, or moves left to make room for the right side.
+        room = width - badge.cell_len - day.cell_len - 1 - right.cell_len
+        left_gap = max(1, min((width - day.cell_len) // 2 - badge.cell_len, room))
         right_gap = max(1, width - badge.cell_len - left_gap - day.cell_len - right.cell_len)
         return Text.assemble(badge, " " * left_gap, day, " " * right_gap, right)
+
+    def _right(self, pending: int, help_key: str, short: bool) -> Text:
+        """Sync status, pending edits and the help badge."""
+        p = self.tcal.palette
+        right = self._sync_text()
+        if pending:
+            right.append(f"  ↑{pending}" if short else f"  ↑{pending} pending", style=p.yellow)
+        right.append("  ")
+        right.append(f" {help_key} help ", style=f"{p.background1} on {p.secondary}")
+        return right
 
     def _sync_text(self) -> Text:
         p = self.tcal.palette

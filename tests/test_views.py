@@ -155,3 +155,33 @@ async def test_view_switcher_shortens_title_not_tabs(app: RecordingApp) -> None:
         await pilot.press("d")
         text = str(app.query_one(ViewSwitcher).render())
         assert "Day│Week│Month│Year│Schedule" in text and "Wed 18 Nov 2026" in text
+
+
+async def test_year_view_scrolls_to_the_selected_month(app: RecordingApp) -> None:
+    async with app.run_test(size=(80, 24)) as pilot:  # QA4 #9: too small for 12 months
+        await pilot.press("Y")
+        view = app.query_one(YearView)
+        text = str(view.render())
+        assert "November" in text and "January" not in text and "▲" in text
+        app.select_date(date(2026, 1, 5))
+        await pilot.pause()
+        text = str(view.render())
+        assert "January" in text and "November" not in text and "▼" in text
+        layout = view._layout()
+        x, y = layout.origin(0)
+        await pilot.click(YearView, offset=content(view, x + 3 * layout.cell, y + 1))
+        assert app.state.day == date(2026, 1, 1)
+
+
+async def test_escape_in_the_sidebar_returns_to_the_view(app: RecordingApp) -> None:
+    async with app.run_test(size=(100, 35)) as pilot:  # QA4 #13
+        sidebar = app.query_one("#sidebar")
+        await pilot.press("c", "space", "escape")
+        await pilot.pause()
+        assert app.focused is app.query_one(f"#{app.state.view.value}")
+        assert not sidebar.display
+        await pilot.press("c")
+        app.query_one(MiniCal).focus()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.focused is app.query_one(f"#{app.state.view.value}")

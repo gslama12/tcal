@@ -101,3 +101,11 @@ async def test_search_escape_cancels(app: TcalApp) -> None:
         await pilot.press("slash", *"dinner", "escape")
         assert not isinstance(app.screen, SearchScreen)
         assert app.state.view is ViewMode.WEEK and app.state.day == TODAY
+
+
+async def test_search_says_a_series_repeats(app: TcalApp) -> None:
+    async with app.run_test(size=(140, 45)) as pilot:  # QA4 #19
+        await pilot.press("slash", *"gym")
+        results = app.screen.query_one(ResultList)
+        assert results.option_count == 1
+        assert "Gym · every week on Tue, Thu" in str(results.get_option_at_index(0).prompt)

@@ -111,7 +111,8 @@ class KeyTable(Static):
 
 class HelpScreen(ModalScreen[None]):
     """Key bindings over the dimmed app. esc, q or the help key closes it;
-    the configured up/down keys (and arrows) scroll."""
+    the configured up/down keys (and arrows) scroll, page keys / space page,
+    home/end (g/G) jump to the top/bottom; the mouse wheel scrolls too."""
 
     def __init__(self, keys: dict[str, list[str]]) -> None:
         super().__init__()
@@ -123,7 +124,7 @@ class HelpScreen(ModalScreen[None]):
             with VerticalScroll(id="help-panel", can_focus=False):
                 yield KeyTable(self.keys)
             down, up = (format_key(self.keys[a][0]) for a in ("cursor_down", "cursor_up"))
-            yield Static(f"{down}/{up} scroll · esc close", id="help-hint")
+            yield Static(f"{down}/{up} scroll · space page · G end · esc close", id="help-hint")
 
     def on_key(self, event: events.Key) -> None:
         # The modal owns every key: the app's bindings are for the panes behind it.
@@ -135,6 +136,12 @@ class HelpScreen(ModalScreen[None]):
             "up": panel.scroll_up,
             "pagedown": panel.scroll_page_down,
             "pageup": panel.scroll_page_up,
+            "space": panel.scroll_page_down,
+            "shift+space": panel.scroll_page_up,
+            "end": panel.scroll_end,
+            "G": panel.scroll_end,
+            "home": panel.scroll_home,
+            "g": panel.scroll_home,
             **{k: panel.scroll_down for k in self.keys["cursor_down"]},
             **{k: panel.scroll_up for k in self.keys["cursor_up"]},
         }

@@ -454,3 +454,15 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - `timepaint.markers(frame, height)` places the `▲/▼` markers (also used for clicks): on the
   edge row, or the nearest row inwards that is not the cursor/now row and has room beside the
   events. Clicking one selects (and scrolls to) the first hidden event; it doesn't open it.
+
+### QA4 fixes (feat-h3: #2, #9, #13, #15, #19, #20)
+
+- Schedule now line is one row sized to the width (it wrapped, which broke the row arithmetic).
+- **V5 amended:** when even the compact year grid is too tall (80x24), `Layout.build(w, h, show=)`
+  scrolls so the selected month's row is visible, with ▲/▼ hints at the right edge.
+- `widgets/base.SidebarWidget` (MiniCal, CalendarList): the `cancel` key focuses the main view
+  (the narrow-terminal sidebar then hides as before). Clicking the minical's ‹ › still focuses it.
+- Status bar: when the right side doesn't fit, "↑N pending" → "↑N", then the date is dropped;
+  the date also slides left of centre before anything is cut.
+- Search rows of a series add "· every week on Tue, Thu" (`describe_rrule`).
+- Help: space/shift+space page, home/end and g/G jump (pageup/down already worked).
