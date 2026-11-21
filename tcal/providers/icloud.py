@@ -14,8 +14,8 @@ import logging
 import re
 from collections.abc import Callable, Iterator
 from dataclasses import replace
+from datetime import datetime, timedelta
 from functools import partial
-from datetime import UTC, datetime, timedelta
 from typing import Any, TypeVar
 from urllib.parse import quote, urljoin, urlsplit
 
@@ -26,6 +26,7 @@ from lxml import etree
 from tcal import ics
 from tcal.model import Calendar, Event
 from tcal.providers.base import AuthError, ConflictError, ProviderError
+from tcal.tz import utc_stamp
 
 log = logging.getLogger(__name__)
 
@@ -128,7 +129,7 @@ class ICloudProvider:
         """
         seen: dict[str, list[Event]] = {}
         for lo, hi in _chunks(start, end):
-            query = REPORT_EVENTS.format(start=_utc(lo), end=_utc(hi))
+            query = REPORT_EVENTS.format(start=utc_stamp(lo), end=utc_stamp(hi))
             response = _call("REPORT", partial(self.client.report, calendar.id, query, 1))
             _check(response, "REPORT", calendar.id, ok=(207,))
             for resp in response.tree.iterfind("d:response", NS):
@@ -248,7 +249,3 @@ def _chunks(start: datetime, end: datetime) -> Iterator[tuple[datetime, datetime
         lo += CHUNK
         if lo >= end:
             return
-
-
-def _utc(dt: datetime) -> str:
-    return dt.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")

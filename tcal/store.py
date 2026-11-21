@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 
 from tcal import ics
 from tcal.model import Calendar, Event
-from tcal.tz import local_midnight
+from tcal.tz import UTC_STAMP, local_midnight, utc_stamp
 
 OpKind = Literal["create", "update", "delete"]
 
@@ -118,7 +118,7 @@ class Store:
 
         A superset (by a day either side); ``recurrence.expand`` does the exact cut.
         """
-        lo, hi = _utc_key(start - timedelta(days=1)), _utc_key(end + timedelta(days=1))
+        lo, hi = utc_stamp(start - timedelta(days=1)), utc_stamp(end + timedelta(days=1))
         rows = self.db.execute(
             """SELECT * FROM events
                WHERE (start_utc < :hi AND end_utc >= :lo)
@@ -184,7 +184,7 @@ class Store:
             with self.db:
                 self.db.execute(
                     "DELETE FROM events WHERE uid = ? AND recurrence_id = ?",
-                    (uid, _utc_key(occurrence)),
+                    (uid, utc_stamp(occurrence)),
                 )
                 master = ics.without_instance(master, occurrence)
                 self.save_event(replace(master, exdates=(*master.exdates, occurrence)))
@@ -279,7 +279,7 @@ class Store:
             "INSERT OR REPLACE INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 e.uid,
-                _utc_key(e.recurrence_id) if e.recurrence_id else "",
+                utc_stamp(e.recurrence_id) if e.recurrence_id else "",
                 e.calendar_id,
                 e.summary,
                 e.start.isoformat(),
@@ -293,32 +293,26 @@ class Store:
                 e.etag,
                 e.href,
                 e.raw,
-                _utc_key(e.start),
-                _utc_key(e.end),
+                utc_stamp(e.start),
+                utc_stamp(e.end),
             ),
         )
-
-
-def _utc_key(dt: datetime) -> str:
-    return dt.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _event(row: sqlite3.Row) -> Event:
     zone = ZoneInfo(row["tz"]) if row["tz"] else None
 
-    def load(text: str) -> datetime:
-        dt = datetime.fromisoformat(text)
+    def in_zone(dt: datetime) -> datetime:
         return dt.astimezone(zone) if zone else dt
+
+    def load(text: str) -> datetime:
+        return in_zone(datetime.fromisoformat(text))
 
     start, end = load(row["start"]), load(row["end"])
     if row["all_day"]:  # dates are local, wherever the cache was written
         start, end = local_midnight(start.date()), local_midnight(end.date())
     rid = row["recurrence_id"]
-    recurrence_id = (
-        load(datetime.strptime(rid, "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC).isoformat())
-        if rid
-        else None
-    )
+    recurrence_id = in_zone(datetime.strptime(rid, UTC_STAMP).replace(tzinfo=UTC)) if rid else None
     return Event(
         uid=row["uid"],
         calendar_id=row["calendar_id"],
