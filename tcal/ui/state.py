@@ -36,7 +36,7 @@ class AppState:
                 return start, start + timedelta(days=7)
             case ViewMode.MONTH:
                 start = d.replace(day=1)
-                return start, _add_months(start, 1)
+                return start, add_months(start, 1)
             case ViewMode.YEAR:
                 return date(d.year, 1, 1), date(d.year + 1, 1, 1)
 
@@ -48,9 +48,9 @@ class AppState:
             case ViewMode.WEEK:
                 new = self.day + timedelta(weeks=n)
             case ViewMode.MONTH:
-                new = _add_months(self.day, n)
+                new = add_months(self.day, n)
             case ViewMode.YEAR:
-                new = _add_months(self.day, 12 * n)
+                new = add_months(self.day, 12 * n)
         return replace(self, day=new)
 
     def title(self) -> str:
@@ -72,7 +72,7 @@ class AppState:
                 return str(start.year)
 
 
-def _add_months(d: date, n: int) -> date:
+def add_months(d: date, n: int) -> date:
     """``d`` moved by ``n`` months, clamping the day (31 Jan + 1 -> 28/29 Feb)."""
     month0 = d.month - 1 + n
     year, month = d.year + month0 // 12, month0 % 12 + 1
