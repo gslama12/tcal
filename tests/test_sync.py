@@ -71,7 +71,7 @@ def test_conflict_server_wins(engine: SyncEngine, provider: FakeProvider, caplog
 
     with caplog.at_level(logging.WARNING, logger="tcal.sync"):
         summary = engine.sync()
-    assert summary.conflicts == 1 and summary.pushed == 0
+    assert summary.conflicts == ["Local edit"] and summary.pushed == 0
     assert "conflict" in caplog.text
     synced = engine.store.get_event(uid)
     assert synced and synced.summary == "Server edit"

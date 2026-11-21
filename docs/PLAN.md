@@ -423,3 +423,22 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - `tcal/dates.py` holds the pure date helpers: `parse_date` (was in `ui/screens/goto.py`),
   `add_months` (was in `ui/state.py`; still importable from there), `WEEKDAYS`/`MONTHS`
   (also used by `config.py`). Quick add and the event form no longer import a UI screen.
+
+### Form/detail vs. sync (feat-h1: QA4 #1, #5, #10, #12, #18)
+
+- **H1 Form:** `#form` is a `VerticalScroll` (title in the border, `#hint` docked), so it
+  scrolls to the focused field on short terminals. Saving toasts "Saved “X” · u undo"
+  (quick add: "Added …"; `Editor.form_done(event, verb)`).
+- **H2 Ends:** a series' "Ends" row (`#ends` never / on date / after + `#ends_value`) maps to
+  `UNTIL` (all-day: a DATE; timed: the end of that local day in UTC) / `COUNT`;
+  `split_end` / `end_rule` in `event_form.py`; `repeat_of` ignores the end, so
+  `FREQ=WEEKLY;COUNT=5` is "Every week" + "After 5". No "this and following" scope (kept simple).
+- **H3 Sync interplay:** the detail watches `app.state` and re-resolves its occurrence with
+  `app.current_occurrence(occ)` (by key; a one-off also by uid after a move): newer version →
+  recompose; gone → close + "“X” was deleted/changed on the server". The form snapshots the
+  event's cache rows on mount (etag/href ignored, so our own push isn't a change); if they
+  differ at save, `ServerChanged` asks o overwrite (rebased on the current etag/href, or created
+  again if deleted) / d discard / esc back. `SyncSummary.conflicts` is now the list of titles,
+  named in the toast. Open: `log.warning` still only reaches Textual's captured stderr.
+- **H4 Detail wording:** durations "10 min" / "1 h" / "1 h 30 min"; people as "4 guests · 1 yes,
+  1 maybe, 1 no, 1 awaiting" + one line per guest, the organizer marked, not repeated.

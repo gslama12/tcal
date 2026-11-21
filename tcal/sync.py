@@ -28,7 +28,7 @@ class SyncSummary:
     calendars: int = 0
     events: int = 0
     pushed: int = 0
-    conflicts: int = 0
+    conflicts: list[str] = field(default_factory=list)  # titles of the dropped local changes
     failed: list[str] = field(default_factory=list)  # subscriptions that could not be fetched
 
     def __str__(self) -> str:
@@ -36,7 +36,7 @@ class SyncSummary:
         if self.pushed:
             text += f", pushed {self.pushed} change(s)"
         if self.conflicts:
-            text += f", {self.conflicts} conflict(s) (server version kept)"
+            text += f", {len(self.conflicts)} conflict(s) (server version kept)"
         if self.failed:
             text += f", could not fetch {', '.join(self.failed)}"
         return text
@@ -90,7 +90,7 @@ class SyncEngine:
                 log.warning(
                     "%s of %r conflicts (%s); keeping the server version", op.kind, event.summary, e
                 )
-                summary.conflicts += 1
+                summary.conflicts.append(event.summary)
             self.store.clear_op(op.id)
 
     def _pull(self, summary: SyncSummary) -> None:

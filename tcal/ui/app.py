@@ -12,7 +12,7 @@ Layout::
 
 Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
-``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``save_event()``,
+``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``current_occurrence()``, ``save_event()``,
 ``delete_event()``, ``undo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``,
 ``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event form),
 ``check_writable()``, ``focus_view()``, ``selected_occurrence()``, ``select_in_view()``.
@@ -174,6 +174,19 @@ class TcalApp(App[None]):
             self._occ_cache[key] = self.source.occurrences(start, end)
         return self._occ_cache[key]
 
+    def current_occurrence(self, occ: Occurrence) -> Occurrence | None:
+        """``occ`` as the cache has it now (e.g. after a sync); None if its event is gone
+        or, for a series, this instance no longer exists at that time."""
+        event = self.source.get_event(occ.event.uid)
+        if event is None:
+            return None
+        moved = not (event.rrule or event.recurrence_id)  # a one-off may have moved
+        for day in {occ.start.date(), event.start.astimezone(local_zone()).date()}:
+            for found in self._occurrences(day, day + timedelta(1)):
+                if found.key == occ.key or (moved and found.event.uid == occ.event.uid):
+                    return found
+        return None
+
     def refresh_data(self) -> None:
         """Re-read calendars from the source and redraw everything (e.g. after sync)."""
         self._calendars = self.source.calendars()
@@ -262,9 +275,10 @@ class TcalApp(App[None]):
             summary = result if isinstance(result, SyncSummary) else SyncSummary()
             self.sync_status = self.sync_status.succeeded(datetime.now(), tuple(summary.failed))
             if summary.conflicts:
+                names = ", ".join(f"“{name}”" for name in summary.conflicts)
                 self.notify(
-                    f"{summary.conflicts} local change(s) conflicted with the server"
-                    " and were dropped (server version kept)",
+                    f"{names} changed on the server meanwhile: your change was dropped"
+                    " (server version kept)",
                     title="Sync",
                     severity="warning",
                     timeout=10,

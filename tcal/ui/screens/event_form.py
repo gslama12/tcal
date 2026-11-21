@@ -13,13 +13,15 @@ a master with an RRULE edits all events (the dates shown are the first one's).
 A series can end on a date (UNTIL) or after a number of times (COUNT).
 Dates accept goto's forms (``fri``, ``tomorrow``, ``24.12.``, ISO). An error on
 save is shown below its field, which is marked; it clears when a field changes.
+If a sync changed or deleted the event while the form was open, saving asks
+``ServerChanged`` first (overwrite / discard / back to the form).
 
 """
 
 import re
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from textual import on
 from textual.app import ComposeResult
@@ -34,6 +36,9 @@ from tcal.model import Calendar, Event
 from tcal.tz import local_midnight, local_zone
 from tcal.ui.keys import binding
 from tcal.ui.screens.event_detail import describe_rrule, until_date
+
+if TYPE_CHECKING:
+    from tcal.ui.app import TcalApp
 
 REPEATS: dict[str, str | None] = {  # choice -> RRULE
     "none": None,
@@ -213,6 +218,11 @@ def _repeat_fields(v: FormValues) -> tuple[str, str, str]:
     return v.repeat, v.ends, v.ends_value.strip()
 
 
+def _content(rows: list[Event]) -> list[Event]:
+    """``rows`` without what our own push changes (etag, href; ``raw`` isn't compared)."""
+    return [replace(r, etag=None, href=None) for r in rows]
+
+
 class AllDay(Checkbox):
     """A checkbox whose box is empty when off (styled in styles.tcss) and ✓ when on."""
 
@@ -236,6 +246,34 @@ class ConfirmDiscard(ModalScreen[bool]):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self.dismiss(event.button.id == "y")
+
+
+class ServerChanged(ModalScreen[bool | None]):
+    """At save, the event changed (or was deleted) on the server since the form opened:
+    o = overwrite with the form's version (True), d = discard it (False), esc = back."""
+
+    BINDINGS = [
+        Binding("o", "dismiss(True)", show=False),
+        Binding("d", "dismiss(False)", show=False),
+        Binding("escape", "dismiss(None)", show=False),
+    ]
+
+    def __init__(self, summary: str, deleted: bool) -> None:
+        super().__init__()
+        self.summary = summary
+        self.deleted = deleted
+
+    def compose(self) -> ComposeResult:
+        what = "was deleted" if self.deleted else "changed"
+        with Vertical(id="dialog"):
+            yield Static(f"“{self.summary}” {what} on the server.", classes="question")
+            with Horizontal(id="buttons"):
+                yield Button("Save again (o)" if self.deleted else "Overwrite (o)", id="o")
+                yield Button("Discard mine (d)", id="d", variant="error")
+                yield Button("Back (esc)", id="back")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss({"o": True, "d": False}.get(event.button.id or ""))
 
 
 class EventForm(ModalScreen[Event | None]):
@@ -310,7 +348,13 @@ class EventForm(ModalScreen[Event | None]):
             yield Static(id="error")
             yield Static("ctrl+s save · esc cancel · tab next field", id="hint")
 
+    @property
+    def _rows(self) -> list[Event]:
+        """The cache's rows of the event now (``TcalApp.source``)."""
+        return cast("TcalApp", self.app).source.rows(self.event.uid)
+
     def on_mount(self) -> None:
+        self._opened = _content(self._rows)  # to notice a sync's changes at save time
         self._show_times(self.shown.all_day)
         self._show_ends()
         self.query_one("#title").focus()
@@ -340,7 +384,19 @@ class EventForm(ModalScreen[Event | None]):
         except FormError as error:
             self._show_error(error)
             return
-        self.dismiss(event)
+        now = self._rows
+        if self.new or _content(now) == self._opened:
+            self.dismiss(event)
+            return
+
+        def done(overwrite: bool | None) -> None:
+            if overwrite:  # on top of the server's version (or created again)
+                href, etag = (now[0].href, now[0].etag) if now else (None, None)
+                self.dismiss(replace(event, href=href, etag=etag))
+            elif overwrite is False:
+                self.dismiss(None)
+
+        self.app.push_screen(ServerChanged(event.summary, deleted=not now), done)
 
     def action_cancel(self) -> None:
         if not self.edited and self.values() == self.shown:

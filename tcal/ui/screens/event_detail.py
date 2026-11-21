@@ -1,7 +1,7 @@
 """Event detail modal (enter/click on an event) and the delete confirmation.
 
 ``EventDetail(occ)``: e = edit (``app.edit_occurrence``), x = delete, j/k scroll,
-esc/q = close (a read-only calendar's event only hints "esc close"; e/x give a
+esc/q = close; it follows a sync's changes to the event (closes if it's gone) (a read-only calendar's event only hints "esc close"; e/x give a
 notice and keep the detail open).
 ``confirm_delete(app, occ)`` is the one delete flow, also used by the ``x`` key
 in the views: read-only calendars only get a notice; a recurring event asks
@@ -289,6 +289,20 @@ class EventDetail(ModalScreen[None]):
 
     def on_mount(self) -> None:
         self.call_after_refresh(self._show_scroll_hint)
+        self.watch(self.app, "state", self._data_changed, init=False)
+
+    def _data_changed(self) -> None:
+        """After a sync (any redraw): show the event's new version, or close if it's gone."""
+        occ = self.tcal.current_occurrence(self.occ)
+        if occ is None:
+            gone = self.tcal.source.get_event(self.occ.event.uid) is None
+            what = "was deleted" if gone else "was changed"
+            self.tcal.notify(f"“{self.occ.summary}” {what} on the server", severity="warning")
+            self.dismiss()
+        elif occ != self.occ:
+            self.occ = occ
+            self.refresh(recompose=True)
+            self.call_after_refresh(self._show_scroll_hint)
 
     def _show_scroll_hint(self) -> None:
         if self.query_one("#dialog", VerticalScroll).max_scroll_y:
