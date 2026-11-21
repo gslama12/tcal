@@ -138,3 +138,15 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   MiniCal reuses `cursor_*`/`prev_period`/`next_period`/`open` with its own cursor that
   only commits on enter (click commits at once).
 - **V4 Titles:** kept the scaffold's `AppState.title()` format ("16 – 22 November 2026").
+
+### Time grid notes (package 3)
+
+- **T1 Messages:** views post `tcal.ui.messages.EventSelected(occurrence)` (enter / click on an
+  event) and `NewEventRequested(start)` (enter on an empty slot, `new_event` key while a grid is
+  focused). `TcalApp.on_event_selected` / `on_new_event_requested` are placeholders for CRUD.
+- **T2 Keys:** new `[keys]` actions `next_event` (n) / `prev_event` (p) cycle through the events
+  in view (by day, all-day first, then start time).
+- **T3 Zoom:** levels 1, 2, 3, 4, 6, 8 rows/hour (3 = 20-min slots fits ~53-row grids); cursor
+  and scroll position are kept in minutes so they survive zoom and resize.
+- **T4 Strip:** all-day events and timed events lasting ≥ 24 h are bars in the all-day strip
+  (max 3 lanes, "+N" in the axis for the rest); shorter events crossing midnight are split.
