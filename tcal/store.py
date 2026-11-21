@@ -206,6 +206,10 @@ class Store:
             ops.append(PendingOp(row["id"], row["kind"], event))
         return ops
 
+    def pending_count(self) -> int:
+        """Number of queued edits not yet pushed to the server."""
+        return int(self.db.execute("SELECT COUNT(*) FROM ops").fetchone()[0])
+
     def clear_op(self, op_id: int) -> None:
         with self.db:
             self.db.execute("DELETE FROM ops WHERE id = ?", (op_id,))

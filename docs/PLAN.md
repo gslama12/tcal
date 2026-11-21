@@ -150,3 +150,12 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   and scroll position are kept in minutes so they survive zoom and resize.
 - **T4 Strip:** all-day events and timed events lasting ≥ 24 h are bars in the all-day strip
   (max 3 lanes, "+N" in the axis for the rest); shorter events crossing midnight are split.
+
+### Help + status bar notes
+
+- **H1 Sync status:** `app.sync_status` is a `tcal.ui.sync_status.SyncStatus` (state off /
+  syncing / synced / offline / failed, `last_sync`, `error`), not a string. Errors that are
+  `OSError`s (connection, timeout) count as offline. Status bar: view badge · selected date ·
+  sync status, `↑N pending` (new `EventSource.pending_count()` / `Store.pending_count()`), help key.
+- **H2 Help:** `HelpScreen(config.keys)` lists the active keymap grouped by `help.GROUPS`;
+  actions not listed there (new `[keys]` entries) appear under "Other" — add them to GROUPS.

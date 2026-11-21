@@ -66,3 +66,50 @@ StatusBar {
 #views > DayView, #views > WeekView {
     padding: 0;
 }
+
+/* ----- help (tcal/ui/screens/help.py): todooit's key-bindings panel ----- */
+
+HelpScreen {
+    align: center middle;
+    background: $background1 70%;
+
+    & > #help-panel {
+        width: 70;
+        max-width: 90%;
+        height: auto;
+        max-height: 85%;
+        background: $background2;
+        border: $border_type $secondary;
+        border-title-background: $primary;
+        border-title-color: $background1;
+        border-title-align: center;
+        padding: 0 1;
+        scrollbar-size-vertical: 1;
+    }
+
+    & > #help-hint {
+        width: 70;
+        max-width: 90%;
+        color: $foreground1 60%;
+        text-align: center;
+    }
+}
+
+KeyTable {
+    background: $background2;
+    color: $foreground3;
+
+    & > .keytable--key {
+        color: $primary;
+        text-style: bold;
+    }
+
+    & > .keytable--title {
+        color: $secondary;
+        text-style: bold;
+    }
+
+    & > .keytable--separator {
+        color: $background3;
+    }
+}

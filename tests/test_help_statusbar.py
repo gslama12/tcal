@@ -1,0 +1,95 @@
+from datetime import datetime, time, timedelta
+
+from conftest import TODAY
+
+from tcal.model import Event
+from tcal.tz import local_zone
+from tcal.ui.screens.help import HelpScreen, KeyTable, sections
+from tcal.ui.state import ViewMode
+from tcal.ui.sync_status import SyncState, SyncStatus
+from tcal.ui.widgets.statusbar import StatusBar
+
+
+def bar_text(app) -> str:
+    return str(app.query_one(StatusBar).render())
+
+
+async def test_help_lists_user_overridden_key(make_app, write_config) -> None:
+    app = make_app(write_config('[keys]\nsync = ["S"]\nhelp = ["f1"]\n'))
+    async with app.run_test() as pilot:
+        await pilot.press("f1")
+        assert isinstance(app.screen, HelpScreen)
+        table = app.screen.query_one(KeyTable)
+        rows = dict(row for _, rows in sections(table.keys) for row in rows)
+        assert rows["S"] == "Sync now"
+        assert "r" not in rows
+        await pilot.press("d")  # app keys don't reach the panes behind the modal
+        assert app.state.view is ViewMode.WEEK
+        await pilot.press("f1")
+        assert not isinstance(app.screen, HelpScreen)
+
+
+async def test_help_closes_with_escape_and_q(make_app) -> None:
+    app = make_app()
+    async with app.run_test() as pilot:
+        for key in ("escape", "q"):
+            await pilot.press("question_mark")
+            assert isinstance(app.screen, HelpScreen)
+            await pilot.press(key)
+            assert not isinstance(app.screen, HelpScreen)
+        assert app.is_running  # q closed the help, it did not quit
+
+
+def test_sections_group_and_keep_unknown_actions() -> None:
+    keys = {"today": ["t"], "zoom_in": ["plus", "ctrl+up"], "new_thing": ["z"]}
+    assert sections(keys) == [
+        ("Navigation", [("t", "Jump to today")]),
+        ("Views", [("+ ctrl+up", "Zoom in (time grid)")]),
+        ("Other", [("z", "New thing")]),
+    ]
+
+
+async def test_statusbar_shows_view_date_and_help(make_app, write_config) -> None:
+    app = make_app(write_config('[keys]\nhelp = ["f1"]\n'))
+    async with app.run_test(size=(120, 30)):
+        text = bar_text(app)
+        assert "WEEK" in text
+        assert "Wed 18 Nov 2026" in text
+        assert "f1 help" in text
+        assert "local only" in text  # no sync job
+
+
+async def test_statusbar_sync_states(make_app) -> None:
+    app = make_app()
+    at = datetime(2026, 11, 18, 14, 2)
+    async with app.run_test(size=(120, 30)) as pilot:
+        bar = app.query_one(StatusBar)
+        cases = [
+            (SyncStatus().started(), "syncing…"),
+            (SyncStatus().succeeded(at), "✓ synced 14:02"),
+            (
+                SyncStatus().succeeded(at).failed(ConnectionError("no route")),
+                "offline · last sync 14:02",
+            ),
+            (SyncStatus().failed(ValueError("HTTP 500")), "sync failed: HTTP 500 · never synced"),
+        ]
+        for status, expected in cases:
+            app.sync_status = status
+            bar.refresh()
+            await pilot.pause()
+            assert expected in bar_text(app)
+
+
+def test_offline_vs_failed() -> None:
+    assert SyncStatus().failed(TimeoutError()).state is SyncState.OFFLINE
+    assert SyncStatus().failed(RuntimeError("x")).state is SyncState.FAILED
+
+
+async def test_statusbar_shows_pending_count(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 30)) as pilot:
+        assert "pending" not in bar_text(app)
+        start = datetime.combine(TODAY, time(15), local_zone())
+        app.save_event(Event("new", "work", "Coffee", start, start + timedelta(minutes=30)))
+        await pilot.pause()
+        assert "↑1 pending" in bar_text(app)

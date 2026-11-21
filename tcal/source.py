@@ -30,6 +30,10 @@ class EventSource(Protocol):
         """Delete the event, or only the instance whose original start is ``occurrence``."""
         ...
 
+    def pending_count(self) -> int:
+        """Number of local edits waiting to be pushed."""
+        ...
+
 
 class StoreSource:
     def __init__(self, store: Store) -> None:
@@ -47,3 +51,6 @@ class StoreSource:
 
     def delete_event(self, uid: str, occurrence: datetime | None = None) -> None:
         self.store.delete_event(uid, occurrence)
+
+    def pending_count(self) -> int:
+        return self.store.pending_count()

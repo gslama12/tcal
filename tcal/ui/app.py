@@ -32,7 +32,9 @@ from tcal.source import EventSource
 from tcal.sync import SyncSummary
 from tcal.ui.keys import binding, keymap
 from tcal.ui.messages import EventSelected, NewEventRequested
+from tcal.ui.screens.help import HelpScreen
 from tcal.ui.state import AppState, ViewMode
+from tcal.ui.sync_status import SyncStatus
 from tcal.ui.theme import PALETTES, make_theme
 from tcal.ui.widgets.calendar_list import CalendarList
 from tcal.ui.widgets.minical import MiniCal
@@ -84,7 +86,7 @@ class TcalApp(App[None]):
         super().__init__()
         self.source = source
         self._sync = sync
-        self.sync_status = ""  # shown in the status bar
+        self.sync_status = SyncStatus()  # shown in the status bar
         self.config = config or load_config()
         name = self.config.theme.name
         if name not in PALETTES:
@@ -144,7 +146,7 @@ class TcalApp(App[None]):
         """Start a background sync unless one is running (or syncing is off)."""
         if self._sync is None or any(w.group == "sync" and w.is_running for w in self.workers):
             return
-        self.sync_status = "syncing…"
+        self.sync_status = self.sync_status.started()
         self.refresh_data()
         self.run_worker(self._sync, group="sync", thread=True, exit_on_error=False)
 
@@ -153,9 +155,9 @@ class TcalApp(App[None]):
         if worker.group != "sync" or event.state not in (WorkerState.SUCCESS, WorkerState.ERROR):
             return
         if event.state is WorkerState.SUCCESS:
-            self.sync_status = f"synced {datetime.now():%H:%M}"
+            self.sync_status = self.sync_status.succeeded(datetime.now())
         else:
-            self.sync_status = f"sync failed: {worker.error}"
+            self.sync_status = self.sync_status.failed(worker.error)
             self.log.error(f"sync failed: {worker.error!r}")
         self.refresh_data()
 
@@ -238,7 +240,7 @@ class TcalApp(App[None]):
         self.request_sync()
 
     def action_help(self) -> None:
-        self.notify("Help: not implemented yet")
+        self.push_screen(HelpScreen(self.config.keys))
 
     def on_event_selected(self, message: EventSelected) -> None:
         self.notify(f"Open {message.occurrence.summary!r}: not implemented yet")
