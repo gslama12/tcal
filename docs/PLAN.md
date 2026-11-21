@@ -246,3 +246,9 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   resource; a deleted instance updates the series again). `EventSource.restore` passes it
   through; `app.delete_event` toasts `Deleted "X" · u undo` and `[keys] undo = ["u"]`
   (`app.undo()`) restores the last delete once.
+- **C1 Config UX:** `tcal config path|edit|check`. `edit` seeds a missing file with
+  `commented_defaults()` (every default line commented out). Key conflicts
+  (`config.key_conflicts`: one key in several actions' lists) are not errors — they warn
+  via `check` (non-zero exit) and a startup toast. Themes: nord, gruvbox,
+  catppuccin-mocha, tokyo-night, catppuccin-latte (light: `theme.LIGHT`, `dark=False`);
+  timegrid `_readable` now sorts its text colors by luminance so light palettes work.

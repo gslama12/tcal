@@ -1,7 +1,8 @@
 """Command line: ``tcal`` starts the TUI; ``tcal --demo`` uses sample data.
 
-``tcal login`` stores the iCloud account, ``tcal sync`` syncs once and
-``tcal calendars`` lists the account's calendars.
+``tcal login`` stores the iCloud account, ``tcal sync`` syncs once,
+``tcal calendars`` lists the account's calendars and ``tcal config path|edit|check``
+helps with the config file.
 """
 
 from collections.abc import Iterator
@@ -10,7 +11,15 @@ from contextlib import contextmanager
 import click
 
 from tcal import paths
-from tcal.config import Config, ConfigError, load_config, save_apple_id
+from tcal.config import (
+    Config,
+    ConfigError,
+    commented_defaults,
+    describe_conflicts,
+    key_conflicts,
+    load_config,
+    save_apple_id,
+)
 from tcal.credentials import CredentialsError, get_password, store_password
 from tcal.providers.base import Provider
 
@@ -119,6 +128,41 @@ def calendars() -> None:
         found = provider.list_calendars()
     for cal in found:
         click.echo(f"{cal.color}  {cal.name}{'  (read-only)' if cal.readonly else ''}")
+
+
+@cli.group(name="config")
+def config_group() -> None:
+    """Show, edit or check the config file."""
+
+
+@config_group.command()
+def path() -> None:
+    """Print the config file's path."""
+    click.echo(paths.config_file())
+
+
+@config_group.command()
+def edit() -> None:
+    """Open the config in $EDITOR (created with the commented defaults if missing)."""
+    file = paths.config_file()
+    if not file.exists():
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text(commented_defaults())
+    click.edit(filename=str(file))
+
+
+@config_group.command()
+def check() -> None:
+    """Validate the config: unknown settings/actions, bad values, duplicate key bindings."""
+    from tcal.ui.theme import PALETTES
+
+    config = _config()
+    problems = describe_conflicts(key_conflicts(config))
+    if config.theme.name not in PALETTES:
+        problems.append(f"unknown theme {config.theme.name!r}; one of {', '.join(PALETTES)}")
+    if problems:
+        raise click.ClickException("\n".join(problems))
+    click.echo(f"{paths.config_file()}: OK")
 
 
 def main() -> None:

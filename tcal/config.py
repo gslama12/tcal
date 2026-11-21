@@ -71,9 +71,33 @@ def parse_hhmm(value: str) -> int:
     return total
 
 
+def default_text() -> str:
+    return resources.files("tcal").joinpath("default_config.toml").read_text()
+
+
 def default_data() -> dict[str, Any]:
-    text = resources.files("tcal").joinpath("default_config.toml").read_text()
-    return tomllib.loads(text)
+    return tomllib.loads(default_text())
+
+
+def commented_defaults() -> str:
+    """The defaults with every setting commented out: a starting point for the user file."""
+    lines = default_text().splitlines()
+    return "".join(
+        f"{line}\n" if not line or line.startswith("#") else f"# {line}\n" for line in lines
+    )
+
+
+def key_conflicts(config: Config) -> dict[str, list[str]]:
+    """Keys bound to more than one action: key -> actions (only one of them would fire)."""
+    actions: dict[str, list[str]] = {}
+    for action, keys in config.keys.items():
+        for key in dict.fromkeys(keys):
+            actions.setdefault(key, []).append(action)
+    return {key: names for key, names in actions.items() if len(names) > 1}
+
+
+def describe_conflicts(conflicts: dict[str, list[str]]) -> list[str]:
+    return [f"key {key!r} is bound to {', '.join(names)}" for key, names in conflicts.items()]
 
 
 def load_config(path: Path | None = None) -> Config:
