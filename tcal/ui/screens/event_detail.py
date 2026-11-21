@@ -173,7 +173,7 @@ class EventDetail(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         occ, p = self.occ, self.tcal.palette
-        calendar = next((c for c in self.tcal.calendars() if c.id == occ.calendar_id), None)
+        calendar = self.tcal.calendar(occ.calendar_id)
         name = calendar.name if calendar else occ.calendar_id
         if calendar is not None and calendar.readonly:
             name += " (read-only)"
