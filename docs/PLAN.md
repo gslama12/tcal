@@ -86,3 +86,15 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
 | 6 | Integration, README, polish, review fixes | orchestrator + agent `review` | feat-polish |
 
 Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
+
+### Scaffold notes (package 1)
+
+- **S1 Data seam:** `tcal/source.py` defines `EventSource` (`calendars()`,
+  `occurrences(start_day, end_day)`); `TcalApp` takes one. `ProviderSource` (provider +
+  dateutil expansion) backs `--demo` until the backend swaps in store + recurrence.py.
+- **S2 Keybinds:** `dd` (delete) is not a default: `d` is the day view and Textual has no
+  chords; delete is `x`. Bindings use Textual keymaps (`Binding.id == [keys] action`).
+- **S3 State:** `AppState` is frozen; `TcalApp.state` is a reactive (`always_update`), so
+  `refresh_data()` re-fires watchers. The selected day field is `day`.
+- **S4 Time:** model datetimes are tz-aware; all-day events are local midnight → next
+  midnight (exclusive). `Occurrence` times are converted to local time.
