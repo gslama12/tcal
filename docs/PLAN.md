@@ -151,6 +151,13 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   in view (by day, all-day first, then start time).
 - **T3 Zoom:** levels 1, 2, 3, 4, 6, 8 rows/hour (3 = 20-min slots fits ~53-row grids); cursor
   and scroll position are kept in minutes so they survive zoom and resize.
+- **T5 Fit (QA #1/#4–6):** a minute belongs to the row whose start is *nearest* (ties: earlier
+  row) — event tops/bottoms, hour labels, cursor and now-line all round the same way, so
+  back-to-back events never share a row and starts sit on their hour label. Fitted (uneven)
+  slots show the roundest :00/:30/:15/:05 minute of the row (15-min snapping while rows are
+  ≥ 15 min); zoom levels keep their exact slot starts (e.g. :20 at 3 rows/h). The fit is one stop
+  on the `+`/`-` ladder (choosing it re-fits and puts `day_start` on top). Each column shows
+  `▲ N earlier` / `▼ N later` (or `▲N`) for timed events scrolled out of view.
 - **T4 Strip:** all-day events and timed events lasting ≥ 24 h are bars in the all-day strip
   (max 3 lanes, "+N" in the axis for the rest); shorter events crossing midnight are split.
 

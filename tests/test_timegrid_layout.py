@@ -32,25 +32,32 @@ def test_slot_mapping_round_trips(rph: int) -> None:
     assert scale.total_rows == 24 * rph
     for row in range(scale.total_rows):
         assert scale.row_of(scale.minute_of(row)) == row
-    assert scale.row_of(0) == 0 and scale.row_end(24 * 60) == scale.total_rows
+    assert scale.row_of(0) == 0 and scale.row_of(24 * 60) == scale.total_rows
 
 
 def test_slot_mapping_values() -> None:
-    assert TimeScale(2).row_of(9 * 60 + 29) == 18
-    assert TimeScale(2).row_end(9 * 60 + 1) == 19
+    assert TimeScale(2).row_of(9 * 60 + 14) == 18  # nearest row start: 09:00
+    assert TimeScale(2).row_of(9 * 60 + 15) == 18  # ties: the earlier row
+    assert TimeScale(2).row_of(9 * 60 + 16) == 19
     assert TimeScale(4).minute_of(5) == 75
     assert TimeScale(3).minute_of(1) == 20
 
 
-@pytest.mark.parametrize("height", [20, 31, 35, 46, 52, 53, 100, 140])
+@pytest.mark.parametrize("height", [20, 26, 28, 31, 35, 46, 52, 53, 100, 140])
 def test_fit_scale_shows_day_start_to_end_exactly(height: int) -> None:
     start, end = 6 * 60 + 30, 24 * 60  # 17.5 h
     scale = fit_scale(height, start, end)
-    assert scale.row_end(end) - scale.row_of(start) == height
-    assert scale.minute_of(scale.row_of(start)) == start
-    assert scale.row_end(end) == scale.total_rows  # nothing below 24:00
+    first = scale.row_of(start)
+    assert scale.row_of(end) - first == height
+    assert scale.minute_of(first) == start
+    assert scale.row_of(end) == scale.total_rows  # nothing below 24:00
+    assert scale.row_of(0) == 0
     for row in range(scale.total_rows):
         assert scale.row_of(scale.minute_of(row)) == row
+        if height <= 70:  # rows of >= 15 min: slots snap to 15 min
+            assert scale.minute_of(row) % 15 == 0
+    for hour in range(24):  # the row an hour label sits in starts at that hour
+        assert scale.minute_of(scale.row_of(hour * 60)) == hour * 60
 
 
 def test_fit_scale_limits_and_slot_times() -> None:
@@ -60,9 +67,28 @@ def test_fit_scale_limits_and_slot_times() -> None:
     assert fit_scale(200, start, end) == TimeScale(8)
     stretched = fit_scale(46, start, end)  # 22.8 min per row
     first = stretched.row_of(start)
-    slots = [stretched.slot_minute(first + i) for i in range(4)]
-    assert slots == [390, 415, 440, 460]  # 06:30, 06:55, 07:20, 07:40
-    assert TimeScale(3).slot_minute(1) == 20
+    slots = [stretched.minute_of(first + i) for i in range(5)]
+    assert slots == [390, 420, 435, 450, 480]  # 06:30, 07:00, 07:15, 07:30, 08:00
+    assert TimeScale(3).minute_of(1) == 20
+
+
+def test_back_to_back_events_never_share_a_row() -> None:
+    scale = fit_scale(28, 6 * 60 + 30, 24 * 60)  # 100x35: 37.5 min per row
+    blocks = layout_blocks(
+        [
+            occ("08:00", "08:45"),
+            occ("09:00", "10:00"),
+            occ("10:00", "11:30"),
+            occ("11:00", "12:00"),
+        ],
+        [DAY],
+        scale,
+    )
+    haircut, standup, review, dentist = blocks
+    assert haircut.bottom <= standup.top and (haircut.cols, standup.cols) == (1, 1)
+    assert standup.bottom == review.top
+    for block, hour in ((standup, 9), (review, 10), (dentist, 11)):
+        assert block.top == scale.row_of(hour * 60)  # starts in its hour label's row
 
 
 def test_pack_columns() -> None:

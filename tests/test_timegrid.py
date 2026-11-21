@@ -235,3 +235,55 @@ async def test_day_view(app: RecordingApp) -> None:
         assert "Design review" in body and "1:1 with Alex" in body and "Dentist" in body
         await pilot.press("l")
         assert "Thursday, 19 November" in text(grid)[0]
+
+
+FITTED = (140, 40)  # 30-row grid: 06:30-24:00 at 1.71 rows/hour (35 min per row)
+
+
+async def test_fitted_slots_snap_to_quarter_hours(app: RecordingApp) -> None:
+    async with app.run_test(size=FITTED) as pilot:
+        grid = app.query_one(WeekView)
+        assert grid.scale.even is False
+        assert grid.cursor_time == at("10:00")  # now = 10:15
+        xs, header = grid._columns(), grid._header_height()
+        y = next(y for y, line in enumerate(text(grid)) if line.startswith("16:00"))
+        await pilot.click(WeekView, offset=(xs[2] + 3, 1 + y))  # next to the 16:00 label
+        assert grid.cursor_time == at("16:00")
+        assert text(grid)[y].startswith("16:00")
+        times = set()
+        for _ in range(8):
+            await pilot.press("j")
+            times.add(grid.cursor_time)
+        assert len(times) == 8 and all(t.minute % 15 == 0 for t in times)
+        assert y >= header
+
+
+async def test_zoom_ladder_returns_to_fit(app: RecordingApp) -> None:
+    async with app.run_test(size=FITTED) as pilot:
+        grid = app.query_one(WeekView)
+        fitted = grid.scale
+        await pilot.press(*["plus"] * 5)
+        assert grid.rows_per_hour == 8
+        await pilot.press("minus", "minus", "minus", "minus")
+        assert grid.rows_per_hour == 2
+        await pilot.press("minus")
+        assert grid.scale == fitted  # the fit is the stop below 2 rows/hour
+        assert grid._top_row() == fitted.row_of(6 * 60 + 30)  # 06:30 on top again
+        await pilot.press("minus", "minus")
+        assert grid.scale == fitted  # 1 row/hour would leave empty rows below 24:00
+        await pilot.press("plus")
+        assert grid.rows_per_hour == 2
+
+
+async def test_hidden_events_have_markers(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        grid = app.query_one(WeekView)
+        lines, xs, header = text(grid), grid._columns(), grid._header_height()
+        early = next(o for o in grid._occurrences() if o.summary == "Early run")
+        col = grid._load()[0].index(early.start.date())
+        assert "▲ 1 earlier" in lines[header][xs[col] : xs[col + 1]]
+        assert "▲" not in "".join(line[xs[col + 1] :] for line in lines)
+        await pilot.press(*["k"] * 30)  # scroll to 00:00
+        lines = text(grid)
+        assert "▲" not in "".join(lines)
+        assert any("later" in line for line in lines[-1:])

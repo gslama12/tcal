@@ -53,9 +53,11 @@ def now() -> datetime:
 class TimeScale:
     """Mapping between minutes after midnight and grid rows.
 
-    Row ``r`` starts at minute ``offset + r * 60 / rows_per_hour``. Zoom levels are
-    whole rows per hour aligned to midnight; a fitted scale may be fractional, with
-    ``offset`` (in (-1 row, 0]) aligning a row start to ``day_start``.
+    Row ``r`` starts at minute ``offset + r * 60 / rows_per_hour``. A minute belongs to
+    the row whose start is nearest (ties: the earlier row), so event edges, hour labels
+    and the cursor all round the same way. Zoom levels are whole rows per hour aligned
+    to midnight; a fitted scale may be fractional, with ``offset`` (within half a row
+    of 0) aligning a row start to ``day_start``.
     """
 
     rows_per_hour: Fraction | int
@@ -65,7 +67,7 @@ class TimeScale:
     def aligned(cls, rows_per_hour: Fraction, minute: int) -> "TimeScale":
         """The scale whose rows start exactly at ``minute``."""
         per_row = 60 / rows_per_hour
-        return cls(rows_per_hour, minute - math.ceil(minute / per_row) * per_row)
+        return cls(rows_per_hour, minute - math.ceil(minute / per_row - Fraction(1, 2)) * per_row)
 
     @property
     def even(self) -> bool:
@@ -73,25 +75,34 @@ class TimeScale:
         return self.offset == 0 and Fraction(self.rows_per_hour).denominator == 1
 
     @property
+    def per_row(self) -> Fraction:
+        return Fraction(60) / self.rows_per_hour
+
+    @property
     def total_rows(self) -> int:
-        return self.row_end(MINUTES)
+        return math.ceil((MINUTES - self.offset) / self.per_row)
 
     def row_of(self, minute: int) -> int:
-        """The row containing ``minute``."""
-        return math.floor((minute - self.offset) * Fraction(self.rows_per_hour) / 60)
-
-    def row_end(self, minute: int) -> int:
-        """The first row at or after ``minute`` (exclusive end of a span)."""
-        return math.ceil((minute - self.offset) * Fraction(self.rows_per_hour) / 60)
+        """The row whose start is nearest ``minute``."""
+        return math.ceil((minute - self.offset) / self.per_row - Fraction(1, 2))
 
     def minute_of(self, row: int) -> int:
-        """Start minute of ``row`` (rounded up so that ``row_of`` round-trips)."""
-        return max(0, math.ceil(self.offset + row * Fraction(60) / self.rows_per_hour))
+        """Start minute of ``row`` as shown to the user (``row_of`` round-trips).
 
-    def slot_minute(self, row: int) -> int:
-        """Start minute of ``row`` as shown to the user: uneven slots round up to 5 min."""
-        minute = self.minute_of(row)
-        return minute if self.even else min(MINUTES - 1, -(-minute // 5) * 5)
+        Zoom levels use the exact row start; uneven rows snap to the roundest of
+        :00 / :30 / :15 / :05 among the minutes that belong to the row.
+        """
+        per_row = self.per_row
+        start = self.offset + row * per_row
+        if self.even:
+            return max(0, math.ceil(start))
+        lo = max(start - per_row / 2, Fraction(-1))
+        hi = min(start + per_row / 2, Fraction(MINUTES - 1))
+        for step in (60, 30, 15, 5, 1):
+            first, last = math.floor(lo / step) + 1, math.floor(hi / step)
+            if first <= last:
+                return min(range(first * step, last * step + 1, step), key=lambda m: abs(m - start))
+        return max(0, math.ceil(start))  # unreachable: rows are > 1 minute
 
 
 def fit_scale(height: int, start: int, end: int) -> TimeScale:
@@ -210,7 +221,7 @@ def layout_blocks(
             start, end = _minute_in(day, occ.start), _minute_in(day, occ.end)
             if start < end or (start == end and occ.start.date() == day and start < MINUTES):
                 top = scale.row_of(start)
-                spans.append((occ, top, max(top + 1, scale.row_end(end))))
+                spans.append((occ, top, max(top + 1, scale.row_of(end))))
         packed = pack_columns([(top, bottom) for _, top, bottom in spans])
         blocks += [
             Block(occ, i, top, bottom, col, cols)
@@ -309,7 +320,7 @@ class TimeGrid(CalendarView):
 
     def __init__(self, *, id: str | None = None) -> None:
         super().__init__(id=id)
-        self._zoom: int | None = None  # set by the user's zoom keys
+        self._zoom: int | None = None  # rows per hour; None = fit day_start..day_end
         self._cursor_min = 0  # cursor slot, minutes after midnight
         self._top_min = 0  # first visible grid row, as minutes
         self._picked: Occurrence | None = None  # chosen by n/p or click
@@ -332,6 +343,7 @@ class TimeGrid(CalendarView):
             minute if today and view.day_start <= minute < view.day_end else view.day_start
         )
         self._top_min = view.day_start
+        self._zoom = view.rows_per_hour or None
         super().on_mount()
         self.set_interval(60, self._redraw)
 
@@ -375,12 +387,11 @@ class TimeGrid(CalendarView):
 
     @property
     def scale(self) -> TimeScale:
-        """Current zoom: the user's, else the config's, else day_start..day_end fitted."""
+        """Current zoom: a zoom level, or day_start..day_end fitted to the grid."""
+        return TimeScale(self._zoom) if self._zoom else self._fit()
+
+    def _fit(self) -> TimeScale:
         view = self.tcal.config.view
-        if self._zoom:
-            return TimeScale(self._zoom)
-        if view.rows_per_hour:
-            return TimeScale(view.rows_per_hour)
         return fit_scale(self._grid_height(), view.day_start, view.day_end)
 
     @property
@@ -426,7 +437,7 @@ class TimeGrid(CalendarView):
     @property
     def cursor_time(self) -> datetime:
         """Start of the cursor slot (local, aware)."""
-        minute = self.scale.slot_minute(self._cursor_row())
+        minute = self.scale.minute_of(self._cursor_row())
         return datetime.combine(self.tcal.state.day, time(minute // 60, minute % 60), now().tzinfo)
 
     @property
@@ -532,17 +543,28 @@ class TimeGrid(CalendarView):
     def action_new_event(self) -> None:
         self.post_message(NewEventRequested(self.cursor_time))
 
+    def _ladder(self) -> list[tuple[Fraction | int, int | None]]:
+        """Zoom stops ``(rows_per_hour, zoom)``: the levels plus the fit (zoom None).
+
+        Levels whose day is shorter than the grid (empty rows below 24:00) are left out.
+        """
+        height = self._grid_height()
+        stops: dict[Fraction | int, int | None] = {z: z for z in ZOOMS if 24 * z >= height}
+        stops[self._fit().rows_per_hour] = None
+        return sorted(stops.items())
+
     def action_zoom_in(self) -> None:
-        self._set_zoom([z for z in ZOOMS if z > self.rows_per_hour][:1])
+        self._set_zoom([z for rph, z in self._ladder() if rph > self.rows_per_hour][:1])
 
     def action_zoom_out(self) -> None:
-        # never so far that the day is shorter than the grid (empty rows below 24:00)
-        height = self._grid_height()
-        self._set_zoom([z for z in ZOOMS if height <= 24 * z < 24 * self.rows_per_hour][-1:])
+        self._set_zoom([z for rph, z in self._ladder() if rph < self.rows_per_hour][-1:])
 
-    def _set_zoom(self, choice: list[int]) -> None:
+    def _set_zoom(self, choice: list[int | None]) -> None:
         if choice:
+            self._cursor_min = self.scale.minute_of(self._cursor_row())  # keep the shown time
             self._zoom = choice[0]
+            if self._zoom is None:
+                self._top_min = self.tcal.config.view.day_start
             self._ensure_visible()
             self._redraw()
 
@@ -695,7 +717,7 @@ class TimeGrid(CalendarView):
             y = header + row - top
             hour_start = row in hour_rows
             if row == cursor_row:
-                minute = scale.slot_minute(row)
+                minute = scale.minute_of(row)
                 canvas.text(y, 0, AXIS, f"{minute // 60:02d}:{minute % 60:02d}", cursor_label)
             elif hour_start:
                 canvas.text(y, 0, AXIS, f"{hour_rows[row]:02d}:00", label)
@@ -716,6 +738,31 @@ class TimeGrid(CalendarView):
         selected = self.selected
         for block in self._block_list():
             self._draw_block(canvas, xs, block, top, bottom, header, block.occ == selected)
+        self._draw_hidden(canvas, xs, top, bottom, header)
+
+    def _draw_hidden(
+        self, canvas: _Canvas, xs: list[int], top: int, bottom: int, header: int
+    ) -> None:
+        """``▲ N earlier`` / ``▼ N later`` per column for events scrolled out of view."""
+        p = self.tcal.palette
+        style = _style(p.foreground2, p.background2)
+        for i in range(len(xs) - 1):
+            blocks = [b for b in self._block_list() if b.day == i]
+            x0, x1 = xs[i] + 1, xs[i + 1]
+            for y, arrow, word, count in (
+                (header, "▲", "earlier", sum(b.bottom <= top for b in blocks)),
+                (header + bottom - top - 1, "▼", "later", sum(b.top >= bottom for b in blocks)),
+            ):
+                if count:
+                    label = next(
+                        (
+                            t
+                            for t in (f" {arrow} {count} {word} ", f"{arrow}{count}", arrow)
+                            if len(t) <= x1 - x0
+                        ),
+                        "",
+                    )
+                    canvas.text(y, x1 - len(label), x1, label, style)
 
     def _draw_block(
         self,
