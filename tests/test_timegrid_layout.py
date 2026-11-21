@@ -8,7 +8,7 @@ from tcal.model import Event, Occurrence
 from tcal.ui.widgets.timegrid import (
     ZOOMS,
     TimeScale,
-    fit_rows_per_hour,
+    fit_scale,
     layout_bars,
     layout_blocks,
     pack_columns,
@@ -42,13 +42,27 @@ def test_slot_mapping_values() -> None:
     assert TimeScale(3).minute_of(1) == 20
 
 
-def test_fit_rows_per_hour() -> None:
+@pytest.mark.parametrize("height", [20, 31, 35, 46, 52, 53, 100, 140])
+def test_fit_scale_shows_day_start_to_end_exactly(height: int) -> None:
     start, end = 6 * 60 + 30, 24 * 60  # 17.5 h
-    assert fit_rows_per_hour(35, start, end) == 2
-    assert fit_rows_per_hour(52, start, end) == 2
-    assert fit_rows_per_hour(53, start, end) == 3
-    assert fit_rows_per_hour(200, start, end) == 8
-    assert fit_rows_per_hour(5, start, end) == 1  # never below the smallest zoom
+    scale = fit_scale(height, start, end)
+    assert scale.row_end(end) - scale.row_of(start) == height
+    assert scale.minute_of(scale.row_of(start)) == start
+    assert scale.row_end(end) == scale.total_rows  # nothing below 24:00
+    for row in range(scale.total_rows):
+        assert scale.row_of(scale.minute_of(row)) == row
+
+
+def test_fit_scale_limits_and_slot_times() -> None:
+    start, end = 6 * 60 + 30, 24 * 60
+    assert fit_scale(35, start, end) == TimeScale(2)
+    assert fit_scale(5, start, end) == TimeScale(1)  # never below the smallest zoom
+    assert fit_scale(200, start, end) == TimeScale(8)
+    stretched = fit_scale(46, start, end)  # 22.8 min per row
+    first = stretched.row_of(start)
+    slots = [stretched.slot_minute(first + i) for i in range(4)]
+    assert slots == [390, 415, 440, 460]  # 06:30, 06:55, 07:20, 07:40
+    assert TimeScale(3).slot_minute(1) == 20
 
 
 def test_pack_columns() -> None:

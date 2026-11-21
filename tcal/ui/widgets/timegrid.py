@@ -8,15 +8,17 @@ Layout (content area of the widget)::
     09:00│ Standup│        │         time grid: rows_per_hour rows per hour,
          │        │ ██████ │         events as colored blocks, now-line, cursor
 
-The pure helpers (``TimeScale``, ``fit_rows_per_hour``, ``pack_columns``,
-``pack_lanes``, ``layout_blocks``, ``layout_bars``) do the geometry; ``TimeGrid``
+The pure helpers (``TimeScale``, ``pack_columns``,
+``pack_lanes``, ``layout_blocks``, ``layout_bars``, ``fit_scale``) do the geometry; ``TimeGrid``
 keeps the cursor / scroll / zoom and draws with the line API from a cached frame.
 Cursor and scroll position are stored in minutes so they survive zooming.
 """
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
+from fractions import Fraction
 from functools import lru_cache
 
 from rich.cells import cell_len
@@ -36,6 +38,7 @@ AXIS = 6  # width of the time axis: "HH:MM "
 MAX_LANES = 3  # all-day strip rows shown at most
 MINUTES = 24 * 60
 SCROLL_ROWS = 2  # rows per mouse-wheel step
+HEADER_FORMATS = ("%A, {day} %B", "%A {day}", "%a {day}", "{day}")  # widest first
 
 
 def now() -> datetime:
@@ -48,31 +51,61 @@ def now() -> datetime:
 
 @dataclass(frozen=True)
 class TimeScale:
-    """Mapping between minutes after midnight and grid rows."""
+    """Mapping between minutes after midnight and grid rows.
 
-    rows_per_hour: int
+    Row ``r`` starts at minute ``offset + r * 60 / rows_per_hour``. Zoom levels are
+    whole rows per hour aligned to midnight; a fitted scale may be fractional, with
+    ``offset`` (in (-1 row, 0]) aligning a row start to ``day_start``.
+    """
+
+    rows_per_hour: Fraction | int
+    offset: Fraction | int = 0
+
+    @classmethod
+    def aligned(cls, rows_per_hour: Fraction, minute: int) -> "TimeScale":
+        """The scale whose rows start exactly at ``minute``."""
+        per_row = 60 / rows_per_hour
+        return cls(rows_per_hour, minute - math.ceil(minute / per_row) * per_row)
+
+    @property
+    def even(self) -> bool:
+        """Whole rows per hour aligned to midnight (a zoom level)."""
+        return self.offset == 0 and Fraction(self.rows_per_hour).denominator == 1
 
     @property
     def total_rows(self) -> int:
-        return 24 * self.rows_per_hour
+        return self.row_end(MINUTES)
 
     def row_of(self, minute: int) -> int:
         """The row containing ``minute``."""
-        return minute * self.rows_per_hour // 60
+        return math.floor((minute - self.offset) * Fraction(self.rows_per_hour) / 60)
 
     def row_end(self, minute: int) -> int:
         """The first row at or after ``minute`` (exclusive end of a span)."""
-        return -(-minute * self.rows_per_hour // 60)
+        return math.ceil((minute - self.offset) * Fraction(self.rows_per_hour) / 60)
 
     def minute_of(self, row: int) -> int:
         """Start minute of ``row`` (rounded up so that ``row_of`` round-trips)."""
-        return -(-row * 60 // self.rows_per_hour)
+        return max(0, math.ceil(self.offset + row * Fraction(60) / self.rows_per_hour))
+
+    def slot_minute(self, row: int) -> int:
+        """Start minute of ``row`` as shown to the user: uneven slots round up to 5 min."""
+        minute = self.minute_of(row)
+        return minute if self.even else min(MINUTES - 1, -(-minute // 5) * 5)
 
 
-def fit_rows_per_hour(height: int, start: int, end: int) -> int:
-    """Largest zoom that shows the minutes [start, end) in ``height`` rows."""
-    fitting = [z for z in ZOOMS if TimeScale(z).row_end(end) - TimeScale(z).row_of(start) <= height]
-    return fitting[-1] if fitting else ZOOMS[0]
+def fit_scale(height: int, start: int, end: int) -> TimeScale:
+    """The scale that shows the minutes [start, end) in exactly ``height`` rows.
+
+    Outside the zoom range the nearest zoom level is used instead (scroll / extra
+    hours above ``start``).
+    """
+    rows_per_hour = Fraction(height * 60, end - start)
+    if rows_per_hour < ZOOMS[0]:
+        return TimeScale(ZOOMS[0])
+    if rows_per_hour > ZOOMS[-1]:
+        return TimeScale(ZOOMS[-1])
+    return TimeScale.aligned(rows_per_hour, start)
 
 
 def _greedy(spans: Sequence[tuple[int, int]], order: Sequence[int]) -> dict[int, int]:
@@ -281,7 +314,7 @@ class TimeGrid(CalendarView):
         self._top_min = 0  # first visible grid row, as minutes
         self._picked: Occurrence | None = None  # chosen by n/p or click
         self._data: tuple[list[date], list[Occurrence], list[Bar]] | None = None
-        self._blocks: tuple[int, list[Block]] | None = None  # (rows_per_hour, blocks)
+        self._blocks: tuple[TimeScale, list[Block]] | None = None
         self._lines: list[Strip] | None = None
 
     def days(self) -> list[date]:
@@ -332,27 +365,27 @@ class TimeGrid(CalendarView):
         return self._load()[2]
 
     def _block_list(self) -> list[Block]:
-        rph = self.rows_per_hour
-        if self._blocks is None or self._blocks[0] != rph:
+        scale = self.scale
+        if self._blocks is None or self._blocks[0] != scale:
             days, occs, _ = self._load()
-            self._blocks = rph, layout_blocks(occs, days, self.scale)
+            self._blocks = scale, layout_blocks(occs, days, scale)
         return self._blocks[1]
 
     # ----- geometry -------------------------------------------------------
 
     @property
-    def rows_per_hour(self) -> int:
-        """Current zoom: the user's, else the config's, else fit to the height."""
+    def scale(self) -> TimeScale:
+        """Current zoom: the user's, else the config's, else day_start..day_end fitted."""
         view = self.tcal.config.view
         if self._zoom:
-            return self._zoom
+            return TimeScale(self._zoom)
         if view.rows_per_hour:
-            return view.rows_per_hour
-        return fit_rows_per_hour(self._grid_height(), view.day_start, view.day_end)
+            return TimeScale(view.rows_per_hour)
+        return fit_scale(self._grid_height(), view.day_start, view.day_end)
 
     @property
-    def scale(self) -> TimeScale:
-        return TimeScale(self.rows_per_hour)
+    def rows_per_hour(self) -> Fraction | int:
+        return self.scale.rows_per_hour
 
     def _strip_rows(self) -> int:
         lanes = max((bar.lane + 1 for bar in self._bars()), default=0)
@@ -393,7 +426,7 @@ class TimeGrid(CalendarView):
     @property
     def cursor_time(self) -> datetime:
         """Start of the cursor slot (local, aware)."""
-        minute = self.scale.minute_of(self._cursor_row())
+        minute = self.scale.slot_minute(self._cursor_row())
         return datetime.combine(self.tcal.state.day, time(minute // 60, minute % 60), now().tzinfo)
 
     @property
@@ -499,7 +532,9 @@ class TimeGrid(CalendarView):
         self._set_zoom([z for z in ZOOMS if z > self.rows_per_hour][:1])
 
     def action_zoom_out(self) -> None:
-        self._set_zoom([z for z in ZOOMS if z < self.rows_per_hour][-1:])
+        # never so far that the day is shorter than the grid (empty rows below 24:00)
+        height = self._grid_height()
+        self._set_zoom([z for z in ZOOMS if height <= 24 * z < 24 * self.rows_per_hour][-1:])
 
     def _set_zoom(self, choice: list[int]) -> None:
         if choice:
@@ -588,11 +623,15 @@ class TimeGrid(CalendarView):
     def _draw_header(self, canvas: _Canvas, xs: list[int]) -> None:
         p = self.tcal.palette
         today, selected = now().date(), self.tcal.state.day
-        for i, day in enumerate(self._load()[0]):
+        days = self._load()[0]
+        narrowest = min(b - a - 1 for a, b in zip(xs, xs[1:], strict=False))
+        fmt = next(
+            (f for f in HEADER_FORMATS if max(len(_header(f, d)) for d in days) + 2 <= narrowest),
+            HEADER_FORMATS[-1],
+        )
+        for i, day in enumerate(days):
             x0, x1 = xs[i] + 1, xs[i + 1]
-            labels = [f"{day:%A}, {day.day} {day:%B}", f"{day:%a} {day.day}", str(day.day)]
-            label = next((lab for lab in labels if len(lab) + 2 <= x1 - x0), labels[-1])
-            label = f" {label} "
+            label = f" {_header(fmt, day)} "
             if day == today:
                 style = _style(p.background1, p.primary, bold=True)
             elif day == selected:
@@ -640,8 +679,9 @@ class TimeGrid(CalendarView):
         divider = _style(p.background3, p.background1)
         line = _style(p.background3, p.background1)
         label = _style(p.foreground1, p.background1)
-        cursor = _style(p.foreground1, p.background3)
+        cursor = _style(p.background1, p.primary)
         cursor_label = _style(p.primary, p.background1, bold=True)
+        hour_rows = {scale.row_of(hour * 60): hour for hour in range(24)}
         sel_col, cursor_row = days.index(self.tcal.state.day), self._cursor_row()
         current = now()
         now_col = days.index(current.date()) if current.date() in days else None
@@ -649,12 +689,12 @@ class TimeGrid(CalendarView):
 
         for row in range(top, bottom):
             y = header + row - top
-            minute = scale.minute_of(row)
-            hour_start = minute % 60 == 0
+            hour_start = row in hour_rows
             if row == cursor_row:
+                minute = scale.slot_minute(row)
                 canvas.text(y, 0, AXIS, f"{minute // 60:02d}:{minute % 60:02d}", cursor_label)
             elif hour_start:
-                canvas.text(y, 0, AXIS, f"{minute // 60:02d}:00", label)
+                canvas.text(y, 0, AXIS, f"{hour_rows[row]:02d}:00", label)
             for i, x in enumerate(xs[:-1]):
                 canvas.fill(y, x, x + 1, divider, "│")
                 if hour_start and scale.rows_per_hour >= 2:
@@ -665,7 +705,7 @@ class TimeGrid(CalendarView):
                 red = Style(color=p.red, bold=True)
                 x0, x1 = xs[now_col] + 1, xs[now_col + 1]
                 for x in range(x0, x1):
-                    canvas.chars[y][x] = "●" if x == x0 else "━"
+                    canvas.chars[y][x] = "●" if x == x0 else "─"
                     canvas.styles[y][x] = canvas.styles[y][x] + red
                 canvas.text(y, 0, AXIS, f"{current:%H:%M}", _style(p.red, p.background1, bold=True))
 
@@ -704,6 +744,10 @@ class TimeGrid(CalendarView):
             if index < len(texts):
                 bold = _style(fg, color, bold=True, reverse=selected) if index == 0 else None
                 canvas.text(y, x0, x1, pad + texts[index], bold)
+
+
+def _header(fmt: str, day: date) -> str:
+    return day.strftime(fmt).replace("{day}", str(day.day))
 
 
 def _midnight(day: date) -> datetime:
