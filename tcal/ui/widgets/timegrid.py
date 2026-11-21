@@ -436,6 +436,10 @@ class TimeGrid(CalendarView):
         self._top_min = self.scale.minute_of(top)
         self._redraw()
 
+    def select(self, occ: Occurrence) -> None:
+        """Select ``occ`` (it must be in view), as n/p would."""
+        self._pick(occ)
+
     def _pick(self, occ: Occurrence) -> None:
         """Select ``occ``: move to its day and (timed events) its start slot."""
         days = self._load()[0]

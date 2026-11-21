@@ -159,3 +159,11 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   sync status, `↑N pending` (new `EventSource.pending_count()` / `Store.pending_count()`), help key.
 - **H2 Help:** `HelpScreen(config.keys)` lists the active keymap grouped by `help.GROUPS`;
   actions not listed there (new `[keys]` entries) appear under "Other" — add them to GROUPS.
+
+### Goto / search notes (package 5)
+
+- **G1 Goto:** `tcal/ui/screens/goto.py` `parse_date(text, today)`; dates without a year are in
+  today's year, a weekday means the next one after today; `+Ny` works besides d/w/m.
+- **G2 Search:** searches the visible calendars over the sync window (today − past_months ..
+  + future_months); a series is listed once (its next instance). `app.show_occurrence(occ)`
+  opens the day view with `occ` selected via the new public `TimeGrid.select(occ)`.

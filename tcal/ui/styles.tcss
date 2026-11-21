@@ -113,3 +113,38 @@ KeyTable {
         color: $background3;
     }
 }
+
+/* ----- go to date / search (tcal/ui/screens/goto.py, search.py) ----- */
+
+GotoScreen, SearchScreen {
+    align: center top;
+    background: $background1 50%;
+}
+
+GotoScreen Input, SearchScreen Input, SearchScreen OptionList {
+    background: $background2;
+    border: $border_type $primary;
+    border-title-color: $foreground1;
+    border-subtitle-color: $red;
+}
+
+GotoScreen Input {
+    width: 60;
+    margin-top: 3;
+}
+
+#search {
+    width: 90;
+    height: 80%;
+    margin-top: 3;
+}
+
+SearchScreen OptionList {
+    height: 1fr;
+    border: $border_type $background3;
+    border-subtitle-color: $foreground2;
+
+    &:focus {
+        border: $border_type $primary;
+    }
+}
