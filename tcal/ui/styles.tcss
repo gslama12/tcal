@@ -28,6 +28,10 @@ MiniCal, CalendarList, ViewSwitcher, #views > * {
     }
 }
 
+#views > MonthView {
+    padding: 0;  /* week separators run into the border */
+}
+
 MiniCal {
     height: 10;
 }

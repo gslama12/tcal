@@ -291,11 +291,12 @@ class TcalApp(App[None]):
         self.new_event(datetime.combine(self.state.day, time(hour), local_zone()))
 
     def selected_occurrence(self) -> Occurrence | None:
-        """The event under the cursor of the focused day/week view, if any."""
-        return self.focused.selected if isinstance(self.focused, TimeGrid) else None
+        """The event selected in the focused day/week/month view, if any."""
+        focused = self.focused
+        return focused.selected if isinstance(focused, TimeGrid | MonthView) else None
 
     def action_edit_event(self) -> None:
-        """Edit the event selected in the focused day/week view."""
+        """Edit the event selected in the focused day/week/month view."""
         if occ := self.selected_occurrence():
             self.edit_occurrence(occ)
         else:

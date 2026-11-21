@@ -126,8 +126,8 @@ async def test_month_view_clicks(app: RecordingApp) -> None:
         grid = view.grid()
         week = next(i for i, w in enumerate(grid.weeks) if TODAY in w)
         x = grid.xs[TODAY.weekday()] + 1
-        y = 1 + week * grid.block + grid.rule  # TODAY's day-number line
-        first_chip = view.day_chips(grid)[TODAY][0]
+        y = grid.tops[week] + grid.rule  # TODAY's day-number line
+        first_chip = view.week_cells(grid)[week][TODAY.weekday()][0]
         await pilot.click(MonthView, offset=content(view, x, y + 1))
         assert isinstance(app.posted[-1], EventSelected)
         assert app.posted[-1].occurrence == first_chip
