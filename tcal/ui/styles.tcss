@@ -28,8 +28,10 @@ MiniCal, CalendarList, ViewSwitcher, #views > * {
     }
 }
 
-#views > MonthView {
-    padding: 0;  /* week separators run into the border */
+/* Month: week separators run into the border; Day/Week (timegrid.py): the grid
+   paints every cell itself from app.palette, the axis is its left margin. */
+#views > MonthView, #views > DayView, #views > WeekView {
+    padding: 0;
 }
 
 MiniCal {
@@ -62,13 +64,6 @@ StatusBar {
     scrollbar-color-hover: $secondary;
     scrollbar-background-active: $background2;
     scrollbar-color-active: $secondary;
-}
-
-/* ----- time grid (Day/Week views, tcal/ui/widgets/timegrid.py) -----
-   The grid paints every cell itself from app.palette; the axis is its left margin. */
-
-#views > DayView, #views > WeekView {
-    padding: 0;
 }
 
 /* ----- help (tcal/ui/screens/help.py): todooit's key-bindings panel ----- */
