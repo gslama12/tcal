@@ -29,6 +29,9 @@ _ISO = re.compile(r"(\d{4})-(\d{1,2})-(\d{1,2})")
 _DOTTED = re.compile(r"(\d{1,2})\.(\d{1,2})\.?(\d{4})?")
 _DAY_MONTH = re.compile(r"(\d{1,2})\s+([a-z]+)\.?(?:\s+(\d{4}))?")
 _MONTH_DAY = re.compile(r"([a-z]+)\.?\s+(\d{1,2})(?:,?\s+(\d{4}))?")
+_MONTH_YEAR = re.compile(r"([a-z]+)\.?(?:\s+(\d{4}))?")
+_YEAR = re.compile(r"\d{4}")
+_SLASHED = re.compile(r"(\d{1,2})/(\d{1,2})(?:/(\d{4}))?")
 
 
 def _prefix_index(word: str, names: tuple[str, ...]) -> int | None:
@@ -38,7 +41,7 @@ def _prefix_index(word: str, names: tuple[str, ...]) -> int | None:
     return next((i for i, name in enumerate(names) if name.startswith(word)), None)
 
 
-def _month(word: str) -> int | None:
+def month_number(word: str) -> int | None:
     """The month number ``word`` abbreviates (1 = January)."""
     index = _prefix_index(word, MONTHS)
     return None if index is None else index + 1
@@ -56,7 +59,7 @@ def _make(year: int, month: int | None, day: int) -> date | None:
 def parse_date(text: str, today: date) -> date | None:
     """Parse a date typed by the user, relative to ``today``; None if not understood.
 
-    Accepts: today, tomorrow, yesterday; a weekday (mon .. sunday: the next one
+    Accepts: today (now, tonight), tomorrow, yesterday; a weekday (mon .. sunday: the next one
     after today); next/last <weekday> (that day in the next/previous week);
     +3d / -1w / +2m / +1y; in 3 days|weeks|months|years (= +3d ...);
     next/last week|month|year (= ±1w/m/y); 2026-12-24; 24.12. / 24.12.2026;
@@ -64,7 +67,7 @@ def parse_date(text: str, today: date) -> date | None:
     today's year.
     """
     s = text.strip().lower()
-    if s in ("today", "now"):
+    if s in ("today", "now", "tonight"):
         return today
     if s == "tomorrow":
         return today + timedelta(days=1)
@@ -93,9 +96,27 @@ def parse_date(text: str, today: date) -> date | None:
     if m := _DOTTED.fullmatch(s):
         return _make(int(m[3] or today.year), int(m[2]), int(m[1]))
     if m := _DAY_MONTH.fullmatch(s):
-        return _make(int(m[3] or today.year), _month(m[2]), int(m[1]))
+        return _make(int(m[3] or today.year), month_number(m[2]), int(m[1]))
     if m := _MONTH_DAY.fullmatch(s):
-        return _make(int(m[3] or today.year), _month(m[1]), int(m[2]))
+        return _make(int(m[3] or today.year), month_number(m[1]), int(m[2]))
+    return None
+
+
+def parse_jump(text: str, today: date) -> date | None:
+    """``parse_date`` plus the forms only goto takes (in quick add they would eat title
+    words like "may" or "2027"): a month ``dec`` / ``jan 2027`` (its first day, in today's
+    year without one), a year ``2027`` (1 Jan) and ``12/24`` / ``12/24/2026`` (month/day,
+    or day/month when the first number can't be a month)."""
+    if (day := parse_date(text, today)) is not None:
+        return day
+    s = text.strip().lower()
+    if m := _MONTH_YEAR.fullmatch(s):
+        return _make(int(m[2] or today.year), month_number(m[1]), 1)
+    if _YEAR.fullmatch(s):
+        return _make(int(s), 1, 1)
+    if m := _SLASHED.fullmatch(s):
+        year, a, b = int(m[3] or today.year), int(m[1]), int(m[2])
+        return _make(year, a, b) if a <= 12 else _make(year, b, a)
     return None
 
 

@@ -30,10 +30,10 @@ and edits made offline are queued and pushed later.
 - **Events:** create, edit, delete, incl. recurring events ("this event" or "all events"),
   repeat rules with an end (on a date / after N times), alarms and invitees kept on edit.
   The detail view shows time zone, guests and their answers, alerts and URL.
-- **Quick add** (`A`): one line like `Lunch with Anna tomorrow 12:30-13:30 @Cafe #home`.
+- **Quick add** (`A`): one line like `Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal`.
 - **Yank / paste / duplicate / move** events with the keyboard (`y` `p` `D`, `J` `K` `<` `>`)
   and an **undo** stack (`u`, the last 20 changes).
-- **Go to date** (`g`: `fri`, `next fri`, `+2w`, `in 3 days`, `24.12.`, `dec 24`, `2026-12-24`)
+- **Go to date** (`g`: `fri`, `next fri`, `+2w`, `in 3 days`, `24.12.`, `dec 24`, `dec`, `2027`, `2026-12-24`)
   and **search** (`/`).
 - **iCloud sync** in the background, offline edits queued, server wins on conflicts;
   read-only **subscriptions** (holidays, sports, …) from any iCalendar URL.

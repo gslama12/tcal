@@ -34,3 +34,10 @@ async def test_goto_prompt_keeps_open_on_bad_input_and_cancels(make_app) -> None
         await pilot.press("escape")
         assert not isinstance(app.screen, GotoScreen)
         assert app.state.day == TODAY
+
+
+async def test_goto_jumps_to_a_month(make_app) -> None:
+    app = make_app()
+    async with app.run_test() as pilot:
+        await pilot.press("g", *"jan 2027", "enter")
+        assert app.state.day == date(2027, 1, 1)
