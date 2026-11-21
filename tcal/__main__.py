@@ -44,6 +44,13 @@ def connect(config: Config, apple_id: str | None = None, password: str | None = 
     return ICloudProvider.connect(apple_id, password, account.caldav_url)
 
 
+def _feeds(config: Config) -> Provider | None:
+    """The ``[[subscription]]`` feeds' provider, None without any."""
+    from tcal.providers.ics_url import IcsUrlProvider
+
+    return IcsUrlProvider(config.subscriptions) if config.subscriptions else None
+
+
 @contextmanager
 def _reported(what: str) -> Iterator[None]:
     """Turn provider/network errors into a clean CLI error."""
@@ -83,7 +90,7 @@ def cli(ctx: click.Context, demo: bool) -> None:
         sync()  # fill the cache before the first frame
     else:
         database = paths.database_file()
-        sync = sync_job(connect(config), database, config.sync)
+        sync = sync_job(connect(config), database, config.sync, subscriptions=_feeds(config))
     with Store(database) as store:
         TcalApp(StoreSource(store), config, sync=sync).run()
 
@@ -115,7 +122,9 @@ def sync() -> None:
     from tcal.sync import sync_job
 
     config = _config()
-    job = sync_job(connect(config), paths.database_file(), config.sync)
+    job = sync_job(
+        connect(config), paths.database_file(), config.sync, subscriptions=_feeds(config)
+    )
     with _reported("sync failed"):
         summary = job()
     click.echo(f"Synced: {summary}")

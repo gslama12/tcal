@@ -8,6 +8,8 @@ exclusive, as in iCalendar (a one-day event on the 5th ends on the 6th).
 from dataclasses import dataclass, field
 from datetime import datetime
 
+SUBSCRIPTION_PREFIX = "subscription:"  # id of a read-only feed's calendar: prefix + feed URL
+
 
 @dataclass
 class Calendar:
@@ -16,6 +18,11 @@ class Calendar:
     color: str  # "#RRGGBB"
     visible: bool = True
     readonly: bool = False
+
+    @property
+    def subscribed(self) -> bool:
+        """A subscribed iCalendar feed ("Other calendars"), not one of the account's."""
+        return self.id.startswith(SUBSCRIPTION_PREFIX)
 
 
 @dataclass

@@ -347,3 +347,19 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   day at the event's time of day. Moves check `check_writable`; a series asks `MoveScope`
   (o this event = `instance_of` shifted / s all events = master shifted, EXDATEs along; existing
   overrides keep their RECURRENCE-IDs). The copy / moved event stays selected (`_select_moved`).
+
+### Subscriptions + detail extras (feat-subs)
+
+- **U1 Subscriptions:** `[[subscription]] name, url, color?` (`Config.subscriptions`, a list of
+  tables, so `_merge` passes it through; `webcal://` → `https://`). `providers/ics_url.py`
+  `IcsUrlProvider` (urllib, gzip bodies un-gzipped by magic bytes — Apple's holiday feeds) splits
+  a feed into one resource per UID (+ the feed's VTIMEZONEs) so `raw` stays small; read-only.
+  Calendar id = `model.SUBSCRIPTION_PREFIX + url` and `Calendar.subscribed` is derived from it
+  (no store schema change). `SyncEngine(..., subscriptions=)` / `sync_job(..., subscriptions=)`
+  pull feeds after the account; a failing feed (ProviderError/OSError) keeps its cache and is
+  listed in `SyncSummary.failed`. Not used by `--demo` (no network). `CalendarList` shows feeds
+  under "Other calendars".
+- **U2 Detail extras:** `ics.extras(event)` → `Extras(organizer, attendees (name, PARTSTAT),
+  alarms (offset from start or absolute time; RELATED=END folded in), url)` from `raw`. The detail
+  shows `#timezone` (event zone + its times, only when its UTC offset differs from local),
+  `#url`, `#people`, `#alarms` ("Alert: 10 min before"; all-day: "1 day before at 09:00").
