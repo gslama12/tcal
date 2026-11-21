@@ -32,13 +32,14 @@ from tcal.source import EventSource
 from tcal.sync import SyncSummary
 from tcal.ui.keys import binding, keymap
 from tcal.ui.messages import EventSelected, NewEventRequested
+from tcal.ui.screens.event_detail import EventDetail, confirm_delete
 from tcal.ui.state import AppState, ViewMode
 from tcal.ui.theme import PALETTES, make_theme
 from tcal.ui.widgets.calendar_list import CalendarList
 from tcal.ui.widgets.minical import MiniCal
 from tcal.ui.widgets.month_view import MonthView
 from tcal.ui.widgets.statusbar import StatusBar
-from tcal.ui.widgets.timegrid import DayView, WeekView
+from tcal.ui.widgets.timegrid import DayView, TimeGrid, WeekView
 from tcal.ui.widgets.view_switcher import ViewSwitcher
 from tcal.ui.widgets.year_view import YearView
 
@@ -220,11 +221,23 @@ class TcalApp(App[None]):
     def action_new_event(self) -> None:
         self.notify("New event: not implemented yet")
 
+    def selected_occurrence(self) -> Occurrence | None:
+        """The event under the cursor of the focused day/week view, if any."""
+        return self.focused.selected if isinstance(self.focused, TimeGrid) else None
+
     def action_edit_event(self) -> None:
-        self.notify("Edit event: not implemented yet")
+        if occ := self.selected_occurrence():
+            self.edit_occurrence(occ)
+
+    def edit_occurrence(self, occurrence: Occurrence) -> None:
+        """Hook for the event form (edit ``occurrence``'s event)."""
+        self.notify(f"Edit {occurrence.summary!r}: not implemented yet")
 
     def action_delete_event(self) -> None:
-        self.notify("Delete event: not implemented yet")
+        if occ := self.selected_occurrence():
+            confirm_delete(self, occ)
+        else:
+            self.notify("No event selected")
 
     def action_goto_date(self) -> None:
         self.notify("Go to date: not implemented yet")
@@ -241,7 +254,7 @@ class TcalApp(App[None]):
         self.notify("Help: not implemented yet")
 
     def on_event_selected(self, message: EventSelected) -> None:
-        self.notify(f"Open {message.occurrence.summary!r}: not implemented yet")
+        self.push_screen(EventDetail(message.occurrence))
 
     def on_new_event_requested(self, message: NewEventRequested) -> None:
         self.notify(f"New event at {message.start:%a %H:%M}: not implemented yet")

@@ -32,6 +32,7 @@ class RecordingApp(TcalApp):
         self.posted: list[Message] = []
 
     def on_event_selected(self, message: messages.EventSelected) -> None:
+        message.prevent_default()  # record only, no detail modal
         self.posted.append(message)
 
     def on_new_event_requested(self, message: messages.NewEventRequested) -> None:
