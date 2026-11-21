@@ -163,6 +163,13 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   ≥ 15 min); zoom levels keep their exact slot starts (e.g. :20 at 3 rows/h). The fit is one stop
   on the `+`/`-` ladder (choosing it re-fits and puts `day_start` on top). Each column shows
   `▲ N earlier` / `▼ N later` (or `▲N`) for timed events scrolled out of view.
+- **T6 Overlaps (QA #2/#3/#8):** `pack_columns` returns `(col, span, cols)`: Google-style
+  clusters (touching is no overlap), greedy columns, and each event widens over the free columns
+  to its right. Side-by-side events keep a 1-col gap; if a cluster needs more columns than fit the
+  narrowest day column at `MIN_EVENT_WIDTH` (4) + gap, `layout_blocks(..., max_cols)` collapses
+  it into one `Block` with `group` (its events by start): drawn as "N events" (plus the selected
+  event's title/time), enter/click opens the first, n/p cycle through them. The now-line is drawn
+  behind events; only its `●` stays on a free left-edge cell of an event.
 - **T4 Strip:** all-day events and timed events lasting ≥ 24 h are bars in the all-day strip
   (max 3 lanes, "+N" in the axis for the rest); shorter events crossing midnight are split.
 
