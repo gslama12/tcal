@@ -16,6 +16,10 @@ class ViewMode(StrEnum):
     WEEK = "week"
     MONTH = "month"
     YEAR = "year"
+    SCHEDULE = "schedule"
+
+
+SCHEDULE_DAYS = 14  # a schedule "period": H/L page by two weeks
 
 
 @dataclass(frozen=True)
@@ -39,6 +43,8 @@ class AppState:
                 return start, add_months(start, 1)
             case ViewMode.YEAR:
                 return date(d.year, 1, 1), date(d.year + 1, 1, 1)
+            case ViewMode.SCHEDULE:
+                return d, d + timedelta(days=SCHEDULE_DAYS)
 
     def shifted(self, n: int) -> "AppState":
         """Move the selected date by ``n`` periods (prev/next)."""
@@ -51,6 +57,8 @@ class AppState:
                 new = add_months(self.day, n)
             case ViewMode.YEAR:
                 new = add_months(self.day, 12 * n)
+            case ViewMode.SCHEDULE:
+                new = self.day + timedelta(days=SCHEDULE_DAYS * n)
         return replace(self, day=new)
 
     def title(self, short: bool = False) -> str:
@@ -67,7 +75,7 @@ class AppState:
                 if start.month != last.month:
                     return f"{start:%-d %b} – {last:%-d %b %Y}"
                 return f"{start:%-d} – {last:%-d {'%b' if short else '%B'} %Y}"
-            case ViewMode.MONTH:
+            case ViewMode.MONTH | ViewMode.SCHEDULE:
                 return f"{start:%b %Y}" if short else f"{start:%B %Y}"
             case ViewMode.YEAR:
                 return str(start.year)

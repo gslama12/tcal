@@ -1,0 +1,267 @@
+"""Schedule view (Google Calendar's "Schedule"): upcoming days as a list.
+
+The list starts at the selected day; each day with events gets a date header
+(today accented) followed by its events: time range or "All day", calendar
+colour dot, title and the location dimmed. Empty days are skipped. More days
+are loaded (``CHUNK_DAYS`` at a time) when the cursor or the scroll reaches the end.
+"""
+
+from dataclasses import dataclass
+from datetime import date, timedelta
+
+from rich.style import Style
+from rich.text import Text
+from textual import events
+from textual.app import RenderResult
+
+from tcal.model import Occurrence
+from tcal.ui.calgrid import by_day
+from tcal.ui.keys import binding
+from tcal.ui.messages import EventSelected
+from tcal.ui.state import AppState
+from tcal.ui.widgets.base import CalendarView
+
+CHUNK_DAYS = 28  # days loaded at a time
+LOOKAHEAD_DAYS = 366  # one "load more" scans at most this far for events
+SCROLL_LINES = 3  # mouse wheel step
+TIME_WIDTH = 13  # "09:00 – 10:00"
+
+
+@dataclass(frozen=True)
+class Row:
+    """One list line: a day header (``occ`` None), an event of ``day``, or a blank."""
+
+    day: date
+    occ: Occurrence | None = None
+    blank: bool = False
+
+
+def build_rows(occurrences: list[Occurrence], start: date, end: date) -> list[Row]:
+    """Rows for the days [start, end): header + events per non-empty day, blank between."""
+    rows: list[Row] = []
+    for day, occs in sorted(by_day(occurrences).items()):
+        if not start <= day < end:
+            continue
+        if rows:
+            rows.append(Row(day, blank=True))
+        rows.append(Row(day))
+        rows.extend(Row(day, occ) for occ in occs)
+    return rows
+
+
+def time_range(occ: Occurrence, day: date) -> str:
+    """'09:00 – 10:00', 'All day', or the part of a timed event that falls on ``day``."""
+    starts, ends = occ.start.date() == day, (occ.end - timedelta(microseconds=1)).date() == day
+    if occ.all_day or not (starts or ends):
+        return "All day"
+    begin = f"{occ.start:%H:%M}" if starts else ""
+    end = f"{occ.end:%H:%M}" if ends else ""
+    return f"{begin} – {end}".strip() if begin != end else begin
+
+
+class ScheduleView(CalendarView):
+    """The schedule list. j/k (and n/p) move between events, h/l jump to the
+    previous/next day's first event, enter opens the selected event (``selected``),
+    H/L (the app's prev/next period) re-start the list two weeks earlier/later."""
+
+    BINDINGS = [binding("next_event", "Next event"), binding("prev_event", "Previous event")]
+
+    def __init__(self, *, id: str | None = None) -> None:
+        super().__init__(id=id)
+        self._start = self._end = date.min  # loaded days [start, end)
+        self._anchor: date | None = None  # state.day the list was last set to / followed
+        self._rows: list[Row] = []
+        self._cursor: int | None = None  # index into _rows of the selected event
+        self._top = 0  # first visible row
+
+    # ----- data -----------------------------------------------------------
+
+    def _load(self) -> None:
+        self._rows = build_rows(
+            self.tcal.occurrences(self._start, self._end), self._start, self._end
+        )
+
+    def _load_more(self) -> bool:
+        """Extend the list until it gains events (or ``LOOKAHEAD_DAYS`` are scanned)."""
+        events_before = len(self._event_rows())
+        limit = self._end + timedelta(days=LOOKAHEAD_DAYS)
+        while self._end < limit:
+            self._end += timedelta(days=CHUNK_DAYS)
+            self._load()
+            if len(self._event_rows()) > events_before:
+                return True
+        return False
+
+    def _event_rows(self) -> list[int]:
+        return [i for i, row in enumerate(self._rows) if row.occ is not None]
+
+    @property
+    def selected(self) -> Occurrence | None:
+        return self._rows[self._cursor].occ if self._cursor is not None else None
+
+    def on_state(self, state: AppState) -> None:
+        selected = self._rows[self._cursor] if self._cursor is not None else None
+        if state.day != self._anchor:  # navigated from outside: restart the list there
+            self._anchor, self._start, self._top, selected = state.day, state.day, 0, None
+            self._end = state.day + timedelta(days=CHUNK_DAYS)
+        self._load()
+        while len(self._rows) < self.content_size.height and self._load_more():
+            pass
+        events_ = self._event_rows()
+        # by row, not occurrence: a multi-day event has a row on each of its days
+        same = [i for i in events_ if self._rows[i] == selected]
+        if same:
+            self._cursor = same[0]
+        elif selected is None or not events_:
+            self._cursor = events_[0] if events_ else None
+        else:  # the selected event is gone (deleted, calendar hidden): its neighbour
+            self._cursor = min(events_, key=lambda i: abs(i - (self._cursor or 0)))
+        self._clamp()
+        self.refresh()
+
+    def on_resize(self) -> None:
+        self.on_state(self.tcal.state)
+
+    # ----- cursor & scrolling ---------------------------------------------
+
+    def _select(self, index: int) -> None:
+        self._cursor = index
+        self._clamp()
+        day = self._rows[index].day
+        self._anchor = day  # following the cursor does not restart the list
+        self.tcal.select_date(day)
+        self.refresh()
+
+    def _clamp(self) -> None:
+        """Keep the cursor's row (and its day header, if it fits) visible."""
+        height = max(1, self.content_size.height)
+        if self._cursor is not None:
+            header = self._cursor
+            while header > 0 and self._rows[header].occ is not None:
+                header -= 1
+            if self._cursor >= self._top + height:
+                self._top = self._cursor - height + 1
+            if header < self._top or self._cursor < self._top:
+                self._top = header if self._cursor - header < height else self._cursor
+        self._top = max(0, min(self._top, len(self._rows) - height))
+
+    def _step(self, step: int) -> None:
+        events_ = self._event_rows()
+        if not events_:
+            if step > 0 and self._load_more():
+                self._select(self._event_rows()[0])
+            return
+        pos = events_.index(self._cursor) if self._cursor in events_ else -1
+        if pos + step >= len(events_):
+            if not self._load_more():
+                return
+            events_ = self._event_rows()
+        if 0 <= pos + step < len(events_):
+            self._select(events_[pos + step])
+
+    def _jump_day(self, step: int) -> None:
+        """Select the first event of the previous/next listed day."""
+        if self._cursor is None:
+            return self._step(step)
+        day = self._rows[self._cursor].day
+        if step > 0:
+            later = [i for i in self._day_firsts() if self._rows[i].day > day]
+            if not later and self._load_more():
+                later = [i for i in self._day_firsts() if self._rows[i].day > day]
+            if later:
+                self._select(later[0])
+        else:
+            earlier = [i for i in self._day_firsts() if self._rows[i].day < day]
+            self._select(earlier[-1] if earlier else self._day_firsts()[0])
+
+    def _day_firsts(self) -> list[int]:
+        """Row index of each listed day's first event."""
+        return [i for i in self._event_rows() if self._rows[i - 1].occ is None]
+
+    def _scroll(self, lines: int) -> None:
+        height = self.content_size.height
+        if lines > 0 and self._top + height + lines > len(self._rows):
+            self._load_more()
+        self._top = max(0, min(self._top + lines, len(self._rows) - height))
+        self.refresh()
+
+    def action_cursor_down(self) -> None:
+        self._step(1)
+
+    def action_cursor_up(self) -> None:
+        self._step(-1)
+
+    def action_next_event(self) -> None:
+        self._step(1)
+
+    def action_prev_event(self) -> None:
+        self._step(-1)
+
+    def action_cursor_right(self) -> None:
+        self._jump_day(1)
+
+    def action_cursor_left(self) -> None:
+        self._jump_day(-1)
+
+    def action_open(self) -> None:
+        if occ := self.selected:
+            self.post_message(EventSelected(occ))
+
+    def on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
+        event.stop()
+        self._scroll(SCROLL_LINES)
+
+    def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
+        event.stop()
+        self._scroll(-SCROLL_LINES)
+
+    def on_click(self, event: events.Click) -> None:
+        offset = event.get_content_offset(self)
+        if offset is None:
+            return
+        index = self._top + offset.y
+        if 0 <= index < len(self._rows) and self._rows[index].occ is not None:
+            self._select(index)
+            self.action_open()
+
+    # ----- drawing --------------------------------------------------------
+
+    def render(self) -> RenderResult:
+        visible = self._rows[self._top : self._top + self.content_size.height]
+        if not self._rows:
+            p = self.tcal.palette
+            return Text(" No upcoming events", style=Style(color=p.foreground1))
+        lines = [self._line(row, self._top + i) for i, row in enumerate(visible)]
+        return Text("\n", no_wrap=True, overflow="crop").join(lines)
+
+    def _line(self, row: Row, index: int) -> Text:
+        p, width = self.tcal.palette, self.content_size.width
+        if row.blank:
+            return Text()
+        if row.occ is None:
+            return self._header(row.day)
+        occ, selected = row.occ, index == self._cursor
+        base = (
+            Style(bgcolor=p.background3 if self.has_focus else p.background2)
+            if selected
+            else Style()
+        )
+        text = Text(style=base)
+        text.append(
+            f"   {time_range(occ, row.day):<{TIME_WIDTH}}  ", style=Style(color=p.foreground2)
+        )
+        text.append("● ", style=Style(color=self.tcal.calendar_color(occ.calendar_id)))
+        text.append(occ.summary or "(no title)", style=Style(color=p.foreground3, bold=selected))
+        if occ.event.location:
+            text.append(f"  {occ.event.location}", style=Style(color=p.foreground1, dim=True))
+        text.truncate(width, pad=True)
+        return text
+
+    def _header(self, day: date) -> Text:
+        p = self.tcal.palette
+        label = f"{day:%a %-d %b}" + (f" {day:%Y}" if day.year != date.today().year else "")
+        if day == date.today():
+            return Text.assemble(
+                (f" {label} · Today ", Style(color=p.background1, bgcolor=p.primary, bold=True))
+            )
+        return Text(f" {label}", style=Style(color=p.secondary, bold=True))
