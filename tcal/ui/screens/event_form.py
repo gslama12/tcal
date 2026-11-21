@@ -197,11 +197,16 @@ class ConfirmDiscard(ModalScreen[bool]):
 class EventForm(ModalScreen[Event | None]):
     BINDINGS = [binding("save", "Save", priority=True), binding("cancel", "Cancel")]
 
-    def __init__(self, event: Event, calendars: list[Calendar], new: bool) -> None:
+    def __init__(
+        self, event: Event, calendars: list[Calendar], new: bool, edited: bool = False
+    ) -> None:
+        """``edited``: the prefilled values are already the user's input (quick add), so
+        cancel asks "Discard changes?" even when no field was changed."""
         super().__init__()
         self.event = event
         self.calendars = calendars
         self.new = new
+        self.edited = edited
         self.shown = values_of(event)
         if all(c.id != event.calendar_id for c in calendars):
             self.shown = replace(self.shown, calendar_id=calendars[0].id)
@@ -281,7 +286,7 @@ class EventForm(ModalScreen[Event | None]):
         self.dismiss(event)
 
     def action_cancel(self) -> None:
-        if self.values() == self.shown:
+        if not self.edited and self.values() == self.shown:
             self.dismiss(None)
             return
 

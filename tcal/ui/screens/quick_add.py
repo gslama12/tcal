@@ -1,19 +1,20 @@
 """Quick add (``A``): one line parsed by ``tcal.quickadd.parse``, previewed as you type.
 
 Dismisses with ``("save", parsed)`` (enter) or ``("form", parsed)`` (tab: open the full
-form prefilled); esc cancels. The caller turns the result into an ``Event``.
+form prefilled, ``[keys] focus_next``); ``[keys] cancel`` cancels. The caller turns the
+result into an ``Event``.
 """
 
 from datetime import date, timedelta
 from typing import Literal
 
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Input, Static
 
 from tcal.quickadd import QuickAdd, parse
+from tcal.ui.keys import binding
 
 Mode = Literal["save", "form"]
 
@@ -38,37 +39,56 @@ class QuickAddScreen(ModalScreen[tuple[Mode, QuickAdd]]):
     """Prompt + live preview; enter saves, tab opens the event form, esc cancels."""
 
     BINDINGS = [
-        Binding("escape", "dismiss", "Cancel"),
-        Binding("tab", "open_form", "Full form", priority=True),
+        binding("cancel", "Cancel", action="dismiss"),
+        binding("focus_next", "Full form", action="open_form", priority=True),
     ]
 
-    def __init__(self, today: date, calendars: list[str]) -> None:
+    def __init__(
+        self, today: date, calendars: list[str], default: str, readonly: list[str]
+    ) -> None:
+        """``calendars``: the writable names (``#`` matches these first), ``default``: the
+        one used without ``#``; ``readonly``: names ``#`` reports as read-only."""
         super().__init__()
         self.today = today
         self.calendars = calendars
+        self.default = default
+        self.readonly = readonly
 
     def compose(self) -> ComposeResult:
         with Vertical():
             prompt = Input(placeholder="Lunch with Anna tomorrow 12:30-13:30 @Cafe #Personal")
             prompt.border_title = "Quick add"
-            prompt.border_subtitle = "enter save · tab full form"
             yield prompt
             yield Static(id="preview")
 
     def on_mount(self) -> None:
+        keys = {
+            b.binding.id: self.app.get_key_display(b.binding) for b in self.active_bindings.values()
+        }
+        self.query_one(
+            Input
+        ).border_subtitle = (
+            f"enter save · {keys.get('focus_next', '')} full form · {keys.get('cancel', '')} cancel"
+        )
         self._preview()
 
     def parsed(self) -> QuickAdd:
-        return parse(self.query_one(Input).value, self.today, self.calendars)
+        return parse(self.query_one(Input).value, self.today, self.calendars + self.readonly)
+
+    def error(self, q: QuickAdd) -> str:
+        """Why ``q`` can't be saved ("" if it can)."""
+        if q.unknown_calendar:
+            return f"No calendar “{q.unknown_calendar}”"
+        if q.calendar in self.readonly and q.calendar not in self.calendars:
+            return f"{q.calendar} is read-only"
+        return ""
 
     def _preview(self) -> QuickAdd:
         q = self.parsed()
+        error = self.error(q)
         preview = self.query_one("#preview", Static)
-        preview.set_class(bool(q.unknown_calendar), "-error")
-        if q.unknown_calendar:
-            preview.update(f"No calendar “{q.unknown_calendar}”")
-        else:
-            preview.update(describe(q, self.calendars[0]))
+        preview.set_class(bool(error), "-error")
+        preview.update(error or describe(q, self.default))
         return q
 
     def on_input_changed(self) -> None:
@@ -78,9 +98,9 @@ class QuickAddScreen(ModalScreen[tuple[Mode, QuickAdd]]):
         q = self._preview()
         if not q.summary:
             self.query_one("#preview", Static).set_class(True, "-error").update("Type a title")
-        elif not q.unknown_calendar:
+        elif not self.error(q):
             self.dismiss(("save", q))
 
     def action_open_form(self) -> None:
-        if not self._preview().unknown_calendar:
-            self.dismiss(("form", self.parsed()))
+        if not self.error(q := self._preview()):
+            self.dismiss(("form", q))

@@ -226,7 +226,9 @@ class TcalApp(App[None]):
         if not writable:
             self.notify("No writable calendar", severity="warning")
             return
-        draft = Event(f"{uuid4()}@tcal", writable[0].id, "", begin, end, all_day)
+        draft = Event(
+            f"{uuid4()}@tcal", self._default_calendar(writable).id, "", begin, end, all_day
+        )
         self.push_screen(EventForm(draft, writable, new=True), self._form_done)
 
     def quick_add(self) -> None:
@@ -240,17 +242,21 @@ class TcalApp(App[None]):
             if result is None:
                 return
             mode, q = result
-            calendar = next((c for c in writable if c.name == q.calendar), writable[0])
+            calendar = next((c for c in writable if c.name == q.calendar), default)
             event = Event(
                 f"{uuid4()}@tcal", calendar.id, q.summary, q.start, q.end, q.all_day, q.location
             )
             if mode == "save":
-                self.save_event(event)
+                self._form_done(event)
                 self.notify(f"Added “{event.summary}”")
             else:
-                self.push_screen(EventForm(event, writable, new=True), self._form_done)
+                form = EventForm(event, writable, new=True, edited=True)
+                self.push_screen(form, self._form_done)
 
-        self.push_screen(QuickAddScreen(date.today(), [c.name for c in writable]), done)
+        default = self._default_calendar(writable)
+        readonly = [c.name for c in self._calendars if c.readonly]
+        names = [c.name for c in writable]
+        self.push_screen(QuickAddScreen(date.today(), names, default.name, readonly), done)
 
     def edit_event(self, event: Event) -> None:
         """Open the form for an existing event (a master edits the whole series)."""
@@ -285,9 +291,18 @@ class TcalApp(App[None]):
     def _writable(self) -> list[Calendar]:
         return [c for c in self._calendars if not c.readonly]
 
+    def _default_calendar(self, writable: list[Calendar]) -> Calendar:
+        """For new events: the first shown calendar of ``writable`` (else the first)."""
+        hidden = self.state.hidden_calendars
+        return next((c for c in writable if c.id not in hidden), writable[0])
+
     def _form_done(self, event: Event | None) -> None:
-        if event is not None:
-            self.save_event(event)
+        """Save a new/edited event; a hidden calendar it lands in is shown again."""
+        if event is None:
+            return
+        if event.calendar_id in self.state.hidden_calendars:
+            self.toggle_calendar(event.calendar_id)
+        self.save_event(event)
 
     # ----- sync -----------------------------------------------------------
 

@@ -138,12 +138,19 @@ class MonthView(DayCursorView):
         self._pick(occ, occ.start.date())
 
     def action_cycle(self, step: int) -> None:
+        """Select the next (``step`` 1) / previous (-1) event: from the selected one, else
+        the first shown on or after (last starting on or before) the selected day; wraps."""
         stops = self._stops()
         if not stops:
             return
         occs = [occ for occ, _ in stops]
-        current = self.selected
-        index = occs.index(current) + step if current in occs else (0 if step > 0 else -1)
+        current, day = self.selected, self.tcal.state.day
+        if current in occs:
+            index = occs.index(current) + step
+        elif step > 0:
+            index = next((i for i, occ in enumerate(occs) if max(occurrence_days(occ)) >= day), 0)
+        else:
+            index = next((i for i in reversed(range(len(stops))) if stops[i][1] <= day), -1)
         self._pick(*stops[index % len(stops)])
 
     def move(self, days: int) -> None:

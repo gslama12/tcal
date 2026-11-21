@@ -335,6 +335,15 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   the preview) → `for 2h|90m|1h30` → time range / single time (needs `:mm`, am/pm or `h`; a bare
   "12" stays text) → date; what's left after a word-initial `@` is the location (so `@` may come
   before the date/time). No time → all-day (a duration is then ignored); end ≤ start → next day.
+- **QA3 (feat-g2):** dates also take `next/last <weekday>` (that weekday in the next/previous
+  Mon-based week, so on Wed "next fri" is 9 days away) and `in N days|weeks|months|years` (goto
+  too). Quick add reads a date range `<date> - <date>` (runs of ≤ 9 words; `dec 30 - jan 2` rolls
+  the end into the next year) as a multi-day event. New events default to the first *shown*
+  writable calendar; saving into a hidden one (`#work`, the form) shows it again. `#` also
+  matches read-only calendars (after the writable ones) to say "Holidays is read-only".
+  Quick add's keys are `[keys] cancel` and `focus_next` (tab; a separate key would collide with
+  it), shown in its hint; the form opened from it asks "Discard changes?" (`EventForm(edited=True)`).
+  Month `n`/`N` without a selection start at the selected day, like the time grids.
 
 ### Clipboard & moving (feat-yank)
 

@@ -28,6 +28,8 @@ MONTHS = [
 
 _RELATIVE = re.compile(r"([+-]\d+)\s*([dwmy])")
 _NEXT_LAST = re.compile(r"(next|last)\s+(week|month|year)")
+_NEXT_WEEKDAY = re.compile(r"(next|last)\s+([a-z]+)")
+_IN = re.compile(r"in\s+(\d+)\s+(day|week|month|year)s?")
 _ISO = re.compile(r"(\d{4})-(\d{1,2})-(\d{1,2})")
 _DOTTED = re.compile(r"(\d{1,2})\.(\d{1,2})\.?(\d{4})?")
 _DAY_MONTH = re.compile(r"(\d{1,2})\s+([a-z]+)\.?(?:\s+(\d{4}))?")
@@ -54,7 +56,9 @@ def parse_date(text: str, today: date) -> date | None:
     """Parse a date typed by the user, relative to ``today``; None if not understood.
 
     Accepts: today, tomorrow, yesterday; a weekday (mon .. sunday: the next one
-    after today); +3d / -1w / +2m / +1y; next/last week|month|year (= ±1w/m/y); 2026-12-24; 24.12. / 24.12.2026;
+    after today); next/last <weekday> (that day in the next/previous week);
+    +3d / -1w / +2m / +1y; in 3 days|weeks|months|years (= +3d ...);
+    next/last week|month|year (= ±1w/m/y); 2026-12-24; 24.12. / 24.12.2026;
     dec 24 / 24 dec (optionally with a year). Dates without a year are in
     today's year.
     """
@@ -69,6 +73,13 @@ def parse_date(text: str, today: date) -> date | None:
         return today + timedelta(days=(weekday - today.weekday() - 1) % 7 + 1)
     if m := _NEXT_LAST.fullmatch(s):
         s = f"{'+' if m[1] == 'next' else '-'}1{m[2][0]}"
+    elif (m := _NEXT_WEEKDAY.fullmatch(s)) and (
+        weekday := _prefix_index(m[2], WEEKDAYS)
+    ) is not None:
+        monday = today - timedelta(days=today.weekday())
+        return monday + timedelta(weeks=1 if m[1] == "next" else -1, days=weekday)
+    if m := _IN.fullmatch(s):
+        s = f"+{m[1]}{m[2][0]}"
     if m := _RELATIVE.fullmatch(s):
         n, unit = int(m[1]), m[2]
         if unit == "d":
@@ -99,7 +110,9 @@ class GotoScreen(ModalScreen[date]):
         self.today = today
 
     def compose(self) -> ComposeResult:
-        prompt = Input(placeholder="fri, +2w, next month (from today), 24.12., dec 24, 2026-12-24")
+        prompt = Input(
+            placeholder="fri, next fri, +2w, in 3 days, next month, 24.12., dec 24, 2026-12-24"
+        )
         prompt.border_title = "Go to date"
         yield prompt
 

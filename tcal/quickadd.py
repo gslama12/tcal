@@ -9,8 +9,9 @@ Rules (case-insensitive; the pieces may come in any order):
 - ``for 2h`` / ``for 90m`` / ``for 1h30``: the duration (default 1 h).
 - times: a range ``12:30-13:30`` / ``12-13`` / ``9-11am``, or one time ``12:30`` / ``9am`` /
   ``18h`` (optionally after ``at`` / ``from``); an end before the start is on the next day.
-- a date in any of goto's forms (``fri``, ``tomorrow``, ``24.12.``, ``dec 24``, ``+2w``),
-  optionally after ``on``; default: ``today``.
+- a date in any of goto's forms (``fri``, ``next fri``, ``in 2 days``, ``24.12.``, ``dec 24``,
+  ``+2w``), optionally after ``on``; default: ``today``. A range ``dec 3 - dec 5`` /
+  ``1.12.-3.12.`` spans several days (with a time: from the first day to the last).
 - no time: an all-day event (the duration is ignored).
 - `` @``: everything after it (at a word start) (once the pieces above are taken out) is the location.
 """
@@ -39,6 +40,7 @@ _DURATION = re.compile(
     rf"\bfor\s+(?:(\d+)\s*(?:h|hrs?|hours?)(\d{{2}})?(?:\s*{_MINUTES})?|{_MINUTES})\b",
     re.IGNORECASE,
 )
+_DASH = re.compile(r"\s*[-–]\s*")
 _LOCATION = re.compile(r"(?:^|\s)@")
 _CALENDAR = re.compile(r"#(\S+)")
 
@@ -86,17 +88,38 @@ def _take(pattern: re.Pattern[str], text: str) -> tuple[re.Match[str] | None, st
     return m, f"{text[: m.start()]} {_GAP} {text[m.end() :]}"
 
 
-def _take_date(text: str, today: date) -> tuple[date | None, str]:
-    """The longest run of words (≤ 4) that ``parse_date`` understands, and the rest."""
+def _dates(text: str, today: date) -> tuple[date, date] | None:
+    """``text`` as one date (first == last) or a range "<date> - <date>"."""
+    if (day := parse_date(text, today)) is not None:
+        return day, day
+    for dash in _DASH.finditer(text):
+        first, last = parse_date(text[: dash.start()], today), parse_date(text[dash.end() :], today)
+        if first is not None and last is not None:
+            if last < first:  # "dec 30 - jan 2": the end is in the next year
+                last = _next_year(last)
+            if last is not None and last >= first:
+                return first, last
+    return None
+
+
+def _next_year(day: date) -> date | None:
+    try:
+        return day.replace(year=day.year + 1)
+    except ValueError:  # 29 Feb
+        return None
+
+
+def _take_date(text: str, today: date) -> tuple[tuple[date, date] | None, str]:
+    """The longest run of words (≤ 9) that is a date or a date range, and the rest."""
     words = text.split()
-    for size in (4, 3, 2, 1):
+    for size in range(min(9, len(words)), 0, -1):
         for i in range(len(words) - size + 1):
             run = words[i : i + size]
-            if _GAP in run or (day := parse_date(" ".join(run), today)) is None:
+            if _GAP in run or (days := _dates(" ".join(run), today)) is None:
                 continue
             if i and words[i - 1].lower() == "on":
                 i, size = i - 1, size + 1
-            return day, " ".join(words[:i] + [_GAP] + words[i + size :])
+            return days, " ".join(words[:i] + [_GAP] + words[i + size :])
     return None, text
 
 
@@ -132,18 +155,18 @@ def parse(text: str, today: date, calendars: list[str]) -> QuickAdd:
         else:
             rest = before
 
-    day, rest = _take_date(rest, today)
-    day = day or today
+    days, rest = _take_date(rest, today)
+    day, last = days or (today, today)
     summary, *location = _LOCATION.split(_clean(rest), maxsplit=1)
 
     if times is None:
-        start_dt, end_dt = local_midnight(day), local_midnight(day + timedelta(days=1))
+        start_dt, end_dt = local_midnight(day), local_midnight(last + timedelta(days=1))
     else:
         start_dt = datetime.combine(day, times[0], local_zone())
         if times[1] is None:
-            end_dt = start_dt + duration
+            end_dt = datetime.combine(last, times[0], local_zone()) + duration
         else:
-            end_dt = datetime.combine(day, times[1], local_zone())
+            end_dt = datetime.combine(last, times[1], local_zone())
             if end_dt <= start_dt:
                 end_dt += timedelta(days=1)
     return QuickAdd(
