@@ -9,7 +9,7 @@ in the views: read-only calendars only get a notice; a recurring event asks
 one instance of a series ("this event" vs "all events").
 """
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Literal, cast
 from zoneinfo import ZoneInfo
 
@@ -22,6 +22,7 @@ from textual.widgets import Button, Static
 
 from tcal import ics
 from tcal.model import Occurrence
+from tcal.tz import local_zone
 from tcal.ui.calgrid import WEEKDAY_NAMES
 from tcal.ui.keys import binding
 
@@ -67,15 +68,24 @@ def describe_rrule(rrule: str) -> str:
     if count := parts.get("COUNT"):
         words += f", {count} times"
     elif until := parts.get("UNTIL"):
-        words += f", until {date(int(until[:4]), int(until[4:6]), int(until[6:8])):%-d %b %Y}"
+        words += f", until {until_date(until):%-d %b %Y}"
     return words
 
 
-PARTSTATS = {
-    "ACCEPTED": "accepted",
-    "DECLINED": "declined",
+def until_date(value: str) -> date:
+    """The local day of an RRULE UNTIL (a DATE, a UTC ``…Z`` or a floating date-time)."""
+    day = date(int(value[:4]), int(value[4:6]), int(value[6:8]))
+    if not value.upper().endswith("Z"):
+        return day
+    stamp = datetime.strptime(value.upper(), "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
+    return stamp.astimezone(local_zone()).date()
+
+
+PARTSTATS = {  # PARTSTAT -> reply, in the order the guest summary counts them
+    "ACCEPTED": "yes",
     "TENTATIVE": "maybe",
-    "NEEDS-ACTION": "invited",
+    "DECLINED": "no",
+    "NEEDS-ACTION": "awaiting",
     "DELEGATED": "delegated",
 }
 
@@ -92,14 +102,16 @@ def zone_text(occ: Occurrence) -> str:
 
 
 def duration_text(delta: timedelta) -> str:
-    """'10 min', '1 hour', '1 h 30 min', '2 days', '1 week'."""
+    """'10 min', '1 h', '1 h 30 min', '2 days', '1 week'."""
     minutes = int(abs(delta).total_seconds()) // 60
-    for size, unit in ((7 * 24 * 60, "week"), (24 * 60, "day"), (60, "hour")):
+    for size, unit in ((7 * 24 * 60, "week"), (24 * 60, "day")):
         if minutes >= size and minutes % size == 0:
             n = minutes // size
             return f"{n} {unit}{'s' if n > 1 else ''}"
     hours, rest = divmod(minutes, 60)
-    return f"{hours} h {rest} min" if hours else f"{rest} min"
+    if not hours:
+        return f"{rest} min"
+    return f"{hours} h {rest} min" if rest else f"{hours} h"
 
 
 def alarm_text(alarm: ics.Alarm, occ: Occurrence) -> str:
@@ -122,12 +134,21 @@ def alarm_text(alarm: ics.Alarm, occ: Occurrence) -> str:
 
 
 def people_text(extras: ics.Extras) -> str:
-    """'Organizer: Ann' and one line per attendee with their reply."""
-    lines = [f"Organizer: {extras.organizer}"] if extras.organizer else []
-    lines += [
-        f"{name} · {PARTSTATS.get(status, status.lower())}" for name, status in extras.attendees
+    """A Google-style heading ('3 guests · 1 yes, 1 no, 1 awaiting') and one line per
+    guest with their reply; the organizer is marked (and listed first if not a guest)."""
+    if not extras.attendees and not extras.organizer:
+        return ""
+    replies = [PARTSTATS.get(status, status.lower()) for _, status in extras.attendees]
+    lines = [
+        f"{name} · {reply}" + (" · organizer" if name == extras.organizer else "")
+        for (name, _), reply in zip(extras.attendees, replies, strict=True)
     ]
-    return "\n".join(lines)
+    if extras.organizer and all(name != extras.organizer for name, _ in extras.attendees):
+        lines.insert(0, f"{extras.organizer} · organizer")
+    order = [*PARTSTATS.values(), *sorted(set(replies) - set(PARTSTATS.values()))]
+    counts = [f"{replies.count(r)} {r}" for r in order if r in replies]
+    heading = f"{len(lines)} guest{'s' if len(lines) > 1 else ''}"
+    return "\n".join([" · ".join([heading, ", ".join(counts)]) if counts else heading, *lines])
 
 
 def recurrence_text(occ: Occurrence) -> str:

@@ -1,8 +1,9 @@
 """Event detail modal and the delete confirmation flow."""
 
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import icalendar
 from conftest import TODAY
@@ -15,12 +16,15 @@ from tcal.providers.ics_url import split_feed
 from tcal.tz import local_zone
 from tcal.ui.app import TcalApp
 from tcal.ui.messages import EventSelected
+from tcal.ui.screens import event_detail
 from tcal.ui.screens.event_detail import (
     ConfirmDelete,
     EventDetail,
     alarm_text,
     describe_rrule,
     duration_text,
+    people_text,
+    until_date,
 )
 from tcal.ui.widgets.timegrid import TimeGrid
 
@@ -154,10 +158,10 @@ async def test_detail_shows_people_alarms_url_and_zone(make_app) -> None:
         assert text(app, "timezone") == "Pacific/Kiritimati: Thu 19 Nov 2026, 08:00 – 09:00"
         assert text(app, "url") == "https://example.com/planning"
         assert text(app, "people").splitlines() == [
-            "Organizer: Ann Organizer",
-            "Ann Organizer · accepted",
-            "bob@example.com · declined",
-            "Cleo · invited",
+            "3 guests · 1 yes, 1 no, 1 awaiting",
+            "Ann Organizer · yes · organizer",
+            "bob@example.com · no",
+            "Cleo · awaiting",
         ]
         assert text(app, "alarms").splitlines() == [
             "Alert: 10 min before",
@@ -186,6 +190,23 @@ def test_all_day_alarm_and_durations() -> None:
     assert duration_text(timedelta(minutes=-90)) == "1 h 30 min"
     assert duration_text(timedelta(days=2)) == "2 days"
     assert duration_text(timedelta(weeks=1)) == "1 week"
+    assert duration_text(timedelta(hours=-1)) == "1 h"  # same unit style as "10 min"
+
+
+def test_people_text_lists_an_organizer_who_is_no_guest_once() -> None:
+    extras = ics.Extras(organizer="Maria", attendees=(("Ann", "TENTATIVE"),))
+    assert people_text(extras).splitlines() == [
+        "2 guests · 1 maybe",
+        "Maria · organizer",
+        "Ann · maybe",
+    ]
+    assert people_text(ics.Extras()) == ""
+
+
+def test_until_is_shown_as_a_local_day(monkeypatch) -> None:
+    monkeypatch.setattr(event_detail, "local_zone", lambda: ZoneInfo("America/New_York"))
+    assert until_date("20270101T045959Z") == date(2026, 12, 31)
+    assert until_date("20261231") == date(2026, 12, 31)
 
 
 def test_alarm_related_to_the_end() -> None:
