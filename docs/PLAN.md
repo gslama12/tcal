@@ -260,3 +260,10 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   `DAVError` → `ProviderError` (auth hint mentions the app-specific password).
 - **Open:** `tcal doctor` command, iCloud-like XML/ICS fixture tests for the above, ics.py
   edge cases (all-day DTEND == DTSTART).
+
+### Performance notes (feat-perf)
+
+- **P1 Bench:** `scripts/bench.py` (5000 events / 3 years / 6 calendars, 100 series) prints CPU ms
+  per keypress (headless 160x50). `TcalApp` caches `source.occurrences` per day range until
+  `refresh_data()` (so any data change must go through it); `recurrence._rules` caches parsed
+  rule sets (dateutil `cache=True`) keyed by (rrule, start, exdates).

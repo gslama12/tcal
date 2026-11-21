@@ -64,6 +64,7 @@ from tcal.ui.widgets.view_switcher import ViewSwitcher
 from tcal.ui.widgets.year_view import YearView
 
 SIDEBAR_MIN_WIDTH = 120  # terminal columns below which the sidebar starts hidden
+OCC_CACHE_SIZE = 32  # date ranges whose occurrences are kept until the next data refresh
 
 
 class TcalApp(App[None]):
@@ -120,6 +121,7 @@ class TcalApp(App[None]):
         self.register_theme(make_theme(name))
         self.theme = f"tcal-{name}"
         self._calendars = source.calendars()
+        self._occ_cache: dict[tuple[date, date], list[Occurrence]] = {}
         self.set_reactive(
             TcalApp.state,
             AppState(
@@ -144,11 +146,22 @@ class TcalApp(App[None]):
     def occurrences(self, start: date, end: date) -> list[Occurrence]:
         """Occurrences of visible calendars in the days [start, end), sorted by start."""
         hidden = self.state.hidden_calendars
-        return [o for o in self.source.occurrences(start, end) if o.calendar_id not in hidden]
+        return [o for o in self._occurrences(start, end) if o.calendar_id not in hidden]
+
+    def _occurrences(self, start: date, end: date) -> list[Occurrence]:
+        """The source's occurrences, cached per range until ``refresh_data``
+        (every widget redraw asks again; most ask for the same few ranges)."""
+        key = (start, end)
+        if key not in self._occ_cache:
+            if len(self._occ_cache) >= OCC_CACHE_SIZE:
+                self._occ_cache.clear()
+            self._occ_cache[key] = self.source.occurrences(start, end)
+        return self._occ_cache[key]
 
     def refresh_data(self) -> None:
         """Re-read calendars from the source and redraw everything (e.g. after sync)."""
         self._calendars = self.source.calendars()
+        self._occ_cache.clear()
         self.state = self.state
 
     def save_event(self, event: Event) -> Event:
