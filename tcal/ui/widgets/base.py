@@ -1,7 +1,10 @@
 """Base classes for tcal widgets: typed app access and the state-change hook."""
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, cast
 
+from rich.style import Style
+from rich.text import Text
 from textual.widget import Widget
 
 from tcal.ui.keys import VIEW_BINDINGS
@@ -31,7 +34,7 @@ class TcalWidget(Widget):
 
 
 class CalendarView(TcalWidget, can_focus=True):
-    """Base of the main-panel views (Day/Week/Month/Year).
+    """Base of the main-panel views (Day/Week/Month/Year/Schedule).
 
     Declares the configurable cursor/zoom/open bindings (``VIEW_BINDINGS``);
     subclasses implement the matching ``action_cursor_left/down/up/right``,
@@ -40,3 +43,13 @@ class CalendarView(TcalWidget, can_focus=True):
     """
 
     BINDINGS = VIEW_BINDINGS
+
+    def cursor_style(self) -> Style:
+        """Background of the selected day / event row (brighter while focused)."""
+        p = self.tcal.palette
+        return Style(bgcolor=p.background3 if self.has_focus else p.background2)
+
+
+def join_lines(lines: Iterable[Text]) -> Text:
+    """Rendered lines as one Text, cropped (not wrapped) to the widget width."""
+    return Text("\n", no_wrap=True, overflow="crop").join(lines)

@@ -28,7 +28,7 @@ from textual import events
 from textual.strip import Strip
 
 from tcal.model import Occurrence
-from tcal.ui.keys import binding
+from tcal.ui.keys import EVENT_BINDINGS, binding
 from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.state import AppState, ViewMode
 from tcal.ui.widgets.base import CalendarView
@@ -356,11 +356,7 @@ class TimeGrid(CalendarView):
     an event, the wheel scrolls.
     """
 
-    BINDINGS = [
-        binding("next_event", "Next event"),
-        binding("prev_event", "Previous event"),
-        binding("new_event", "New event"),
-    ]
+    BINDINGS = [*EVENT_BINDINGS, binding("new_event", "New event")]
 
     def __init__(self, *, id: str | None = None) -> None:
         super().__init__(id=id)
@@ -527,11 +523,8 @@ class TimeGrid(CalendarView):
         self._redraw()
 
     def select(self, occ: Occurrence) -> None:
-        """Select ``occ`` (it must be in view), as n/p would."""
-        self._pick(occ)
-
-    def _pick(self, occ: Occurrence) -> None:
-        """Select ``occ``: move to its day and (timed events) its start slot."""
+        """Select ``occ`` (it must be in view), as n/p would: move to its day and
+        (timed events) its start slot."""
         days = self._load()[0]
         day = min(max(occ.start.date(), days[0]), days[-1])
         self._picked = occ
@@ -551,13 +544,13 @@ class TimeGrid(CalendarView):
 
         return sorted(self._occurrences(), key=key)
 
-    def _cycle(self, step: int) -> None:
+    def action_cycle(self, step: int) -> None:
         stops = self._stops()
         if not stops:
             return
         current = self.selected
         index = stops.index(current) + step if current in stops else (0 if step > 0 else -1)
-        self._pick(stops[index % len(stops)])
+        self.select(stops[index % len(stops)])
 
     # ----- actions --------------------------------------------------------
 
@@ -569,18 +562,14 @@ class TimeGrid(CalendarView):
         self._move_cursor(self.scale.minute_of(max(self._cursor_row() - 1, 0)))
 
     def action_cursor_left(self) -> None:
-        self._picked = None
-        self.tcal.select_date(self.tcal.state.day - timedelta(days=1))
+        self._select_day(self.tcal.state.day - timedelta(days=1))
 
     def action_cursor_right(self) -> None:
+        self._select_day(self.tcal.state.day + timedelta(days=1))
+
+    def _select_day(self, day: date) -> None:
         self._picked = None
-        self.tcal.select_date(self.tcal.state.day + timedelta(days=1))
-
-    def action_next_event(self) -> None:
-        self._cycle(1)
-
-    def action_prev_event(self) -> None:
-        self._cycle(-1)
+        self.tcal.select_date(day)
 
     def action_open(self) -> None:
         occ = self.selected
@@ -637,8 +626,7 @@ class TimeGrid(CalendarView):
         event.stop()
         header = self._header_height()
         if y == 0:
-            self._picked = None
-            self.tcal.select_date(days[column])
+            self._select_day(days[column])
         elif y < header - 1:
             bar = next(
                 (b for b in self._bars() if b.lane == y - 1 and b.first <= column < b.last), None
@@ -670,7 +658,7 @@ class TimeGrid(CalendarView):
             self._redraw()
 
     def _open(self, occ: Occurrence) -> None:
-        self._pick(occ)
+        self.select(occ)
         self.post_message(EventSelected(occ))
 
     # ----- rendering ------------------------------------------------------
@@ -752,8 +740,7 @@ class TimeGrid(CalendarView):
         scale, header, top = self.scale, self._header_height(), self._top_row()
         days = self._load()[0]
         bottom = min(scale.total_rows, top + len(canvas.chars) - header)
-        divider = _style(p.background3, p.background1)
-        line = _style(p.background3, p.background1)
+        divider = _style(p.background3, p.background1)  # also the hour lines
         label = _style(p.foreground1, p.background1)
         cursor = _style(p.background1, p.primary)
         cursor_label = _style(p.primary, p.background1, bold=True)
@@ -774,7 +761,7 @@ class TimeGrid(CalendarView):
             for i, x in enumerate(xs[:-1]):
                 canvas.fill(y, x, x + 1, divider, "│")
                 if hour_start and scale.rows_per_hour >= 2:
-                    canvas.fill(y, x + 1, xs[i + 1], line, "╌")
+                    canvas.fill(y, x + 1, xs[i + 1], divider, "╌")
             if row == cursor_row:
                 canvas.fill(y, xs[sel_col] + 1, xs[sel_col + 1], cursor)
             if now_col is not None and row == scale.row_of(now_min):
