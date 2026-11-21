@@ -81,6 +81,12 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
   recurring-ical-events (dropped): the cache holds parsed `Event`s, so expanding them
   directly avoids re-parsing iCalendar on every redraw. Series expand in the wall-clock
   time of their own zone (DST-safe); UNTIL in any form is handled.
+- Unknown theme (QA2 #1): the TUI falls back to the default theme with a warning notice
+  instead of refusing to start; `tcal config check` still reports it as an error.
+- Sidebar (QA2 #9/#11): the toggle key pins the user's choice (resizes no longer change it);
+  unpinned on a narrow terminal, a sidebar shown by `focus_calendars` hides again when focus
+  leaves it. Month/schedule text in calendar colours goes through `theme.legible` (darkened on
+  light themes); the time grid keeps its own `_readable`.
 
 ## Work packages (≈ issues)
 

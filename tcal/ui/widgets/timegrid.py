@@ -126,6 +126,7 @@ class TimeGrid(CalendarView):
     """
 
     BINDINGS = [*EVENT_BINDINGS, binding("new_event", "New event")]
+    header_formats: tuple[str, ...] = HEADER_FORMATS
 
     def __init__(self, *, id: str | None = None) -> None:
         super().__init__(id=id)
@@ -461,9 +462,10 @@ class TimeGrid(CalendarView):
         today, selected = now().date(), self.tcal.state.day
         days = self._load()[0]
         narrowest = min(b - a - 1 for a, b in zip(xs, xs[1:], strict=False))
+        formats = self.header_formats
         fmt = next(
-            (f for f in HEADER_FORMATS if max(len(_header(f, d)) for d in days) + 2 <= narrowest),
-            HEADER_FORMATS[-1],
+            (f for f in formats if max(len(_header(f, d)) for d in days) + 2 <= narrowest),
+            formats[-1],
         )
         for i, day in enumerate(days):
             x0, x1 = xs[i] + 1, xs[i + 1]
@@ -658,7 +660,9 @@ def _span(occ: Occurrence, width: int) -> str:
 
 
 class DayView(TimeGrid):
-    """Time grid for ``state.day``."""
+    """Time grid for ``state.day`` (short header: the toolbar shows the full date)."""
+
+    header_formats = ("%a {day}", "{day}")
 
     def days(self) -> list[date]:
         return [self.tcal.state.day]

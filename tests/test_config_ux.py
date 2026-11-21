@@ -7,7 +7,7 @@ from click.testing import CliRunner
 from tcal import paths
 from tcal.__main__ import cli
 from tcal.config import commented_defaults, default_data, key_conflicts, load_config
-from tcal.ui.theme import PALETTES, make_theme
+from tcal.ui.theme import PALETTES, legible, luma, make_theme, text_on
 
 
 def test_defaults_have_no_key_conflicts() -> None:
@@ -41,7 +41,11 @@ def test_config_edit_creates_file(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_config_check(write_config, tcal_home) -> None:
-    assert CliRunner().invoke(cli, ["config", "check"]).exit_code == 0
+    result = CliRunner().invoke(cli, ["config", "check"])
+    assert result.exit_code == 0 and "no config file at" in result.output
+    write_config('[view]\nweek_start = "sunday"\n')
+    result = CliRunner().invoke(cli, ["config", "check"])
+    assert result.exit_code == 0 and result.output.endswith(": OK\n")
     write_config('[keys]\nsync = ["q"]\n')
     result = CliRunner().invoke(cli, ["config", "check"])
     assert result.exit_code != 0 and "key 'q' is bound to sync, quit" in result.output
@@ -61,6 +65,15 @@ async def test_conflicts_are_shown_at_startup(make_app, write_config) -> None:
         assert any("key 'q' is bound to sync, quit" in m for m in messages)
 
 
+async def test_unknown_theme_falls_back_with_a_notice(make_app, write_config) -> None:
+    app = make_app(write_config('[theme]\nname = "dracula"\n'))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.theme == f"tcal-{default_data()['theme']['name']}"
+        messages = [n.message for n in app._notifications]
+        assert any("Unknown theme 'dracula'" in m for m in messages)
+
+
 def test_default_theme_is_listed() -> None:
     assert default_data()["theme"]["name"] in PALETTES
     assert len(PALETTES) >= 5 and not make_theme("catppuccin-latte").dark
@@ -74,3 +87,13 @@ async def test_theme_renders(name, make_app, write_config, tmp_path) -> None:
         assert app.theme == f"tcal-{name}"
         svg = app.export_screenshot()
         assert PALETTES[name].background1.lower() in svg.lower()
+
+
+def test_calendar_colours_are_darkened_on_light_themes() -> None:
+    latte, nord = PALETTES["catppuccin-latte"], PALETTES["nord"]
+    green = "#A3BE8C"
+    assert luma(legible(green, latte)) < 0.46 < luma(green)
+    assert legible(green, nord) == green
+    assert legible("#1E66F5", latte) == "#1E66F5"  # already dark enough
+    assert text_on(green, latte) == latte.foreground3  # dark text on a light bar
+    assert text_on(green, nord) == nord.background1

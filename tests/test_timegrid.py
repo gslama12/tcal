@@ -231,11 +231,11 @@ async def test_day_view(app: RecordingApp) -> None:
         assert app.state.view is ViewMode.DAY
         grid = app.query_one(DayView)
         lines = text(grid)
-        assert "Wednesday, 18 November" in lines[0]
+        assert lines[0].strip() == "Wed 18"  # the toolbar already shows the full date
         body = "\n".join(lines)
         assert "Design review" in body and "1:1 with Alex" in body and "Dentist" in body
         await pilot.press("l")
-        assert "Thursday, 19 November" in text(grid)[0]
+        assert "Thu 19" in text(grid)[0]
 
 
 FITTED = (140, 40)  # 30-row grid: 06:30-24:00 at 1.71 rows/hour (35 min per row)

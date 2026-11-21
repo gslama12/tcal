@@ -80,6 +80,29 @@ PALETTES = {
     "catppuccin-latte": CATPPUCCIN_LATTE,
 }
 LIGHT = {"catppuccin-latte"}
+MAX_TEXT_LUMA = 0.45  # brighter text (e.g. a pastel calendar colour) is hard to read on light
+
+
+def luma(hex_color: str) -> float:
+    """Perceived brightness of ``#RRGGBB``, 0 (black) .. 1 (white)."""
+    r, g, b = (int(hex_color.lstrip("#")[i : i + 2], 16) for i in (0, 2, 4))
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255
+
+
+def legible(color: str, palette: Palette) -> str:
+    """``color`` as text on the palette's background: darkened on light themes."""
+    level = luma(color)
+    if luma(palette.background1) < 0.5 or level <= MAX_TEXT_LUMA:
+        return color
+    scale = MAX_TEXT_LUMA / level
+    r, g, b = (round(int(color.lstrip("#")[i : i + 2], 16) * scale) for i in (0, 2, 4))
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
+def text_on(color: str, palette: Palette) -> str:
+    """The palette's background or text colour, whichever reads better on ``color``."""
+    dark, light = sorted((palette.background1, palette.foreground3), key=luma)
+    return dark if luma(color) > 0.6 else light
 
 
 def make_theme(name: str) -> Theme:

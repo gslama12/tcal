@@ -172,7 +172,8 @@ def check() -> None:
         problems.append(f"unknown theme {config.theme.name!r}; one of {', '.join(PALETTES)}")
     if problems:
         raise click.ClickException("\n".join(problems))
-    click.echo(f"{paths.config_file()}: OK")
+    file = paths.config_file()
+    click.echo(f"{file}: OK" if file.exists() else f"no config file at {file} (defaults are used)")
 
 
 def main() -> None:
