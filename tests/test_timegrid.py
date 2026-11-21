@@ -397,3 +397,16 @@ async def test_tall_blocks_wrap_the_title_before_the_time(app: RecordingApp) -> 
         lines = text(app.query_one(WeekView))
         sprint = next(i for i, line in enumerate(lines) if "Sprint" in line)
         assert "planning" in lines[sprint + 1] and "13:00–15:00" in lines[sprint + 2]
+
+
+async def test_later_marker_moves_off_the_cursor_row(app: RecordingApp) -> None:
+    async with app.run_test(size=(100, 35)) as pilot:
+        await pilot.press(*["plus"] * 7, *["j"] * 60)  # 8 rows/hour, cursor on the bottom row
+        await pilot.press(*["k"] * 20, *["j"] * 20)  # (scrolls down while moving, so back up)
+        grid = app.query_one(WeekView)
+        xs, lines = grid._columns(), text(grid)
+        cursor_y = grid._header_height() + grid._cursor_row() - grid._top_row()
+        column = slice(xs[2] + 1, xs[3])  # Wed, the selected day
+        assert cursor_y == len(lines) - 1
+        assert "▼" not in lines[-1][column] and "▼ 2 later" in lines[-2][column]
+        assert "▼ 1 later" in lines[-1][xs[1] + 1 : xs[2]]  # other columns: the edge row

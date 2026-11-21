@@ -559,9 +559,16 @@ class TimeGrid(CalendarView):
     def _draw_hidden(
         self, canvas: _Canvas, xs: list[int], top: int, bottom: int, header: int
     ) -> None:
-        """``▲ N earlier`` / ``▼ N later`` per column for events scrolled out of view."""
+        """``▲ N earlier`` / ``▼ N later`` per column for events scrolled out of view,
+        one row further in where the edge row holds the column's cursor or now-line."""
         p = self.tcal.palette
         style = _style(p.foreground2, p.background2)
+        days, current = self._load()[0], now()
+        taken = {(days.index(self.tcal.state.day), self._cursor_row())}
+        if current.date() in days:
+            taken.add(
+                (days.index(current.date()), self.scale.row_of(current.hour * 60 + current.minute))
+            )
         for i in range(len(xs) - 1):
             blocks = [b for b in self._block_list() if b.day == i]
             x1 = xs[i + 1]
@@ -569,6 +576,8 @@ class TimeGrid(CalendarView):
                 (top, "▲", "earlier", sum(len(b.occs) for b in blocks if b.bottom <= top)),
                 (bottom - 1, "▼", "later", sum(len(b.occs) for b in blocks if b.top >= bottom)),
             ):
+                while (i, row) in taken and top <= row + (1 if arrow == "▲" else -1) < bottom:
+                    row += 1 if arrow == "▲" else -1
                 # right of the events on the edge row (plus a gap), never over them
                 ends = [self._sub_columns(b, xs)[1] + 1 for b in blocks if b.top <= row < b.bottom]
                 x0, y = max(ends, default=xs[i] + 1), header + row - top
