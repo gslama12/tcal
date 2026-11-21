@@ -88,6 +88,9 @@ def test_calendar_prefix_and_unknown() -> None:
         ("Trip dec 3 - dec 5", date(2026, 12, 3), date(2026, 12, 5)),
         ("Workshop 1.12.-3.12.", date(2026, 12, 1), date(2026, 12, 3)),
         ("Trip dec 30 – jan 2", date(2026, 12, 30), date(2027, 1, 2)),
+        ("Trip dec 3-5", date(2026, 12, 3), date(2026, 12, 5)),
+        ("Trip 3-5 dec", date(2026, 12, 3), date(2026, 12, 5)),
+        ("Trip Mon-Fri", date(2026, 11, 23), date(2026, 11, 27)),
     ],
 )
 def test_date_range_is_multi_day_all_day(text: str, first: date, last: date) -> None:
@@ -132,11 +135,53 @@ def test_plain_words_stay_in_summary() -> None:
             at(date(2026, 11, 23), 7),
             "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
         ),
+        ("Standup weekdays 9:00", "Standup", at(TODAY, 9), "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"),
+        (
+            "Yoga every monday and wednesday 7am",
+            "Yoga",
+            at(TODAY, 7),
+            "FREQ=WEEKLY;BYDAY=MO,WE",
+        ),
+        (
+            "Yoga every mon and wed 7am",
+            "Yoga",
+            at(TODAY, 7),
+            "FREQ=WEEKLY;BYDAY=MO,WE",
+        ),
+        ("Gym every tue, thu 18:00", "Gym", at(date(2026, 11, 19), 18), "FREQ=WEEKLY;BYDAY=TU,TH"),
     ],
 )
 def test_repeats(text: str, summary: str, start: datetime, rrule: str) -> None:
     q = parse(text, TODAY, NAMES)
     assert (q.summary, q.start, q.rrule) == (summary, start, rrule)
+
+
+@pytest.mark.parametrize(
+    ("text", "summary"),
+    [
+        ("Daily standup 9:00", "Daily standup"),
+        ("Weekly review fri 16:00", "Weekly review"),
+        ("Monthly report dec 1", "Monthly report"),
+        ("Every day counts", "Every day counts"),
+    ],
+)
+def test_a_leading_repeat_word_is_the_title(text: str, summary: str) -> None:
+    q = parse(text, TODAY, NAMES)
+    assert (q.summary, q.rrule) == (summary, None)
+
+
+def test_a_repeat_after_a_leading_repeat_word_counts() -> None:
+    q = parse("Weekly sync weekly mon 10:00", TODAY, NAMES)
+    assert (q.summary, q.start, q.rrule) == (
+        "Weekly sync",
+        at(date(2026, 11, 23), 10),
+        "FREQ=WEEKLY",
+    )
+
+
+def test_tonight_is_today() -> None:
+    q = parse("Movie tonight 8pm", TODAY, NAMES)
+    assert (q.summary, q.start) == ("Movie", at(TODAY, 20))
 
 
 def test_every_without_a_unit_stays_in_summary() -> None:

@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from conftest import TODAY
 
-from tcal.dates import parse_date
+from tcal.dates import parse_date, parse_jump
 
 # TODAY is Wednesday 2026-11-18
 
@@ -52,6 +52,7 @@ from tcal.dates import parse_date
         ("24 dec", date(2026, 12, 24)),
         ("24 Sept", date(2026, 9, 24)),
         ("24 dec 2027", date(2027, 12, 24)),
+        ("tonight", TODAY),
     ],
 )
 def test_parse_date(text: str, expected: date) -> None:
@@ -85,3 +86,25 @@ def test_parse_date_rejects(text: str) -> None:
 
 def test_relative_months_clamp() -> None:
     assert parse_date("+1m", date(2027, 1, 31)) == date(2027, 2, 28)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("fri", date(2026, 11, 20)),
+        ("dec", date(2026, 12, 1)),
+        ("January 2027", date(2027, 1, 1)),
+        ("jan 2027", date(2027, 1, 1)),
+        ("2027", date(2027, 1, 1)),
+        ("12/24", date(2026, 12, 24)),
+        ("24/12", date(2026, 12, 24)),
+        ("1/5/2027", date(2027, 1, 5)),
+    ],
+)
+def test_parse_jump_takes_months_years_and_slashes(text: str, expected: date) -> None:
+    assert parse_jump(text, TODAY) == expected
+
+
+@pytest.mark.parametrize("text", ["foo", "foo 2027", "13/13", "99999"])
+def test_parse_jump_rejects(text: str) -> None:
+    assert parse_jump(text, TODAY) is None

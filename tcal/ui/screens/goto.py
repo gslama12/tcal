@@ -1,4 +1,4 @@
-"""Go to date: a one-line prompt (``g``) parsed by ``tcal.dates.parse_date``."""
+"""Go to date: a one-line prompt (``g``) parsed by ``tcal.dates.parse_jump``."""
 
 from datetime import date
 
@@ -7,7 +7,7 @@ from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.widgets import Input
 
-from tcal.dates import parse_date
+from tcal.dates import parse_jump
 
 
 class GotoScreen(ModalScreen[date]):
@@ -20,9 +20,7 @@ class GotoScreen(ModalScreen[date]):
         self.today = today
 
     def compose(self) -> ComposeResult:
-        prompt = Input(
-            placeholder="fri, next fri, +2w, in 3 days, next month, 24.12., dec 24, 2026-12-24"
-        )
+        prompt = Input(placeholder="fri, +2w, in 3 days, 24.12., dec 24, dec, 2027")
         prompt.border_title = "Go to date"
         yield prompt
 
@@ -30,7 +28,7 @@ class GotoScreen(ModalScreen[date]):
         event.input.border_subtitle = ""
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        day = parse_date(event.value, self.today)
+        day = parse_jump(event.value, self.today)
         if day is None:
             event.input.border_subtitle = "not a date"
         else:
