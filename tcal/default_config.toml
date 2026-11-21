@@ -47,6 +47,7 @@ goto_date = ["g"]
 search = ["slash"]
 sync = ["r"]
 focus_calendars = ["c"]
+toggle_calendar = ["space"]           # in the calendar list (enter works too)
 focus_next = ["tab"]
 help = ["question_mark"]
 quit = ["q"]
