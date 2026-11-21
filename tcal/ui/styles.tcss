@@ -151,12 +151,12 @@ SearchScreen OptionList {
 
 /* ----- modals (tcal/ui/screens/) ----- */
 
-EventDetail, ConfirmDelete, EventForm {
+EventDetail, ScopeDialog, EventForm {
     align: center middle;
     background: $background1 60%;
 }
 
-EventDetail #dialog, ConfirmDelete #dialog {
+EventDetail #dialog, ScopeDialog #dialog {
     width: 60;
     height: auto;
     max-height: 80%;
@@ -173,7 +173,7 @@ EventDetail #dialog > #hints {
     margin-bottom: 0;
 }
 
-ConfirmDelete #buttons {
+ScopeDialog #buttons {
     height: auto;
     margin-top: 1;
 

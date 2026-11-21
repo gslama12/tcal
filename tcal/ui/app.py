@@ -14,12 +14,13 @@ Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
 ``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``save_event()``,
 ``delete_event()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``,
-``new_event()``, ``edit_event()`` (open the event form).
+``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event form),
+``check_writable()``.
 """
 
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from uuid import uuid4
 
 from textual.app import App, ComposeResult
@@ -32,10 +33,16 @@ from tcal.config import Config, ConfigError, load_config
 from tcal.model import Calendar, Event, Occurrence
 from tcal.source import EventSource
 from tcal.sync import SyncSummary
-from tcal.tz import local_midnight
+from tcal.tz import local_midnight, local_zone
 from tcal.ui.keys import binding, keymap
 from tcal.ui.messages import EventSelected, NewEventRequested
-from tcal.ui.screens.event_detail import EventDetail, confirm_delete
+from tcal.ui.screens.event_detail import (
+    EditScope,
+    EventDetail,
+    Scope,
+    confirm_delete,
+    is_recurring,
+)
 from tcal.ui.screens.event_form import EventForm
 from tcal.ui.screens.goto import GotoScreen
 from tcal.ui.screens.help import HelpScreen
@@ -163,11 +170,34 @@ class TcalApp(App[None]):
         self.push_screen(EventForm(draft, writable, new=True), self._form_done)
 
     def edit_event(self, event: Event) -> None:
-        """Open the form for an existing event (a series is edited as a whole)."""
-        if event.calendar_id not in {c.id for c in self._writable()}:
-            self.notify("This calendar is read-only", severity="warning")
+        """Open the form for an existing event (a master edits the whole series)."""
+        if self.check_writable(event.calendar_id):
+            self.push_screen(EventForm(event, self._writable(), new=False), self._form_done)
+
+    def edit_occurrence(self, occurrence: Occurrence) -> None:
+        """Edit ``occurrence``; for a series ask "this event" (an override with a
+        RECURRENCE-ID) or "all events" (the master)."""
+        if not self.check_writable(occurrence.calendar_id):
             return
-        self.push_screen(EventForm(event, self._writable(), new=False), self._form_done)
+        if not is_recurring(occurrence):
+            self.edit_event(occurrence.event)
+            return
+
+        def done(scope: Scope | None) -> None:
+            if scope == "occurrence":
+                self.edit_event(instance_of(occurrence))
+            elif scope == "series":
+                self.edit_event(self.source.get_event(occurrence.event.uid) or occurrence.event)
+
+        self.push_screen(EditScope(occurrence), done)
+
+    def check_writable(self, calendar_id: str) -> bool:
+        """True if events in ``calendar_id`` can be edited; else show "<name> is read-only"."""
+        calendar = next((c for c in self._calendars if c.id == calendar_id), None)
+        if calendar is None or not calendar.readonly:
+            return True
+        self.notify(f"{calendar.name} is read-only", severity="warning")
+        return False
 
     def _writable(self) -> list[Calendar]:
         return [c for c in self._calendars if not c.readonly]
@@ -255,8 +285,10 @@ class TcalApp(App[None]):
         self.query_one(CalendarList).focus()
 
     def action_new_event(self) -> None:
-        """Views post their own ``NewEventRequested``; elsewhere: the selected day."""
-        self.new_event(self.state.day)
+        """A timed event at the next round hour on the selected day (day/week views
+        post their own ``NewEventRequested`` for the selected slot)."""
+        hour = min(datetime.now().hour + 1, 23)
+        self.new_event(datetime.combine(self.state.day, time(hour), local_zone()))
 
     def selected_occurrence(self) -> Occurrence | None:
         """The event under the cursor of the focused day/week view, if any."""
@@ -268,10 +300,6 @@ class TcalApp(App[None]):
             self.edit_occurrence(occ)
         else:
             self.notify("No event selected")
-
-    def edit_occurrence(self, occurrence: Occurrence) -> None:
-        """Open the event form on ``occurrence``'s event (a series as a whole)."""
-        self.edit_event(occurrence.event)
 
     def action_delete_event(self) -> None:
         if occ := self.selected_occurrence():
@@ -318,3 +346,14 @@ class TcalApp(App[None]):
 
     def on_new_event_requested(self, message: NewEventRequested) -> None:
         self.new_event(message.start)
+
+
+def instance_of(occ: Occurrence) -> Event:
+    """The event to edit for just ``occ``: its override, or a new one for the
+    master's instance (RECURRENCE-ID = the instance's start, no RRULE/EXDATEs)."""
+    event = occ.event
+    if event.recurrence_id is not None:
+        return event
+    zone = event.start.tzinfo
+    start, end = occ.start.astimezone(zone), occ.end.astimezone(zone)
+    return replace(event, start=start, end=end, recurrence_id=start, rrule=None, exdates=())

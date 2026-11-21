@@ -9,9 +9,11 @@ from tcal.config import load_config
 from tcal.model import Event
 from tcal.providers.base import ProviderError
 from tcal.providers.fake import FakeProvider
+from tcal.source import StoreSource
 from tcal.store import Store
 from tcal.sync import SyncEngine, sync_job
 from tcal.tz import local_zone
+from tcal.ui.app import instance_of
 
 
 def _at(hour: int, days: int = 0) -> datetime:
@@ -103,3 +105,18 @@ def test_sync_job_uses_its_own_connection(provider: FakeProvider, tmp_path) -> N
     assert job().events == len(provider.events)
     with Store(tmp_path / "tcal.db") as store:
         assert len(store.calendars()) == len(provider.calendars)
+
+
+def test_edited_instance_round_trips_as_an_override(
+    engine: SyncEngine, provider: FakeProvider, tmp_path
+) -> None:
+    engine.sync()
+    source = StoreSource(engine.store)
+    occ = next(o for o in source.occurrences(TODAY, TODAY + timedelta(1)) if o.summary == "Standup")
+    source.save_event(replace(instance_of(occ), summary="Late", start=_at(11), end=_at(12)))
+    engine.sync()
+    fresh = SyncEngine(provider, Store(tmp_path / "fresh.db"), today=TODAY)
+    fresh.sync()
+    days = StoreSource(fresh.store).occurrences(TODAY, TODAY + timedelta(2))
+    mine = [(o.summary, o.start) for o in days if o.event.uid == occ.event.uid]
+    assert mine == [("Late", _at(11)), ("Standup", occ.start + timedelta(1))]

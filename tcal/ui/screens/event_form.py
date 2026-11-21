@@ -6,7 +6,9 @@ save: the caller passes the result to ``app.save_event``. ``calendars`` are the
 writable calendars to choose from.
 
 Fields left as shown keep the event's own values (time zone, a custom RRULE).
-Changing the start shifts the end so the duration stays the same.
+Changing the start shifts the end so the duration stays the same. An event with
+``recurrence_id`` is one instance of a series: repeat and calendar are fixed.
+An error shown on save is cleared as soon as a field changes.
 """
 
 import re
@@ -155,13 +157,17 @@ class EventForm(ModalScreen[Event | None]):
     def compose(self) -> ComposeResult:
         v = self.shown
         repeats = REPEATS + (CUSTOM,) if v.repeat == CUSTOM else REPEATS
+        instance = self.event.recurrence_id is not None  # one instance of a series
         with Vertical(id="form") as form:
-            form.border_title = "New event" if self.new else "Edit event"
+            form.border_title = (
+                "New event" if self.new else "Edit this event" if instance else "Edit event"
+            )
             yield Input(v.title, placeholder="Title", id="title")
             yield Select(
                 [(c.name, c.id) for c in self.calendars],
                 value=v.calendar_id,
                 allow_blank=False,
+                disabled=instance,
                 id="calendar",
             )
             with Horizontal(classes="row"):
@@ -177,7 +183,7 @@ class EventForm(ModalScreen[Event | None]):
                 [(f"Repeat: {r}", r) for r in repeats],
                 value=v.repeat,
                 allow_blank=False,
-                disabled=self.event.recurrence_id is not None,  # one instance of a series
+                disabled=instance,
                 id="repeat",
             )
             yield Input(v.location, placeholder="Location", id="location")
@@ -216,6 +222,13 @@ class EventForm(ModalScreen[Event | None]):
 
     def action_cancel(self) -> None:
         self.dismiss(None)
+
+    @on(Input.Changed)
+    @on(TextArea.Changed)
+    @on(Select.Changed)
+    @on(Checkbox.Changed)
+    def _clear_error(self) -> None:
+        self.query_one("#error", Static).update("")
 
     @on(Checkbox.Changed, "#all_day")
     def _all_day_changed(self, message: Checkbox.Changed) -> None:

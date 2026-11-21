@@ -65,8 +65,7 @@ class MonthView(DayCursorView):
 
     h/j/k/l move the selected day, enter (or a click on the day number or on
     "+N more") opens it in the Day view, a click on an event posts
-    ``EventSelected``, 'new event' posts ``NewEventRequested(day)``. The cell
-    height follows the widget height.
+    ``EventSelected``. The cell height follows the widget height.
     """
 
     def grid(self) -> Grid:

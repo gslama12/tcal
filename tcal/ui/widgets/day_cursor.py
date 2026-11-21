@@ -1,17 +1,13 @@
 from datetime import timedelta
 
-from tcal.ui.keys import binding
-from tcal.ui.messages import NewEventRequested
 from tcal.ui.widgets.base import CalendarView
 
 
 class DayCursorView(CalendarView):
     """A view whose cursor is the selected day: h/l move a day, j/k a week.
 
-    Enter opens the day in the Day view; 'new event' posts ``NewEventRequested(day)``.
+    Enter opens the day in the Day view; 'new event' is the app's (next round hour).
     """
-
-    BINDINGS = [binding("new_event")]
 
     def move(self, days: int) -> None:
         self.tcal.select_date(self.tcal.state.day + timedelta(days=days))
@@ -30,6 +26,3 @@ class DayCursorView(CalendarView):
 
     def action_open(self) -> None:
         self.tcal.action_set_view("day")
-
-    def action_new_event(self) -> None:
-        self.post_message(NewEventRequested(self.tcal.state.day))
