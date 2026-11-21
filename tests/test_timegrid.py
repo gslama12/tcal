@@ -16,7 +16,7 @@ from tcal.ui import messages
 from tcal.ui.app import TcalApp
 from tcal.ui.state import ViewMode
 from tcal.ui.widgets import timegrid
-from tcal.ui.widgets.timegrid import DayView, TimeGrid, WeekView
+from tcal.ui.widgets.timegrid import AXIS, DayView, TimeGrid, WeekView
 
 NOW = datetime.combine(TODAY, time(10, 15)).astimezone()
 SIZE = (140, 45)  # week grid: 4 header rows + 35 rows -> 06:30-24:00 at 2 rows/hour
@@ -287,3 +287,46 @@ async def test_hidden_events_have_markers(app: RecordingApp) -> None:
         lines = text(grid)
         assert "▲" not in "".join(lines)
         assert any("later" in line for line in lines[-1:])
+
+
+async def test_overlaps_pack_google_style(app: RecordingApp) -> None:
+    async with app.run_test(size=(200, 55)) as pilot:
+        await pilot.press("d")
+        await pilot.pause()
+        grid = app.query_one(DayView)
+        blocks = {b.occ.summary: b for b in grid._block_list() if b.day == 0}
+        review, one, dentist = blocks["Design review"], blocks["1:1 with Alex"], blocks["Dentist"]
+        assert (review.col, review.cols) == (0, 2)
+        assert (one.col, one.cols) == (dentist.col, dentist.cols) == (1, 2)
+        xs = grid._columns()
+        left, right = grid._sub_columns(review, xs), grid._sub_columns(one, xs)
+        assert right[0] - left[1] == 1  # one-column gap
+
+
+async def test_narrow_columns_collapse_cluster(app: RecordingApp) -> None:
+    async with app.run_test(size=(100, 35)) as pilot:
+        await pilot.pause()
+        grid = app.query_one(WeekView)
+        group = next(b for b in grid._block_list() if b.group)
+        assert [o.summary for o in group.occs] == ["Design review", "1:1 with Alex", "Dentist"]
+        assert any("3 ev" in line for line in text(grid))
+        await pilot.press("n")  # cycling reaches the events of the collapsed block
+        while grid.selected not in group.occs:
+            await pilot.press("n")
+        first = grid.selected
+        await pilot.press("n")
+        assert grid.selected in group.occs and grid.selected != first
+        await pilot.press("enter")
+        opened = app.posted[-1]
+        assert isinstance(opened, messages.EventSelected) and opened.occurrence == grid.selected
+
+
+async def test_now_line_keeps_event_text(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("d")
+        await pilot.pause()
+        grid = app.query_one(DayView)
+        row = next(line for line in text(grid) if line.startswith("10:15"))
+        event = row[AXIS + 1 : row.index("Design review") + len("Design review")]
+        assert event == "●Design review"  # only the marker, on the event's edge
+        assert "─" in row[row.index("Design review") :]  # the line goes on beside the event

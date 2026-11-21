@@ -93,13 +93,37 @@ def test_back_to_back_events_never_share_a_row() -> None:
 
 def test_pack_columns() -> None:
     assert pack_columns([]) == []
-    assert pack_columns([(0, 2), (2, 4)]) == [(0, 1), (0, 1)]  # touching: no overlap
+    assert pack_columns([(0, 2), (2, 4)]) == [(0, 1, 1), (0, 1, 1)]  # touching: no overlap
     # A long event with two short ones beside it: two columns, short ones share one.
-    assert pack_columns([(0, 4), (1, 2), (2, 3)]) == [(0, 2), (1, 2), (1, 2)]
-    # Transitive cluster: all three share the width though 0 and 2 don't overlap.
-    assert pack_columns([(0, 2), (1, 3), (2, 4)]) == [(0, 2), (1, 2), (0, 2)]
+    assert pack_columns([(0, 4), (1, 2), (2, 3)]) == [(0, 1, 2), (1, 1, 2), (1, 1, 2)]
+    # Transitive cluster: 0 and 2 don't overlap, so they stack in column 0.
+    assert pack_columns([(0, 2), (1, 3), (2, 4)]) == [(0, 1, 2), (1, 1, 2), (0, 1, 2)]
     # Three at once, then an independent event later.
-    assert pack_columns([(5, 6), (0, 3), (0, 3), (1, 2)]) == [(0, 1), (0, 3), (1, 3), (2, 3)]
+    assert pack_columns([(5, 6), (0, 3), (0, 3), (1, 2)]) == [
+        (0, 1, 1),
+        (0, 1, 3),
+        (1, 1, 3),
+        (2, 1, 3),
+    ]
+
+
+def test_pack_columns_expands_into_free_columns() -> None:
+    # a spans 0-6; b, c side by side early; d late overlaps only a -> widens over cols 1-2.
+    spans = [(0, 6), (0, 2), (0, 2), (3, 5)]
+    assert pack_columns(spans) == [(0, 1, 3), (1, 1, 3), (2, 1, 3), (1, 2, 3)]
+    # Design review 10:00-11:30, 1:1 10:30-11:00, Dentist 11:00-12:00 (2 rows/h).
+    assert pack_columns([(20, 23), (21, 22), (22, 24)]) == [(0, 1, 2), (1, 1, 2), (1, 1, 2)]
+
+
+def test_wide_clusters_collapse() -> None:
+    three = [occ("10:00", "11:30"), occ("10:30", "11:00"), occ("11:00", "12:00")]  # 2 columns
+    alone = occ("14:00", "15:00")
+    blocks = layout_blocks([*three, alone], [DAY], TimeScale(2), max_cols=1)
+    group, single = blocks
+    assert (group.top, group.bottom, group.col, group.span, group.cols) == (20, 24, 0, 1, 1)
+    assert group.occ == three[0] and group.occs == tuple(three)
+    assert single.occs == (alone,) and not single.group
+    assert len(layout_blocks(three, [DAY], TimeScale(2), max_cols=2)) == 3
 
 
 def test_pack_lanes() -> None:

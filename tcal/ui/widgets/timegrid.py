@@ -38,6 +38,7 @@ AXIS = 6  # width of the time axis: "HH:MM "
 MAX_LANES = 3  # all-day strip rows shown at most
 MINUTES = 24 * 60
 SCROLL_ROWS = 2  # rows per mouse-wheel step
+MIN_EVENT_WIDTH = 4  # narrowest side-by-side event (+ 1-col gap); else the cluster collapses
 HEADER_FORMATS = ("%A, {day} %B", "%A {day}", "%a {day}", "{day}")  # widest first
 
 
@@ -144,13 +145,34 @@ def pack_lanes(spans: Sequence[tuple[int, int]]) -> list[int]:
     return [lanes[i] for i in range(len(spans))]
 
 
-def pack_columns(spans: Sequence[tuple[int, int]]) -> list[tuple[int, int]]:
-    """``(column, columns)`` per [start, end) span for side-by-side layout.
+def pack_columns(spans: Sequence[tuple[int, int]]) -> list[tuple[int, int, int]]:
+    """``(column, span, columns)`` per [start, end) span for side-by-side layout.
 
-    Spans are grouped into clusters of transitively overlapping spans; each
-    cluster is packed greedily and all its spans share the cluster's width.
+    Google-style: spans are grouped into clusters of transitively overlapping spans
+    (touching is no overlap); each cluster is packed greedily into ``columns``
+    columns, and a span widens over the columns to its right (``span``) until one
+    holds a span it overlaps.
     """
-    result: list[tuple[int, int]] = [(0, 1)] * len(spans)
+    result: list[tuple[int, int, int]] = [(0, 1, 1)] * len(spans)
+    for cluster in _clusters(spans):
+        lanes = _greedy(spans, cluster)
+        width = max(lanes.values()) + 1
+        for i, lane in lanes.items():
+            start, end = spans[i]
+            right = min(
+                (
+                    lanes[j]
+                    for j in cluster
+                    if lanes[j] > lane and spans[j][0] < end and start < spans[j][1]
+                ),
+                default=width,
+            )
+            result[i] = (lane, right - lane, width)
+    return result
+
+
+def _clusters(spans: Sequence[tuple[int, int]]) -> list[list[int]]:
+    """Indices of transitively overlapping spans, in start order."""
     clusters: list[list[int]] = []
     cluster_end = 0
     for i in _order(spans):
@@ -160,12 +182,7 @@ def pack_columns(spans: Sequence[tuple[int, int]]) -> list[tuple[int, int]]:
             cluster_end = end
         clusters[-1].append(i)
         cluster_end = max(cluster_end, end)
-    for cluster in clusters:
-        lanes = _greedy(spans, cluster)
-        width = max(lanes.values()) + 1
-        for i, lane in lanes.items():
-            result[i] = (lane, width)
-    return result
+    return clusters
 
 
 def is_bar(occ: Occurrence) -> bool:
@@ -192,6 +209,13 @@ class Block:
     bottom: int
     col: int
     cols: int
+    span: int = 1  # columns it covers from ``col``
+    group: tuple[Occurrence, ...] = ()  # a collapsed cluster: its events (``occ`` first)
+
+    @property
+    def occs(self) -> tuple[Occurrence, ...]:
+        """The occurrences drawn in this block."""
+        return self.group or (self.occ,)
 
 
 @dataclass(frozen=True)
@@ -205,12 +229,16 @@ class Bar:
 
 
 def layout_blocks(
-    occs: Sequence[Occurrence], days: Sequence[date], scale: TimeScale
+    occs: Sequence[Occurrence],
+    days: Sequence[date],
+    scale: TimeScale,
+    max_cols: int | None = None,
 ) -> list[Block]:
     """Grid blocks of the timed occurrences, clipped per day and packed into columns.
 
     An event shorter than a row still gets one row; events crossing midnight
-    get one block per day.
+    get one block per day. A cluster needing more than ``max_cols`` columns
+    becomes one block over the whole column (``group`` = its events).
     """
     blocks: list[Block] = []
     for i, day in enumerate(days):
@@ -222,12 +250,22 @@ def layout_blocks(
             if start < end or (start == end and occ.start.date() == day and start < MINUTES):
                 top = scale.row_of(start)
                 spans.append((occ, top, max(top + 1, scale.row_of(end))))
-        packed = pack_columns([(top, bottom) for _, top, bottom in spans])
-        blocks += [
-            Block(occ, i, top, bottom, col, cols)
-            for (occ, top, bottom), (col, cols) in zip(spans, packed, strict=True)
-        ]
+        rows = [(top, bottom) for _, top, bottom in spans]
+        packed = pack_columns(rows)
+        for cluster in _clusters(rows):
+            if max_cols is not None and packed[cluster[0]][2] > max_cols:
+                top, bottom = rows[cluster[0]][0], max(rows[j][1] for j in cluster)
+                group = tuple(sorted((spans[j][0] for j in cluster), key=_by_start))
+                blocks.append(Block(group[0], i, top, bottom, 0, 1, group=group))
+                continue
+            for j in cluster:
+                (occ, top, bottom), (col, span, cols) = spans[j], packed[j]
+                blocks.append(Block(occ, i, top, bottom, col, cols, span))
     return blocks
+
+
+def _by_start(occ: Occurrence) -> tuple[datetime, datetime]:
+    return occ.start, occ.end
 
 
 def layout_bars(occs: Sequence[Occurrence], days: Sequence[date]) -> list[Bar]:
@@ -325,7 +363,7 @@ class TimeGrid(CalendarView):
         self._top_min = 0  # first visible grid row, as minutes
         self._picked: Occurrence | None = None  # chosen by n/p or click
         self._data: tuple[list[date], list[Occurrence], list[Bar]] | None = None
-        self._blocks: tuple[TimeScale, list[Block]] | None = None
+        self._blocks: tuple[TimeScale, int, list[Block]] | None = None
         self._lines: list[Strip] | None = None
 
     def days(self) -> list[date]:
@@ -377,11 +415,11 @@ class TimeGrid(CalendarView):
         return self._load()[2]
 
     def _block_list(self) -> list[Block]:
-        scale = self.scale
-        if self._blocks is None or self._blocks[0] != scale:
+        scale, max_cols = self.scale, self._max_cols()
+        if self._blocks is None or self._blocks[:2] != (scale, max_cols):
             days, occs, _ = self._load()
-            self._blocks = scale, layout_blocks(occs, days, scale)
-        return self._blocks[1]
+            self._blocks = scale, max_cols, layout_blocks(occs, days, scale, max_cols)
+        return self._blocks[2]
 
     # ----- geometry -------------------------------------------------------
 
@@ -421,16 +459,18 @@ class TimeGrid(CalendarView):
         n, avail = len(self._load()[0]), max(0, self.size.width - AXIS)
         return [AXIS + avail * i // n for i in range(n + 1)]
 
+    def _max_cols(self) -> int:
+        """Side-by-side events that fit the narrowest day column (1-col gaps)."""
+        xs = self._columns()
+        inner = min(b - a - 1 for a, b in zip(xs, xs[1:], strict=False))
+        return max(1, (inner + 1) // (MIN_EVENT_WIDTH + 1))
+
     def _sub_columns(self, block: Block, xs: list[int]) -> tuple[int, int]:
         x0, x1 = xs[block.day] + 1, xs[block.day + 1]
-        inner = x1 - x0
-        left, right = (
-            x0 + inner * block.col // block.cols,
-            x0 + inner * (block.col + 1) // block.cols,
-        )
-        if block.col < block.cols - 1 and right - left > 2:
-            right -= 1  # gap between side-by-side events
-        return left, right
+        inner, end = x1 - x0 + 1, block.col + block.span
+        left = x0 + inner * block.col // block.cols
+        right = x0 + inner * end // block.cols - 1  # 1-col gap (the last one is the divider)
+        return left, min(right, x1)
 
     # ----- cursor & selection --------------------------------------------
 
@@ -452,7 +492,7 @@ class TimeGrid(CalendarView):
         picked = self._picked
         if picked is not None and (
             any(bar.occ == picked for bar in self._bars())
-            or any(b.occ == picked for b in at_cursor)
+            or any(picked in b.occs for b in at_cursor)
         ):
             return picked
         return at_cursor[0].occ if at_cursor else None
@@ -737,7 +777,13 @@ class TimeGrid(CalendarView):
 
         selected = self.selected
         for block in self._block_list():
-            self._draw_block(canvas, xs, block, top, bottom, header, block.occ == selected)
+            self._draw_block(canvas, xs, block, top, bottom, header, selected)
+        if now_col is not None and top <= scale.row_of(now_min) < bottom:
+            # Events cover the line; the marker stays on the column edge if it is free.
+            y, x0 = header + scale.row_of(now_min) - top, xs[now_col] + 1
+            if canvas.chars[y][x0] == " ":
+                canvas.chars[y][x0] = "●"
+                canvas.styles[y][x0] = canvas.styles[y][x0] + Style(color=p.red, bold=True)
         self._draw_hidden(canvas, xs, top, bottom, header)
 
     def _draw_hidden(
@@ -750,8 +796,13 @@ class TimeGrid(CalendarView):
             blocks = [b for b in self._block_list() if b.day == i]
             x0, x1 = xs[i] + 1, xs[i + 1]
             for y, arrow, word, count in (
-                (header, "▲", "earlier", sum(b.bottom <= top for b in blocks)),
-                (header + bottom - top - 1, "▼", "later", sum(b.top >= bottom for b in blocks)),
+                (header, "▲", "earlier", sum(len(b.occs) for b in blocks if b.bottom <= top)),
+                (
+                    header + bottom - top - 1,
+                    "▼",
+                    "later",
+                    sum(len(b.occs) for b in blocks if b.top >= bottom),
+                ),
             ):
                 if count:
                     label = next(
@@ -772,19 +823,24 @@ class TimeGrid(CalendarView):
         top: int,
         bottom: int,
         header: int,
-        selected: bool,
+        selected_occ: Occurrence | None,
     ) -> None:
         first, last = max(block.top, top), min(block.bottom, bottom)
         if first >= last:
             return
-        p, occ = self.tcal.palette, block.occ
+        p, selected = self.tcal.palette, selected_occ in block.occs
+        occ = selected_occ if selected and selected_occ is not None else block.occ
         color = self.tcal.calendar_color(occ.calendar_id)
         fg = _readable(color, p.background1, p.foreground3)
         style = _style(fg, color, reverse=selected)
         x0, x1 = self._sub_columns(block, xs)
         pad = " " if x1 - x0 >= 6 else ""
         title, span = _clean(occ.summary), f"{occ.start:%H:%M}–{occ.end:%H:%M}"
-        if block.bottom - block.top == 1:
+        if block.group:
+            n = len(block.group)
+            count = next((t for t in (f"{n} events", f"{n} ev") if len(pad + t) <= x1 - x0), f"{n}")
+            texts = [count] + ([title, span] if selected else [])
+        elif block.bottom - block.top == 1:
             texts = [f"{occ.start:%H:%M} {title}" if x1 - x0 >= 12 else title]
         else:
             texts = [title, span] + ([_clean(occ.event.location)] if occ.event.location else [])
