@@ -108,3 +108,37 @@ async def test_statusbar_shows_pending_count(make_app) -> None:
         app.save_event(Event("new", "work", "Coffee", start, start + timedelta(minutes=30)))
         await pilot.pause()
         assert "↑1 pending" in bar_text(app)
+
+
+async def test_statusbar_shortens_instead_of_cutting_the_help_key(make_app) -> None:
+    app = make_app()  # QA4 #15: offline with a pending edit at 100 columns
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.sync_status = SyncStatus(SyncState.OFFLINE, datetime(2026, 11, 21, 18, 49))
+        start = datetime.combine(TODAY, time(15), local_zone())
+        app.save_event(Event("new", "work", "Coffee", start, start + timedelta(minutes=30)))
+        await pilot.pause()
+        text = bar_text(app)
+        assert len(text) <= 100 and text.rstrip().endswith("? help")
+        assert "↑1" in text and "offline" in text
+        await pilot.resize_terminal(60, 30)
+        await pilot.pause()
+        text = bar_text(app)
+        assert len(text) <= 60 and text.rstrip().endswith("? help") and "2026" not in text
+
+
+async def test_help_pages_and_jumps(make_app) -> None:
+    app = make_app()  # QA4 #20
+    async with app.run_test(size=(100, 35)) as pilot:
+        await pilot.press("question_mark")
+        panel = app.screen.query_one("#help-panel")
+        assert panel.max_scroll_y > 0
+        for key in ("end", "G", "space", "pagedown"):
+            await pilot.press("home")
+            await pilot.pause(0.3)
+            assert panel.scroll_y == 0
+            await pilot.press(key)
+            await pilot.pause(0.3)
+            assert panel.scroll_y > 0, key
+        await pilot.press("g")
+        await pilot.pause(0.3)
+        assert panel.scroll_y == 0

@@ -202,3 +202,21 @@ async def test_schedule_never_ends_with_a_day_header(app: RecordingApp) -> None:
         lines = str(view.render()).split("\n")
         assert len(lines) == height - 1 and "No upcoming" not in lines[-1]
         assert lines[-1].strip() == ""  # the blank row before the dropped header
+
+
+async def test_schedule_now_line_is_one_row(
+    app: RecordingApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = datetime.combine(TODAY, datetime.strptime("18:38", "%H:%M").time(), ZONE)
+    monkeypatch.setattr(schedule_view, "now", lambda: current)
+    async with app.run_test(size=(100, 35)) as pilot:
+        await pilot.press("s")
+        view = app.query_one(ScheduleView)
+        now_row = next(i for i, r in enumerate(view._rows) if r.now)
+        line = view._line(view._rows[now_row], now_row)
+        assert line.plain.startswith("   18:38 ●─") and len(line) == view.content_size.width
+        await pilot.press(*"k" * 10, *"j" * 26)  # the selection stays on screen
+        lines = str(view.render()).split("\n")
+        assert len(lines) == view.content_size.height
+        assert view._cursor is not None
+        assert view._top <= view._cursor < view._top + len(lines)

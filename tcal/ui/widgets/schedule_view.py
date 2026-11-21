@@ -327,8 +327,9 @@ class ScheduleView(CalendarView):
         p, width = self.tcal.palette, self.content_size.width
         if row.blank:
             return Text()
-        if row.now:
-            return Text(f"   {now():%H:%M} ●" + "─" * width, style=Style(color=p.red))
+        if row.now:  # one row: "   18:38 ●───" up to the width
+            line = f"   {now():%H:%M} ●"
+            return Text(line + "─" * (width - len(line)), style=Style(color=p.red))[:width]
         if row.occ is None:
             return self._header(row.day)
         occ, selected = row.occ, index == self._cursor

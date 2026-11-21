@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 from rich.style import Style
@@ -46,8 +46,11 @@ class Layout:
         return 1 + self.header + WEEKS * self.row_height
 
     @classmethod
-    def build(cls, width: int, height: int) -> "Layout":
-        """The grid (of ``GRIDS``) with the largest day cells that fits the content size."""
+    def build(cls, width: int, height: int, show: int = 0) -> "Layout":
+        """The grid (of ``GRIDS``) with the largest day cells that fits the content size.
+
+        If none fits, the narrowest grid that fits the width, scrolled so that
+        month ``show`` (0 = January) is visible."""
         for header, min_vgap in COMPACT:
             best: Layout | None = None
             for cols, rows in GRIDS:
@@ -66,7 +69,9 @@ class Layout:
         cols, rows = next(
             (g for g in GRIDS if g[0] * WIDTH + (g[0] - 1) * MIN_HGAP <= width), GRIDS[-1]
         )
-        return cls._place(cols, rows, 3, 1, False, width, height)
+        layout = cls._place(cols, rows, 3, 1, False, width, height)
+        bottom = layout.origin(show)[1] + layout.height
+        return replace(layout, y0=layout.y0 - max(0, bottom - height))
 
     @classmethod
     def _place(
@@ -93,9 +98,14 @@ class Layout:
                 return index, x - bx, y - by
         return None
 
+    def overflow(self, height: int) -> tuple[bool, bool]:
+        """Whether months are cut off above / below a content of ``height`` lines."""
+        return self.y0 < 0, self.origin(11)[1] + self.height > height
+
 
 class YearView(DayCursorView):
-    """The 12 months of ``state.day``'s year (4x3, 3x4 or 2x6, scaled to the size).
+    """The 12 months of ``state.day``'s year (4x3, 3x4 or 2x6, scaled to the size;
+    scrolled to the selected month with ▲/▼ hints if even the smallest is too tall).
 
     Today accented, days with events bright (others dimmed), the selected day highlighted;
     h/j/k/l move it, enter opens the Day view. Clicking a day selects it
@@ -105,7 +115,7 @@ class YearView(DayCursorView):
     def render(self) -> RenderResult:
         state, p = self.tcal.state, self.tcal.palette
         width, height = self.content_size
-        layout = Layout.build(width, height)
+        layout = self._layout()
         event_days = by_day(self.tcal.occurrences(*state.period())).keys()
         canvas = [Text() for _ in range(height)]
         for index in range(12):
@@ -130,12 +140,20 @@ class YearView(DayCursorView):
                     row = canvas[y + i]
                     row.pad_right(x - len(row))
                     row.append_text(line)
+        above, below = layout.overflow(height)
+        for shown, edge, arrow in ((above, 0, "▲"), (below, height - 1, "▼")):
+            if shown and height and canvas[edge].cell_len < width:  # scroll hint, right edge
+                canvas[edge].pad_right(width - 1 - canvas[edge].cell_len)
+                canvas[edge].append(arrow, style=Style(color=p.foreground2))
         return join_lines(canvas)
+
+    def _layout(self) -> Layout:
+        return Layout.build(*self.content_size, show=self.tcal.state.day.month - 1)
 
     def on_click(self, event: events.Click) -> None:
         offset = event.get_content_offset(self)
         state = self.tcal.state
-        layout = Layout.build(*self.content_size)
+        layout = self._layout()
         hit = layout.at(offset.x, offset.y) if offset else None
         if hit is None:
             return

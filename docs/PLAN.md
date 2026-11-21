@@ -423,3 +423,15 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - `tcal/dates.py` holds the pure date helpers: `parse_date` (was in `ui/screens/goto.py`),
   `add_months` (was in `ui/state.py`; still importable from there), `WEEKDAYS`/`MONTHS`
   (also used by `config.py`). Quick add and the event form no longer import a UI screen.
+
+### QA4 fixes (feat-h3: #2, #9, #13, #15, #19, #20)
+
+- Schedule now line is one row sized to the width (it wrapped, which broke the row arithmetic).
+- **V5 amended:** when even the compact year grid is too tall (80x24), `Layout.build(w, h, show=)`
+  scrolls so the selected month's row is visible, with ▲/▼ hints at the right edge.
+- `widgets/base.SidebarWidget` (MiniCal, CalendarList): the `cancel` key focuses the main view
+  (the narrow-terminal sidebar then hides as before). Clicking the minical's ‹ › still focuses it.
+- Status bar: when the right side doesn't fit, "↑N pending" → "↑N", then the date is dropped;
+  the date also slides left of centre before anything is cut.
+- Search rows of a series add "· every week on Tue, Thu" (`describe_rrule`).
+- Help: space/shift+space page, home/end and g/G jump (pageup/down already worked).

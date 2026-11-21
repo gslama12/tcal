@@ -9,20 +9,20 @@ from tcal.dates import add_months
 from tcal.ui.calgrid import by_day, grid_start
 from tcal.ui.keys import binding
 from tcal.ui.state import AppState, ViewMode
-from tcal.ui.widgets.base import TcalWidget
+from tcal.ui.widgets.base import SidebarWidget
 from tcal.ui.widgets.minimonth import WEEKS, WIDTH, day_at, mini_month
 
 PREV_X, NEXT_X = WIDTH - 3, WIDTH - 1  # the "‹ ›" arrows in the header line
 
 
-class MiniCal(TcalWidget, can_focus=True):
+class MiniCal(SidebarWidget):
     """Small month calendar at the top of the sidebar.
 
     Shows the month of its own ``cursor`` (follows ``state.day``): today accented,
     the cursor highlighted, days with events bright (others dimmed), the shown
     week as a band. When focused, h/j/k/l move the cursor, H/L by a month and
     enter jumps the main view to it (and focuses it, like clicking a day);
-    clicking ‹ › browses months.
+    clicking ‹ › browses months; esc returns to the main view.
     """
 
     BINDINGS = [

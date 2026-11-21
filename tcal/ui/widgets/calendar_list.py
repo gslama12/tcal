@@ -5,12 +5,12 @@ from textual.app import RenderResult
 
 from tcal.model import Calendar
 from tcal.ui.keys import binding
-from tcal.ui.widgets.base import TcalWidget
+from tcal.ui.widgets.base import SidebarWidget
 
 OTHER = "Other calendars"
 
 
-class CalendarList(TcalWidget, can_focus=True):
+class CalendarList(SidebarWidget):
     """ "My calendars": one row per calendar, a checkbox in its color and its name;
     subscribed feeds follow under an "Other calendars" heading (like Google), drawn
     as a rule with the title where the border title stands.

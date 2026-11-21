@@ -13,6 +13,7 @@ from textual.widgets.option_list import Option
 
 from tcal.model import Occurrence
 from tcal.ui.keys import binding
+from tcal.ui.screens.event_detail import describe_rrule
 
 
 def search(occurrences: Sequence[Occurrence], query: str, now: datetime) -> list[Occurrence]:
@@ -87,6 +88,8 @@ class SearchScreen(ModalScreen[Occurrence]):
             (f"{occ.start:%a %d %b %Y}  {when:>7}  ", "dim"),
             occ.summary,
         )
+        if rrule := occ.event.rrule:  # a series is listed once: say that it repeats
+            label.append(f" · {describe_rrule(rrule).replace('Every', 'every', 1)}", "dim")
         if occ.event.location:
             label.append(f"  · {occ.event.location}", "dim")
         return label

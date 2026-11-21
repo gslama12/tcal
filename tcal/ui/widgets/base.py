@@ -8,7 +8,7 @@ from rich.style import Style
 from rich.text import Text
 from textual.widget import Widget
 
-from tcal.ui.keys import VIEW_BINDINGS
+from tcal.ui.keys import VIEW_BINDINGS, binding
 from tcal.ui.state import AppState
 
 if TYPE_CHECKING:
@@ -32,6 +32,16 @@ class TcalWidget(Widget):
 
     def on_state(self, state: AppState) -> None:
         self.refresh()
+
+
+class SidebarWidget(TcalWidget, can_focus=True):
+    """A focusable sidebar pane: the cancel key (esc) returns focus to the main view
+    (on a narrow terminal the sidebar then hides again)."""
+
+    BINDINGS = [binding("cancel", action="leave")]
+
+    def action_leave(self) -> None:
+        self.tcal.focus_view()
 
 
 class CalendarView(TcalWidget, can_focus=True):
