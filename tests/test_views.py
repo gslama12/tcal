@@ -6,8 +6,8 @@ from conftest import TODAY
 from textual.message import Message
 
 from tcal.config import load_config
-from tcal.providers.fake import FakeProvider
-from tcal.source import ProviderSource
+from tcal.source import StoreSource
+from tcal.store import Store
 from tcal.ui import app as app_module
 from tcal.ui.app import TcalApp
 from tcal.ui.messages import EventSelected, NewEventRequested
@@ -26,8 +26,8 @@ class RecordingApp(TcalApp):
 
     CSS_PATH = str(Path(app_module.__file__).parent / "styles.tcss")
 
-    def __init__(self, provider: FakeProvider) -> None:
-        super().__init__(ProviderSource(provider), load_config(), today=TODAY)
+    def __init__(self, store: Store) -> None:
+        super().__init__(StoreSource(store), load_config(), today=TODAY)
         self.posted: list[Message] = []
 
     def on_new_event_requested(self, message: NewEventRequested) -> None:
@@ -38,8 +38,8 @@ class RecordingApp(TcalApp):
 
 
 @pytest.fixture
-def app(provider: FakeProvider) -> RecordingApp:
-    return RecordingApp(provider)
+def app(store: Store) -> RecordingApp:
+    return RecordingApp(store)
 
 
 def content(widget, x: int, y: int) -> tuple[int, int]:

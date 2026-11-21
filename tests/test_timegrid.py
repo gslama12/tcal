@@ -9,7 +9,8 @@ from textual import events
 from textual.message import Message
 
 from tcal.config import load_config
-from tcal.source import ProviderSource
+from tcal.source import StoreSource
+from tcal.store import Store
 from tcal.ui import app as app_module
 from tcal.ui import messages
 from tcal.ui.app import TcalApp
@@ -43,8 +44,8 @@ def fixed_now(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def app(provider) -> RecordingApp:
-    return RecordingApp(ProviderSource(provider), load_config(), today=TODAY)
+def app(store: Store) -> RecordingApp:
+    return RecordingApp(StoreSource(store), load_config(), today=TODAY)
 
 
 def text(grid: TimeGrid) -> list[str]:
