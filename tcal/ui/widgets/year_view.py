@@ -8,6 +8,7 @@ from textual.app import RenderResult
 
 from tcal.ui.calgrid import by_day
 from tcal.ui.state import add_months
+from tcal.ui.widgets.base import join_lines
 from tcal.ui.widgets.day_cursor import DayCursorView
 from tcal.ui.widgets.minimonth import WEEKS, WIDTH, day_at, mini_month
 
@@ -129,7 +130,7 @@ class YearView(DayCursorView):
                     row = canvas[y + i]
                     row.pad_right(x - len(row))
                     row.append_text(line)
-        return Text("\n", no_wrap=True, overflow="crop").join(canvas)
+        return join_lines(canvas)
 
     def on_click(self, event: events.Click) -> None:
         offset = event.get_content_offset(self)

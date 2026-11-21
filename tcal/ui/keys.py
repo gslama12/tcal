@@ -35,7 +35,7 @@ def keymap(config: Config) -> dict[str, str]:
     return {name: ",".join(keys) for name, keys in config.keys.items()}
 
 
-# For the view widgets (Day/Week/Month/Year): cursor movement, zoom, open.
+# For the view widgets (Day/Week/Month/Year/Schedule): cursor movement, zoom, open.
 VIEW_BINDINGS: list[BindingType] = [
     binding("cursor_left", "Left"),
     binding("cursor_down", "Down"),
@@ -44,4 +44,10 @@ VIEW_BINDINGS: list[BindingType] = [
     binding("open", "Open"),
     binding("zoom_in", "Zoom in"),
     binding("zoom_out", "Zoom out"),
+]
+
+# For the views with an event cursor: n/p call ``action_cycle(step)``.
+EVENT_BINDINGS: list[BindingType] = [
+    binding("next_event", "Next event", action="cycle(1)"),
+    binding("prev_event", "Previous event", action="cycle(-1)"),
 ]

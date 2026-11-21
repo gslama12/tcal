@@ -8,10 +8,11 @@ from textual.app import RenderResult
 
 from tcal.model import Occurrence
 from tcal.ui.calgrid import by_day, month_weeks, occurrence_days, weekday_names
-from tcal.ui.keys import binding
+from tcal.ui.keys import EVENT_BINDINGS
 from tcal.ui.messages import EventSelected
+from tcal.ui.timelayout import is_bar, layout_bars
+from tcal.ui.widgets.base import join_lines
 from tcal.ui.widgets.day_cursor import DayCursorView
-from tcal.ui.widgets.timegrid import is_bar, layout_bars
 
 Chip = Occurrence | int | None  # an event, the count for "+N more", or an empty lane line
 Cells = list[list[Chip]]  # chip lines per day of a week
@@ -87,7 +88,7 @@ class MonthView(DayCursorView):
     selects and opens it.
     """
 
-    BINDINGS = [binding("next_event", "Next event"), binding("prev_event", "Previous event")]
+    BINDINGS = EVENT_BINDINGS
 
     def __init__(self, *, id: str | None = None) -> None:
         super().__init__(id=id)
@@ -130,7 +131,7 @@ class MonthView(DayCursorView):
         self.tcal.select_date(day)
         self.refresh()
 
-    def _cycle(self, step: int) -> None:
+    def action_cycle(self, step: int) -> None:
         stops = self._stops()
         if not stops:
             return
@@ -142,12 +143,6 @@ class MonthView(DayCursorView):
     def move(self, days: int) -> None:
         self._picked = None
         super().move(days)
-
-    def action_next_event(self) -> None:
-        self._cycle(1)
-
-    def action_prev_event(self) -> None:
-        self._cycle(-1)
 
     def action_open(self) -> None:
         if occ := self.selected:
@@ -173,13 +168,10 @@ class MonthView(DayCursorView):
             lines.append(self._numbers(week, grid))
             for line in range(grid.slots(w)):
                 lines.append(self._chip_line(week, cells, line, grid, selected))
-        return Text("\n", no_wrap=True, overflow="crop").join(lines)
+        return join_lines(lines)
 
     def _base(self, day: date) -> Style:
-        if day != self.tcal.state.day:
-            return Style()
-        p = self.tcal.palette
-        return Style(bgcolor=p.background3 if self.has_focus else p.background2)
+        return self.cursor_style() if day == self.tcal.state.day else Style()
 
     def _numbers(self, week: list[date], grid: Grid) -> Text:
         state, p = self.tcal.state, self.tcal.palette

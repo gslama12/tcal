@@ -16,10 +16,10 @@ from textual.app import RenderResult
 
 from tcal.model import Occurrence
 from tcal.ui.calgrid import by_day
-from tcal.ui.keys import binding
+from tcal.ui.keys import EVENT_BINDINGS
 from tcal.ui.messages import EventSelected
 from tcal.ui.state import AppState
-from tcal.ui.widgets.base import CalendarView
+from tcal.ui.widgets.base import CalendarView, join_lines
 
 CHUNK_DAYS = 28  # days loaded at a time
 LOOKAHEAD_DAYS = 366  # one "load more" scans at most this far for events
@@ -64,7 +64,7 @@ class ScheduleView(CalendarView):
     previous/next day's first event, enter opens the selected event (``selected``),
     H/L (the app's prev/next period) re-start the list two weeks earlier/later."""
 
-    BINDINGS = [binding("next_event", "Next event"), binding("prev_event", "Previous event")]
+    BINDINGS = EVENT_BINDINGS
 
     def __init__(self, *, id: str | None = None) -> None:
         super().__init__(id=id)
@@ -191,11 +191,8 @@ class ScheduleView(CalendarView):
     def action_cursor_up(self) -> None:
         self._step(-1)
 
-    def action_next_event(self) -> None:
-        self._step(1)
-
-    def action_prev_event(self) -> None:
-        self._step(-1)
+    def action_cycle(self, step: int) -> None:
+        self._step(step)
 
     def action_cursor_right(self) -> None:
         self._jump_day(1)
@@ -232,7 +229,7 @@ class ScheduleView(CalendarView):
             p = self.tcal.palette
             return Text(" No upcoming events", style=Style(color=p.foreground1))
         lines = [self._line(row, self._top + i) for i, row in enumerate(visible)]
-        return Text("\n", no_wrap=True, overflow="crop").join(lines)
+        return join_lines(lines)
 
     def _line(self, row: Row, index: int) -> Text:
         p, width = self.tcal.palette, self.content_size.width
@@ -241,12 +238,7 @@ class ScheduleView(CalendarView):
         if row.occ is None:
             return self._header(row.day)
         occ, selected = row.occ, index == self._cursor
-        base = (
-            Style(bgcolor=p.background3 if self.has_focus else p.background2)
-            if selected
-            else Style()
-        )
-        text = Text(style=base)
+        text = Text(style=self.cursor_style() if selected else Style())
         text.append(
             f"   {time_range(occ, row.day):<{TIME_WIDTH}}  ", style=Style(color=p.foreground2)
         )

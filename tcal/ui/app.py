@@ -11,7 +11,7 @@ Layout::
      StatusBar
 
 Public API for widgets/screens: ``state``, ``config``, ``palette``,
-``calendars()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
+``calendars()``, ``calendar()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
 ``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``save_event()``,
 ``delete_event()``, ``undo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``,
 ``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event form),
@@ -139,11 +139,12 @@ class TcalApp(App[None]):
     def calendars(self) -> list[Calendar]:
         return self._calendars
 
+    def calendar(self, calendar_id: str) -> Calendar | None:
+        return next((c for c in self._calendars if c.id == calendar_id), None)
+
     def calendar_color(self, calendar_id: str) -> str:
-        for cal in self._calendars:
-            if cal.id == calendar_id:
-                return cal.color
-        return self.palette.foreground1
+        calendar = self.calendar(calendar_id)
+        return calendar.color if calendar else self.palette.foreground1
 
     def occurrences(self, start: date, end: date) -> list[Occurrence]:
         """Occurrences of visible calendars in the days [start, end), sorted by start."""
@@ -233,7 +234,7 @@ class TcalApp(App[None]):
 
     def check_writable(self, calendar_id: str) -> bool:
         """True if events in ``calendar_id`` can be edited; else show "<name> is read-only"."""
-        calendar = next((c for c in self._calendars if c.id == calendar_id), None)
+        calendar = self.calendar(calendar_id)
         if calendar is None or not calendar.readonly:
             return True
         self.notify(f"{calendar.name} is read-only", severity="warning")
@@ -347,7 +348,7 @@ class TcalApp(App[None]):
 
     def action_set_view(self, mode: str) -> None:
         self.set_view(mode)
-        self.query_one(f"#{mode}").focus()
+        self.focus_view()
 
     def action_focus_calendars(self) -> None:
         self._show_sidebar(True)

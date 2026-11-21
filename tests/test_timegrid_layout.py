@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 import pytest
 
 from tcal.model import Event, Occurrence
-from tcal.ui.widgets.timegrid import (
+from tcal.ui.timelayout import (
     ZOOMS,
     TimeScale,
     fit_scale,
