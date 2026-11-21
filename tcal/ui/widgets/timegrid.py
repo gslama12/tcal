@@ -611,9 +611,10 @@ class TimeGrid(CalendarView):
             texts = [label or _fit(f"{len(block.group)}×", width), span]
         elif block.bottom - block.top == 1:
             texts = [_fit(f"{occ.start:%H:%M} {title}" if width >= 11 else title, width)]
-        else:
-            location = _clean(occ.event.location)
-            texts = [_fit(t, width) for t in (title, span, location) if t]
+        else:  # the title wraps over the lines the time doesn't need, then the location
+            height = block.bottom - block.top
+            lines = _wrap(title, width, max(1, height - 1 if span else height))
+            texts = lines + [_fit(t, width) for t in (span, _clean(occ.event.location)) if t]
         gaps = [x for x in (x0 - 1, x1) if xs[block.day] < x < xs[block.day + 1]]
         for row in range(first, last):
             y = header + row - top
@@ -651,6 +652,19 @@ def _fit(text: str, width: int) -> str:
             break
         out += ch
     return out.rstrip() + "…" if width > 0 else ""
+
+
+def _wrap(text: str, width: int, max_lines: int) -> list[str]:
+    """``text`` word-wrapped to ``width`` cells in at most ``max_lines`` lines; a word
+    too long for a line, and the last line when text is left over, end with ``…``."""
+    lines: list[str] = []
+    words = text.split()
+    while words and len(lines) < max_lines - 1:
+        line = words.pop(0)
+        while words and cell_len(f"{line} {words[0]}") <= width:
+            line += " " + words.pop(0)
+        lines.append(_fit(line, width))
+    return [*lines, _fit(" ".join(words), width)] if words else lines
 
 
 def _span(occ: Occurrence, width: int) -> str:
