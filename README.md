@@ -7,19 +7,32 @@ layout and an offline-first SQLite cache: the UI only reads the cache, sync runs
 and edits made offline are queued and pushed later.
 
 ```
-╭───────────────────────╮╭─ Day  Week  Month  Year  Schedule ─ 16 – 22 Nov 2026 ─ Today ─╮
-│    November 2026      ││        Mon 16   Tue 17   Wed 18   Thu 19   Fri 20   Sat 21  … │
-│ Mo Tu We Th Fr Sa Su  ││ all-day          ████ Conference ████                         │
-│                    1  ││ 06:30                                                         │
-│  2  3  4  5  6  7  8  ││ 09:00  ██Standup          ██Standup         ██Standup         │
-│  …                    ││ 10:00           ██Review                                      │
-│ 23 24 25 26 27 28 29  ││ 12:00  ██Lunch                    ██Lunch                     │
-╰───────────────────────╯│ ───────────────────────────────────────────── now ─────────── │
-╭─ Calendars ───────────╮│ 18:00                    ██Gym                       ██Dinner │
-│ [x] ● Home            ││ …                                                             │
-│ [x] ● Work            ││ 24:00                                                         │
-╰───────────────────────╯╰───────────────────────────────────────────────────────────────╯
- WEEK  Sat 21 Nov 2026  ✓ synced 14:02                                          ? help
+╭──────────────────────────╮╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│ November 2026    ‹ ›     ││  Today    ‹  ›   16 – 22 November 2026             Day │ Week │ Month │ Year │ Schedule  │
+│  M  T  W  T  F  S  S     │╰──────────────────────────────────────────────────────────────────────────────────────────╯
+│ 26 27 28 29 30 31  1     │╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  2  3  4  5  6  7  8     ││         Mon 16      Tue 17      Wed 18      Thu 19      Fri 20      Sat 21      Sun 22   │
+│  9 10 11 12 13 14 15     ││      │           │           │ Conference                        │ Anna's bi…│ Deadline:…│
+│ 16 17 18 19 20 21 22     ││──────┼───────────┼───────────┼───────────┼───────────┼───────────┼───────────┼───────────│
+│ 23 24 25 26 27 28 29     ││      │           │           │           │           │           │           │           │
+│ 30  1  2  3  4  5  6     ││07:00 │           │           │           │           │           │           │           │
+╰──────────────────────────╯│08:00 │           │           │           │           │           │           │           │
+╭─ My calendars ───────────╮│09:00 │ Standup   │ Standup   │ Standup   │ Standup   │ Standup   │           │           │
+│ ■ Work                   ││10:00 │           │           │           │           │           │ Design… +2│           │
+│ ■ Personal               ││11:00 │           │           │           │           │           │ 10:00     │ Call mum  │
+│ ■ Family                 ││      │           │           │           │           │           │           │           │
+│ ■ Sport                  ││12:00 │           │           │           │           │           │           │ Team lunch│
+│ ■ Holidays               ││13:00 │ Sprint pl…│           │           │           │           │           │           │
+│                          ││14:00 │ 13:00     │           │           │ Release   │           │           │           │
+│  Other calendars ─────── ││15:00 │           │           │           │ Interview │ Budget pl…│           │           │
+│ ■ Team events            ││16:00 │           │           │           │           │           │           │           │
+│                          ││      │           │           │           │           │           │           │           │
+│                          ││17:00 │ Kids' play│           │           │           │           │           │           │
+│                          ││18:00 │           │ Gym       │           │ Gym       │           │           │           │
+│                          ││19:00 │           │ 18:00     │           │ 18:00     │           │▌Dinner    │           │
+│                          ││20:00 │           │           │           │           │           ●▌19:00     │           │
+╰──────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────╯
+ WEEK                                               Sat 21 Nov 2026                               ✓ synced 19:32   ? help
 ```
 
 ## Features
@@ -183,7 +196,7 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `x` | Delete event |
 | `u` | Undo the last change |
 | `y` | Copy (yank) event |
-| `p` `P` | Paste copy at cursor slot / selected day |
+| `p` `P` | Paste copy at the cursor slot (time grid) or on the selected day |
 | `D` | Duplicate event to the next day |
 | `K` `ctrl+k` | Move event 15 min earlier (time grid) |
 | `J` `ctrl+j` | Move event 15 min later (time grid) |
@@ -200,8 +213,8 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `q` | Quit |
 <!-- keys:end -->
 
-`j`/`k` scroll the event detail; in the sidebar the cursor keys move its own cursor.
-`J`/`K` move timed events in the day/week grid only. ctrl+h/j/k/l are extra move keys for
+`p` and `P` both paste the same way (there is no "paste before"). `j`/`k` scroll the event
+detail; in the sidebar the cursor keys move its own cursor. `J`/`K` move timed events in the day/week grid only. ctrl+h/j/k/l are extra move keys for
 terminals that pass them through (many send ctrl+h as backspace; tmux often takes them).
 The sidebar hides itself below 120 columns (`b` pins your choice).
 
@@ -211,6 +224,7 @@ The sidebar hides itself below 120 columns (`b` pins your choice).
 |---|---|---|
 | config | `~/.config/tcal/config.toml` | `dir/config.toml` |
 | cache (SQLite, incl. queued edits) | `~/.local/share/tcal/tcal.db` | `dir/data/tcal.db` |
+| log (sync warnings and errors) | `~/.local/share/tcal/tcal.log` | `dir/data/tcal.log` |
 | demo cache (recreated each run) | `~/.local/share/tcal/demo.db` | `dir/data/demo.db` |
 
 `XDG_CONFIG_HOME` / `XDG_DATA_HOME` are respected. `TCAL_HOME` gives a fully isolated
@@ -225,9 +239,12 @@ pending (`↑N pending` in the status bar); it is rebuilt by the next sync.
 - **Status bar:** `✓ synced 14:02`, `offline` (no network; edits stay queued as `↑N pending`),
   `⚠ … failed` (a subscription feed). `r` syncs now and reports the result as a toast.
 - **`tcal sync`** runs one sync in the terminal and prints the error, if any.
-- **Logs:** there is no log file yet. Conflicts (the server version kept) are named in a toast
-  and counted in `tcal sync`'s summary; other sync warnings (e.g. an unreadable event that was skipped)
-  are not shown anywhere yet.
+- **Sync log:** `R` lists this session's sync warnings and errors (e.g. an unreadable event
+  that was skipped, a feed that failed); warnings are also toasted once. Conflicts (the server
+  version kept) are named in a toast and counted in `tcal sync`'s summary.
+- **Log file:** `tcal` and `tcal sync` also append warnings and errors to `tcal.log` in the
+  data directory (see [Files](#files); the sync log dialog prints its path). It rotates at
+  256 kB (one backup kept), so it is safe to leave alone and to attach to a bug report.
 - **Fresh start:** prefix any command with `TCAL_HOME=.tcal` for a separate config and cache.
 
 ## Development
