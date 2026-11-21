@@ -57,8 +57,7 @@ class Editor:
                 f"{uuid4()}@tcal", calendar.id, q.summary, q.start, q.end, q.all_day, q.location
             )
             if mode == "save":
-                self.form_done(event)
-                self.app.notify(f"Added “{event.summary}”")
+                self.form_done(event, "Added")
             else:
                 form = EventForm(event, writable, new=True, edited=True)
                 self.app.push_screen(form, self.form_done)
@@ -90,13 +89,15 @@ class Editor:
 
         self.app.push_screen(EditScope(occurrence), done)
 
-    def form_done(self, event: Event | None) -> None:
-        """Save a new/edited event; a hidden calendar it lands in is shown again."""
+    def form_done(self, event: Event | None, verb: str = "Saved") -> None:
+        """Save a new/edited event and toast "<verb> “X” · u undo"; a hidden calendar
+        it lands in is shown again."""
         if event is None:
             return
         if event.calendar_id in self.app.state.hidden_calendars:
             self.app.toggle_calendar(event.calendar_id)
         self.app.save_event(event)
+        self.app.notify(f"{verb} “{event.summary}” · {self.app.undo_hint}")
 
     # ----- clipboard & moving ---------------------------------------------
 
