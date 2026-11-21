@@ -423,3 +423,15 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - `tcal/dates.py` holds the pure date helpers: `parse_date` (was in `ui/screens/goto.py`),
   `add_months` (was in `ui/state.py`; still importable from there), `WEEKDAYS`/`MONTHS`
   (also used by `config.py`). Quick add and the event form no longer import a UI screen.
+
+### Time grid fixes (feat-h2, QA4 #6–#8, #16)
+
+- **H2 Cursor slot:** the cursor steps at least 15 min: at 8 rows/hour it covers two rows
+  (`TimeGrid._cursor_rows()`, `GridFrame.cursor_rows`), so it never shows 7.5-min times; an
+  event under either row is selected. Zooming adopts the shown time only when it is a
+  quarter hour, so a level that can't show it (:20/:10 rows) doesn't make the cursor drift.
+- Columns pack by `(row, minute)` edges: events overlap if their rows *or* their times do, so a
+  30-min overlap that rounds to touching rows is still drawn side by side.
+- `timepaint.markers(frame, height)` places the `▲/▼` markers (also used for clicks): on the
+  edge row, or the nearest row inwards that is not the cursor/now row and has room beside the
+  events. Clicking one selects (and scrolls to) the first hidden event; it doesn't open it.

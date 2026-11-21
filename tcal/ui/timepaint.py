@@ -34,7 +34,7 @@ class GridFrame:
     bars: list[Bar]
     blocks: list[Block]
     day: date  # the selected day (cursor column)
-    cursor_row: int
+    cursor_rows: range  # the cursor slot (two rows at 8 rows/hour)
     selected: Occurrence | None
     now: datetime
     header_formats: tuple[str, ...]  # widest first
@@ -49,6 +49,22 @@ class GridFrame:
     def now_row(self) -> int:
         return self.scale.row_of(self.now.hour * 60 + self.now.minute)
 
+    def bottom(self, height: int) -> int:
+        """The first grid row below the visible ones (``height``: the widget's)."""
+        return min(self.scale.total_rows, self.top + height - self.header)
+
+
+@dataclass(frozen=True)
+class Marker:
+    """``▲ N earlier`` / ``▼ N later`` in day column ``day``, grid ``row``, x [x0, x1)."""
+
+    day: int
+    row: int
+    x0: int
+    x1: int
+    label: str
+    hidden: tuple[Occurrence, ...]  # the events it stands for, by start
+
 
 def paint(frame: GridFrame, width: int, height: int) -> list[Strip]:
     if width <= AXIS or height <= frame.header:
@@ -57,7 +73,7 @@ def paint(frame: GridFrame, width: int, height: int) -> list[Strip]:
     canvas = Canvas(width, height, style(p.foreground1, p.background1))
     _header(canvas, frame)
     _strip(canvas, frame)
-    _grid(canvas, frame, min(frame.scale.total_rows, frame.top + height - frame.header))
+    _grid(canvas, frame, frame.bottom(height))
     return canvas.strips()
 
 
@@ -124,7 +140,7 @@ def _grid(canvas: Canvas, f: GridFrame, bottom: int) -> None:
     for row in range(top, bottom):
         y = f.header + row - top
         hour_start = row in hour_rows
-        if row == f.cursor_row:
+        if row == f.cursor_rows.start:
             minute = scale.minute_of(row)
             canvas.text(y, 0, AXIS, f"{minute // 60:02d}:{minute % 60:02d}", cursor_label)
         elif hour_start:
@@ -133,7 +149,7 @@ def _grid(canvas: Canvas, f: GridFrame, bottom: int) -> None:
             canvas.fill(y, x, x + 1, divider, "│")
             if hour_start and scale.rows_per_hour >= 2:
                 canvas.fill(y, x + 1, xs[i + 1], divider, "╌")
-        if row == f.cursor_row:
+        if row in f.cursor_rows:
             canvas.fill(y, xs[sel_col] + 1, xs[sel_col + 1], cursor)
         if now_col is not None and row == f.now_row():
             # ● replaces the column's divider (never covered); events drawn later cover
@@ -149,35 +165,46 @@ def _grid(canvas: Canvas, f: GridFrame, bottom: int) -> None:
 
 
 def _hidden(canvas: Canvas, f: GridFrame, bottom: int) -> None:
-    """``▲ N earlier`` / ``▼ N later`` per column for events scrolled out of view,
-    one row further in where the edge row holds the column's cursor or now-line."""
-    p, xs, top = f.palette, f.xs, f.top
-    st = style(p.foreground2, p.background2)
-    taken = {(f.days.index(f.day), f.cursor_row)}
+    st = style(f.palette.foreground2, f.palette.background2)
+    for m in _markers(f, bottom):
+        canvas.text(f.header + m.row - f.top, m.x0, m.x1, m.label, st)
+
+
+def markers(f: GridFrame, height: int) -> list[Marker]:
+    """The markers ``paint(f, width, height)`` draws (for clicks on them)."""
+    return _markers(f, f.bottom(height))
+
+
+def _markers(f: GridFrame, bottom: int) -> list[Marker]:
+    """``▲ N earlier`` / ``▼ N later`` per column for events scrolled out of view, on
+    the edge row, or further in where that row holds the column's cursor or now-line,
+    or where the events on it leave no room (never over an event)."""
+    xs, top = f.xs, f.top
+    taken = {(f.days.index(f.day), row) for row in f.cursor_rows}
     if f.now.date() in f.days:
         taken.add((f.days.index(f.now.date()), f.now_row()))
+    result: list[Marker] = []
     for i in range(len(xs) - 1):
         blocks = [b for b in f.blocks if b.day == i]
-        x1 = xs[i + 1]
-        for row, arrow, word, count in (
-            (top, "▲", "earlier", sum(len(b.occs) for b in blocks if b.bottom <= top)),
-            (bottom - 1, "▼", "later", sum(len(b.occs) for b in blocks if b.top >= bottom)),
+        for edge, step, arrow, word, hidden in (
+            (top, 1, "▲", "earlier", [b for b in blocks if b.bottom <= top]),
+            (bottom - 1, -1, "▼", "later", [b for b in blocks if b.top >= bottom]),
         ):
-            while (i, row) in taken and top <= row + (1 if arrow == "▲" else -1) < bottom:
-                row += 1 if arrow == "▲" else -1
-            # right of the events on the edge row (plus a gap), never over them
-            ends = [sub_columns(b, xs)[1] + 1 for b in blocks if b.top <= row < b.bottom]
-            x0, y = max(ends, default=xs[i] + 1), f.header + row - top
-            if count:
-                label = next(
-                    (
-                        t
-                        for t in (f" {arrow} {count} {word} ", f"{arrow}{count}", arrow)
-                        if len(t) <= x1 - x0
-                    ),
-                    "",
-                )
-                canvas.text(y, x1 - len(label), x1, label, st)
+            occs = tuple(sorted((o for b in hidden for o in b.occs), key=lambda o: o.start))
+            if not occs:
+                continue
+            labels = (f" {arrow} {len(occs)} {word} ", f"{arrow}{len(occs)}", arrow)
+            for row in range(edge, bottom if step > 0 else top - 1, step):
+                if (i, row) in taken:
+                    continue
+                # right of the events on the row (plus a gap)
+                ends = [sub_columns(b, xs)[1] + 1 for b in blocks if b.top <= row < b.bottom]
+                x0, x1 = max(ends, default=xs[i] + 1), xs[i + 1]
+                label = next((t for t in labels if len(t) <= x1 - x0), "")
+                if label:
+                    result.append(Marker(i, row, x1 - len(label), x1, label, occs))
+                    break
+    return result
 
 
 def _block(canvas: Canvas, f: GridFrame, block: Block, bottom: int) -> None:

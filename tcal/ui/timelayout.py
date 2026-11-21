@@ -10,8 +10,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from fractions import Fraction
+from typing import TypeVar
 
 from tcal.model import Occurrence
+
+# A span edge: a row / day index, or ``(row, minute)`` so that events whose times
+# overlap count as overlapping even when they round to touching rows.
+Edge = TypeVar("Edge", int, tuple[int, int])
 
 ZOOMS = (1, 2, 3, 4, 6, 8)  # rows per hour
 MINUTES = 24 * 60
@@ -87,9 +92,9 @@ def fit_scale(height: int, start: int, end: int) -> TimeScale:
     return TimeScale.aligned(rows_per_hour, start)
 
 
-def _greedy(spans: Sequence[tuple[int, int]], order: Sequence[int]) -> dict[int, int]:
+def _greedy(spans: Sequence[tuple[Edge, Edge]], order: Sequence[int]) -> dict[int, int]:
     """Assign each span (in ``order``) the first lane that is free at its start."""
-    lane_ends: list[int] = []
+    lane_ends: list[Edge] = []
     lanes: dict[int, int] = {}
     for i in order:
         start, end = spans[i]
@@ -102,17 +107,19 @@ def _greedy(spans: Sequence[tuple[int, int]], order: Sequence[int]) -> dict[int,
     return lanes
 
 
-def _order(spans: Sequence[tuple[int, int]]) -> list[int]:
-    return sorted(range(len(spans)), key=lambda i: (spans[i][0], -spans[i][1]))
+def _order(spans: Sequence[tuple[Edge, Edge]]) -> list[int]:
+    """Indices by start, the longer span first."""
+    by_end = sorted(range(len(spans)), key=lambda i: spans[i][1], reverse=True)
+    return sorted(by_end, key=lambda i: spans[i][0])
 
 
-def pack_lanes(spans: Sequence[tuple[int, int]]) -> list[int]:
+def pack_lanes(spans: Sequence[tuple[Edge, Edge]]) -> list[int]:
     """Lane per [start, end) span so that spans in one lane never overlap."""
     lanes = _greedy(spans, _order(spans))
     return [lanes[i] for i in range(len(spans))]
 
 
-def pack_columns(spans: Sequence[tuple[int, int]]) -> list[tuple[int, int, int]]:
+def pack_columns(spans: Sequence[tuple[Edge, Edge]]) -> list[tuple[int, int, int]]:
     """``(column, span, columns)`` per [start, end) span for side-by-side layout.
 
     Google-style: spans are grouped into clusters of transitively overlapping spans
@@ -138,17 +145,17 @@ def pack_columns(spans: Sequence[tuple[int, int]]) -> list[tuple[int, int, int]]
     return result
 
 
-def _clusters(spans: Sequence[tuple[int, int]]) -> list[list[int]]:
+def _clusters(spans: Sequence[tuple[Edge, Edge]]) -> list[list[int]]:
     """Indices of transitively overlapping spans, in start order."""
     clusters: list[list[int]] = []
-    cluster_end = 0
+    ends: list[Edge] = []  # the end of the current cluster
     for i in _order(spans):
         start, end = spans[i]
-        if not clusters or start >= cluster_end:
+        if not clusters or start >= ends[-1]:
             clusters.append([])
-            cluster_end = end
+            ends.append(end)
         clusters[-1].append(i)
-        cluster_end = max(cluster_end, end)
+        ends[-1] = max(ends[-1], end)
     return clusters
 
 
@@ -204,12 +211,14 @@ def layout_blocks(
     """Grid blocks of the timed occurrences, clipped per day and packed into columns.
 
     An event shorter than a row still gets one row; events crossing midnight
-    get one block per day. A cluster needing more than ``max_cols`` columns
-    becomes one block over the whole column (``group`` = its events).
+    get one block per day. Events overlap if their rows or their times do (so a
+    30-min overlap shows even when the rows only touch). A cluster needing more
+    than ``max_cols`` columns becomes one block over the whole column (``group``).
     """
     blocks: list[Block] = []
     for i, day in enumerate(days):
         spans: list[tuple[Occurrence, int, int]] = []
+        minutes: list[tuple[int, int]] = []
         for occ in occs:
             if is_bar(occ):
                 continue
@@ -217,9 +226,13 @@ def layout_blocks(
             if start < end or (start == end and occ.start.date() == day and start < MINUTES):
                 top = scale.row_of(start)
                 spans.append((occ, top, max(top + 1, scale.row_of(end))))
+                minutes.append((start, end))
         rows = [(top, bottom) for _, top, bottom in spans]
-        packed = pack_columns(rows)
-        for cluster in _clusters(rows):
+        edges = [
+            ((top, s), (bottom, e)) for (top, bottom), (s, e) in zip(rows, minutes, strict=True)
+        ]
+        packed = pack_columns(edges)
+        for cluster in _clusters(edges):
             if max_cols is not None and packed[cluster[0]][2] > max_cols:
                 top, bottom = rows[cluster[0]][0], max(rows[j][1] for j in cluster)
                 group = tuple(sorted((spans[j][0] for j in cluster), key=_by_start))
