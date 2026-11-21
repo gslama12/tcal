@@ -5,7 +5,7 @@ have ``all_day=True`` and start/end at local midnight (aware), with ``end``
 exclusive, as in iCalendar (a one-day event on the 5th ends on the 6th).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 
@@ -30,8 +30,12 @@ class Event:
     description: str = ""
     rrule: str | None = None  # RRULE value, e.g. "FREQ=WEEKLY;BYDAY=MO"
     recurrence_id: datetime | None = None  # set on an overridden instance of a series
+    exdates: tuple[datetime, ...] = ()  # starts of deleted instances of a series
     etag: str | None = None
     href: str | None = None  # server URL of the resource; None until pushed
+    # iCalendar text of the whole resource as last seen (see tcal/ics.py); edits are
+    # written into it so properties tcal doesn't model (alarms, attendees) survive.
+    raw: str | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)

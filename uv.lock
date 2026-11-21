@@ -2191,7 +2191,6 @@ dependencies = [
     { name = "icalendar" },
     { name = "keyring" },
     { name = "python-dateutil" },
-    { name = "recurring-ical-events" },
     { name = "textual" },
 ]
 
@@ -2212,7 +2211,6 @@ requires-dist = [
     { name = "icalendar", specifier = ">=6.0.0" },
     { name = "keyring", specifier = ">=25.0.0" },
     { name = "python-dateutil", specifier = ">=2.9.0.post0" },
-    { name = "recurring-ical-events", specifier = ">=3.3.0" },
     { name = "textual", specifier = ">=6.1.0" },
 ]
 
