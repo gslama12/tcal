@@ -40,6 +40,21 @@ async def test_help_closes_with_escape_and_q(make_app) -> None:
         assert app.is_running  # q closed the help, it did not quit
 
 
+def test_default_keys_are_all_grouped(make_app) -> None:
+    titles = [title for title, _ in sections(make_app().config.keys)]
+    assert "Event form" in titles and "Other" not in titles
+
+
+async def test_help_hint_is_inside_the_titled_box(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.press("question_mark")
+        box = app.screen.query_one("#help")
+        assert box.border_title == "Key bindings"
+        assert app.screen.query_one("#help-hint").parent is box
+        assert box.region.bottom <= 30
+
+
 def test_sections_group_and_keep_unknown_actions() -> None:
     keys = {"today": ["t"], "zoom_in": ["plus", "ctrl+up"], "new_thing": ["z"]}
     assert sections(keys) == [
