@@ -54,7 +54,14 @@ class Editor:
             mode, q = result
             calendar = next((c for c in writable if c.name == q.calendar), default)
             event = Event(
-                f"{uuid4()}@tcal", calendar.id, q.summary, q.start, q.end, q.all_day, q.location
+                f"{uuid4()}@tcal",
+                calendar.id,
+                q.summary,
+                q.start,
+                q.end,
+                q.all_day,
+                q.location,
+                rrule=q.rrule,
             )
             if mode == "save":
                 self.form_done(event)
