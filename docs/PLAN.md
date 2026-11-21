@@ -150,3 +150,16 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   and scroll position are kept in minutes so they survive zoom and resize.
 - **T4 Strip:** all-day events and timed events lasting ≥ 24 h are bars in the all-day strip
   (max 3 lanes, "+N" in the axis for the rest); shorter events crossing midnight are split.
+
+### Event form notes (package 5, form)
+
+- **F1 API:** `app.new_event(start)` (datetime → 1 h slot; date → all-day, 09:00–10:00 prefilled
+  for unticking) and `app.edit_event(event)` open `screens/event_form.EventForm`; the form
+  returns the edited `Event` and the app saves it (`save_event`). Read-only calendar → notice.
+  The `edit_event` key edits the focused view's `selected` occurrence (time grids only).
+- **F2 Fields:** the end date is always shown (timed events may cross midnight); end follows a
+  start change. Unchanged fields keep the event's own values (time zone, custom RRULE).
+  Repeat none/daily/weekly/monthly/yearly ↔ `FREQ=…`; disabled for an overridden instance.
+- **F3 Keys:** new `[keys] save = ["ctrl+s"]` (priority) and `cancel = ["escape"]`;
+  `binding()` gained `priority`. Test apps that record view messages call `prevent_default()`
+  so TcalApp's handlers don't also open the form.

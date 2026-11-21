@@ -33,9 +33,11 @@ class RecordingApp(TcalApp):
 
     def on_event_selected(self, message: messages.EventSelected) -> None:
         self.posted.append(message)
+        message.prevent_default()  # not TcalApp's handler (it opens a screen)
 
     def on_new_event_requested(self, message: messages.NewEventRequested) -> None:
         self.posted.append(message)
+        message.prevent_default()
 
 
 @pytest.fixture(autouse=True)

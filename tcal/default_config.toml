@@ -53,3 +53,5 @@ toggle_calendar = ["space"]           # in the calendar list (enter works too)
 focus_next = ["tab"]
 help = ["question_mark"]
 quit = ["q"]
+save = ["ctrl+s"]                      # event form
+cancel = ["escape"]                    # close a form / dialog

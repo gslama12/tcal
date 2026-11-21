@@ -13,12 +13,14 @@ Layout::
 Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
 ``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``save_event()``,
-``delete_event()``, ``request_sync()``, ``sync_status``.
+``delete_event()``, ``request_sync()``, ``sync_status``, ``new_event()``,
+``edit_event()`` (open the event form).
 """
 
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from uuid import uuid4
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -30,8 +32,10 @@ from tcal.config import Config, ConfigError, load_config
 from tcal.model import Calendar, Event, Occurrence
 from tcal.source import EventSource
 from tcal.sync import SyncSummary
+from tcal.tz import local_midnight
 from tcal.ui.keys import binding, keymap
 from tcal.ui.messages import EventSelected, NewEventRequested
+from tcal.ui.screens.event_form import EventForm
 from tcal.ui.state import AppState, ViewMode
 from tcal.ui.theme import PALETTES, make_theme
 from tcal.ui.widgets.calendar_list import CalendarList
@@ -138,6 +142,35 @@ class TcalApp(App[None]):
         self.refresh_data()
         self.request_sync()
 
+    # ----- event form ---------------------------------------------------
+
+    def new_event(self, start: date | datetime) -> None:
+        """Open the form for a new event at a time slot (1 h) or on a day (all-day)."""
+        if isinstance(start, datetime):
+            begin, end, all_day = start, start + timedelta(hours=1), False
+        else:
+            begin, end, all_day = local_midnight(start), local_midnight(start + timedelta(1)), True
+        writable = self._writable()
+        if not writable:
+            self.notify("No writable calendar", severity="warning")
+            return
+        draft = Event(f"{uuid4()}@tcal", writable[0].id, "", begin, end, all_day)
+        self.push_screen(EventForm(draft, writable, new=True), self._form_done)
+
+    def edit_event(self, event: Event) -> None:
+        """Open the form for an existing event (a series is edited as a whole)."""
+        if event.calendar_id not in {c.id for c in self._writable()}:
+            self.notify("This calendar is read-only", severity="warning")
+            return
+        self.push_screen(EventForm(event, self._writable(), new=False), self._form_done)
+
+    def _writable(self) -> list[Calendar]:
+        return [c for c in self._calendars if not c.readonly]
+
+    def _form_done(self, event: Event | None) -> None:
+        if event is not None:
+            self.save_event(event)
+
     # ----- sync -----------------------------------------------------------
 
     def request_sync(self) -> None:
@@ -216,12 +249,19 @@ class TcalApp(App[None]):
     def action_focus_calendars(self) -> None:
         self.query_one(CalendarList).focus()
 
-    # Filled in by the crud / backend packages.
     def action_new_event(self) -> None:
-        self.notify("New event: not implemented yet")
+        """Views post their own ``NewEventRequested``; elsewhere: the selected day."""
+        self.new_event(self.state.day)
 
     def action_edit_event(self) -> None:
-        self.notify("Edit event: not implemented yet")
+        """Edit the event selected in the focused view (time grids have one)."""
+        occurrence = getattr(self.focused, "selected", None)
+        if not isinstance(occurrence, Occurrence):
+            self.notify("No event selected")
+            return
+        self.edit_event(occurrence.event)
+
+    # Filled in by the crud / backend packages.
 
     def action_delete_event(self) -> None:
         self.notify("Delete event: not implemented yet")
@@ -244,4 +284,4 @@ class TcalApp(App[None]):
         self.notify(f"Open {message.occurrence.summary!r}: not implemented yet")
 
     def on_new_event_requested(self, message: NewEventRequested) -> None:
-        self.notify(f"New event at {message.start:%a %H:%M}: not implemented yet")
+        self.new_event(message.start)
