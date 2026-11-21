@@ -121,6 +121,7 @@ async def test_saving_over_a_server_change_asks_first(provider: FakeProvider, st
         assert any("Saved “Mine” · u undo" in str(n.message) for n in app._notifications)
         assert not any("dropped" in str(n.message) for n in app._notifications)
 
+
 async def test_first_run_offline_explains_and_retries() -> None:
     calls = 0
 
