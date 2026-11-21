@@ -148,3 +148,36 @@ SearchScreen OptionList {
         border: $border_type $primary;
     }
 }
+
+/* ----- modals (tcal/ui/screens/) ----- */
+
+EventDetail, ConfirmDelete {
+    align: center middle;
+    background: $background1 60%;
+}
+
+EventDetail #dialog, ConfirmDelete #dialog {
+    width: 60;
+    height: auto;
+    max-height: 80%;
+    background: $background2;
+    border: $border_type $primary;
+    padding: 1 2;
+}
+
+EventDetail #dialog > Static {
+    margin-bottom: 1;
+}
+
+EventDetail #dialog > #hints {
+    margin-bottom: 0;
+}
+
+ConfirmDelete #buttons {
+    height: auto;
+    margin-top: 1;
+
+    Button {
+        margin-right: 1;
+    }
+}

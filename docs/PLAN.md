@@ -167,3 +167,13 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **G2 Search:** searches the visible calendars over the sync window (today − past_months ..
   + future_months); a series is listed once (its next instance). `app.show_occurrence(occ)`
   opens the day view with `occ` selected via the new public `TimeGrid.select(occ)`.
+
+### Detail notes (package 5, detail)
+
+- **E1 Detail:** `screens/event_detail.py`: `EventDetail(occ)` opens from `on_event_selected`
+  (e edit, x delete, esc/q close). `confirm_delete(app, occ)` is the one delete flow (also the
+  app's `x`): read-only calendar -> notice; recurring -> o "this occurrence" / s "whole series".
+- **E2 Selection:** `app.selected_occurrence()` = the focused day/week grid's `selected`;
+  month/year views have no event cursor, so `x`/`e` there say "No event selected" / do nothing.
+- **E3 Edit hook:** `TcalApp.edit_occurrence(occ)` is the placeholder the event form replaces;
+  both `e` in the detail modal and the app's `edit_event` action call it.
