@@ -225,6 +225,7 @@ ScopeDialog #buttons, ConfirmDiscard #buttons {
     border-title-color: $foreground3;
     border-title-background: $background2;
     padding: 0 1;
+    scrollbar-size-vertical: 1;
 
     Input, SelectCurrent, TextArea, Checkbox {
         background: $background2;
@@ -242,5 +243,5 @@ ScopeDialog #buttons, ConfirmDiscard #buttons {
     #notes { height: 5; }
     #error { color: $red; height: auto; padding: 0 1; }
     #note { color: $foreground1; padding: 0 1; }
-    #hint { color: $foreground1; }
+    #hint { color: $foreground1; dock: bottom; background: $background2; }
 }

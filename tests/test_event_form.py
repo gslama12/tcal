@@ -3,7 +3,7 @@ from datetime import datetime, time, timedelta
 
 import pytest
 from conftest import TODAY
-from textual.widgets import Checkbox, Input, Select
+from textual.widgets import Checkbox, Input, Select, TextArea
 
 from tcal.model import Event
 from tcal.tz import local_midnight, local_zone
@@ -282,3 +282,21 @@ async def test_edit_all_events_form_wording(make_app) -> None:
         await pilot.press("o")
         await pilot.pause()
         assert app.screen.query_one("#form").border_title == "Edit this event"
+
+
+async def test_form_scrolls_at_80x24_with_the_hint_pinned(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(80, 24)) as pilot:
+        app.new_event(at(14))
+        await pilot.pause()
+        form = app.screen
+        screen_region = form.region
+        hint = form.query_one("#hint")
+        assert screen_region.contains_region(hint.region)
+        while not isinstance(app.focused, TextArea):
+            await pilot.press("tab")
+        await pilot.pause()
+        notes = form.query_one("#notes")
+        assert form.query_one("#form").scroll_y > 0
+        assert screen_region.contains_region(notes.region)  # scrolled into view
+        assert screen_region.contains_region(hint.region)

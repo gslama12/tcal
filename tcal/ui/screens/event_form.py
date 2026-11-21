@@ -23,7 +23,7 @@ from typing import cast
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import Button, Checkbox, Input, Label, Select, Static, TextArea
@@ -221,7 +221,8 @@ class EventForm(ModalScreen[Event | None]):
             repeats.append((CUSTOM, describe_rrule(self.event.rrule or "")))
         instance = self.event.recurrence_id is not None  # one instance of a series
         series = not self.new and bool(self.event.rrule)
-        with Vertical(id="form") as form:
+        # The fields scroll on short terminals; the title (border) and the hint stay put.
+        with VerticalScroll(id="form", can_focus=False) as form:
             form.border_title = "New event" if self.new else "Edit event"
             if instance or series:
                 form.border_title = "Edit this event" if instance else "Edit all events"
