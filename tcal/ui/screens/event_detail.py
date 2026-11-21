@@ -8,8 +8,9 @@ in the views: read-only calendars only get a notice; a recurring event asks
 one instance of a series ("this event" vs "all events").
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Literal, cast
+from zoneinfo import ZoneInfo
 
 from rich.text import Text
 from textual.app import ComposeResult
@@ -18,6 +19,7 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
 
+from tcal import ics
 from tcal.model import Occurrence
 from tcal.ui.keys import binding
 
@@ -73,6 +75,61 @@ def describe_rrule(rrule: str) -> str:
     elif until := parts.get("UNTIL"):
         words += f", until {date(int(until[:4]), int(until[4:6]), int(until[6:8])):%-d %b %Y}"
     return words
+
+
+PARTSTATS = {
+    "ACCEPTED": "accepted",
+    "DECLINED": "declined",
+    "TENTATIVE": "maybe",
+    "NEEDS-ACTION": "invited",
+    "DELEGATED": "delegated",
+}
+
+
+def zone_text(occ: Occurrence) -> str:
+    """The time in the event's own zone, if that differs from local time ('' otherwise)."""
+    zone = occ.event.start.tzinfo
+    if occ.all_day or not isinstance(zone, ZoneInfo):
+        return ""
+    there = Occurrence(occ.event, occ.start.astimezone(zone), occ.end.astimezone(zone))
+    if there.start.utcoffset() == occ.start.utcoffset():
+        return ""
+    return f"{zone.key}: {time_range(there)}"
+
+
+def duration_text(delta: timedelta) -> str:
+    """'10 min', '1 hour', '1 h 30 min', '2 days', '1 week'."""
+    minutes = int(abs(delta).total_seconds()) // 60
+    for size, unit in ((7 * 24 * 60, "week"), (24 * 60, "day"), (60, "hour")):
+        if minutes >= size and minutes % size == 0:
+            n = minutes // size
+            return f"{n} {unit}{'s' if n > 1 else ''}"
+    hours, rest = divmod(minutes, 60)
+    return f"{hours} h {rest} min" if hours else f"{rest} min"
+
+
+def alarm_text(trigger: timedelta | datetime, occ: Occurrence) -> str:
+    """'10 min before', 'At start', all-day: '1 day before at 09:00', absolute: 'At …'."""
+    if isinstance(trigger, datetime):
+        return f"At {trigger.astimezone(occ.start.tzinfo):%a %-d %b %Y, %H:%M}"
+    if occ.all_day:
+        when = occ.start + trigger
+        days = (occ.start.date() - when.date()).days
+        side = "before" if days > 0 else "after"
+        on = "On the day" if days == 0 else f"{abs(days)} day{'s' if abs(days) > 1 else ''} {side}"
+        return f"{on} at {when:%H:%M}"
+    if not trigger:
+        return "At start"
+    return f"{duration_text(trigger)} {'before' if trigger < timedelta() else 'after'}"
+
+
+def people_text(extras: ics.Extras) -> str:
+    """'Organizer: Ann' and one line per attendee with their reply."""
+    lines = [f"Organizer: {extras.organizer}"] if extras.organizer else []
+    lines += [
+        f"{name} · {PARTSTATS.get(status, status.lower())}" for name, status in extras.attendees
+    ]
+    return "\n".join(lines)
 
 
 def recurrence_text(occ: Occurrence) -> str:
@@ -185,9 +242,14 @@ class EventDetail(ModalScreen[None]):
                 id="calendar",
             )
             yield Static(time_range(occ), id="time")
+            extras = ics.extras(occ.event)
             for widget_id, value in (
+                ("timezone", zone_text(occ)),
                 ("recurrence", recurrence_text(occ)),
                 ("location", occ.event.location),
+                ("url", extras.url),
+                ("people", people_text(extras)),
+                ("alarms", "\n".join(f"Alert: {alarm_text(a, occ)}" for a in extras.alarms)),
                 ("notes", occ.event.description),
             ):
                 if value:

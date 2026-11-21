@@ -7,7 +7,7 @@ back into that text, so properties tcal doesn't model (alarms, attendees, ...)
 survive an edit.
 """
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -72,6 +72,49 @@ def to_ics(event: Event) -> str:
         comp.add("RECURRENCE-ID", value(event.recurrence_id, event.start))
     cal.add_missing_timezones()
     return cal.to_ical().decode()
+
+
+@dataclass(frozen=True)
+class Extras:
+    """Properties tcal shows but does not edit (kept in ``Event.raw``)."""
+
+    organizer: str = ""
+    attendees: tuple[tuple[str, str], ...] = ()  # (name or e-mail, PARTSTAT)
+    alarms: tuple[timedelta | datetime, ...] = ()  # offset from the start, or an absolute time
+    url: str = ""
+
+
+def extras(event: Event) -> Extras:
+    """Organizer, attendees, alarms and URL of ``event`` from its ``raw`` text."""
+    if not event.raw:
+        return Extras()
+    comp = _find(icalendar.Calendar.from_ical(event.raw), event.uid, event.recurrence_id)
+    if comp is None:
+        return Extras()
+    organizer = comp.get("ORGANIZER")
+    return Extras(
+        organizer=_person(organizer) if organizer is not None else "",
+        attendees=tuple(
+            (_person(a), str(a.params.get("PARTSTAT", "NEEDS-ACTION")).upper())
+            for a in _as_list(comp.get("ATTENDEE"))
+        ),
+        alarms=tuple(_trigger(alarm, event) for alarm in comp.walk("VALARM") if "TRIGGER" in alarm),
+        url=str(comp.get("URL", "")),
+    )
+
+
+def _person(prop: Any) -> str:
+    """CN, else the address without ``mailto:``."""
+    name = prop.params.get("CN")
+    return str(name) if name else str(prop).removeprefix("mailto:").removeprefix("MAILTO:")
+
+
+def _trigger(alarm: Any, event: Event) -> timedelta | datetime:
+    value = alarm["TRIGGER"].dt
+    if isinstance(value, timedelta):
+        related_end = str(alarm["TRIGGER"].params.get("RELATED", "START")).upper() == "END"
+        return value + (event.end - event.start if related_end else timedelta())
+    return _as_datetime(value)
 
 
 def without_instance(event: Event, recurrence_id: datetime) -> Event:

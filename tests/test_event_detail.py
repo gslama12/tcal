@@ -1,14 +1,25 @@
 """Event detail modal and the delete confirmation flow."""
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
+import icalendar
 from conftest import TODAY
 from textual.widgets import Static
 
+from tcal import ics
 from tcal.model import Occurrence
+from tcal.providers.ics_url import split_feed
+from tcal.tz import local_zone
 from tcal.ui.app import TcalApp
 from tcal.ui.messages import EventSelected
-from tcal.ui.screens.event_detail import ConfirmDelete, EventDetail, describe_rrule
+from tcal.ui.screens.event_detail import (
+    ConfirmDelete,
+    EventDetail,
+    alarm_text,
+    describe_rrule,
+    duration_text,
+)
 from tcal.ui.widgets.timegrid import TimeGrid
 
 SIZE = (140, 45)
@@ -123,3 +134,53 @@ def test_describe_rrule() -> None:
     assert describe_rrule("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,FR") == "Every 2 weeks on Mon, Fri"
     assert describe_rrule("FREQ=MONTHLY;COUNT=5") == "Every month, 5 times"
     assert describe_rrule("FREQ=YEARLY;UNTIL=20271231T225959Z") == "Every year, until 31 Dec 2027"
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+MEETING = (FIXTURES / "meeting.ics").read_text()
+FEED = (FIXTURES / "holidays.ics").read_text()
+
+
+async def test_detail_shows_people_alarms_url_and_zone(make_app) -> None:
+    [event] = ics.from_ics(MEETING, "work")
+    local = local_zone()
+    occ = Occurrence(event, event.start.astimezone(local), event.end.astimezone(local))
+    app = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        app.post_message(EventSelected(occ))
+        await pilot.pause()
+        assert text(app, "timezone") == "Pacific/Kiritimati: Thu 19 Nov 2026, 08:00 – 09:00"
+        assert text(app, "url") == "https://example.com/planning"
+        assert text(app, "people").splitlines() == [
+            "Organizer: Ann Organizer",
+            "Ann Organizer · accepted",
+            "bob@example.com · declined",
+            "Cleo · invited",
+        ]
+        assert text(app, "alarms").splitlines() == [
+            "Alert: 10 min before",
+            "Alert: 1 hour after",
+            f"Alert: At {datetime(2026, 11, 18, 18, tzinfo=UTC).astimezone(local):%a %-d %b %Y, %H:%M}",
+        ]
+
+
+async def test_detail_without_extras_has_no_extra_rows(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        app.post_message(EventSelected(find(app, "Design review")[0]))
+        await pilot.pause()
+        for widget_id in ("timezone", "url", "people", "alarms"):
+            assert not app.screen.query(f"#{widget_id}")
+
+
+def test_all_day_alarm_and_durations() -> None:
+    feed = icalendar.Calendar.from_ical(FEED)
+    texts = [t for t in split_feed(feed) if "UID:national-day" in t]
+    [event] = ics.from_ics(texts[0], "h")
+    occ = Occurrence(event, event.start, event.end)
+    assert ics.extras(event).alarms == (timedelta(hours=-15),)
+    assert alarm_text(timedelta(hours=-15), occ) == "1 day before at 09:00"
+    assert alarm_text(timedelta(hours=9), occ) == "On the day at 09:00"
+    assert duration_text(timedelta(minutes=-90)) == "1 h 30 min"
+    assert duration_text(timedelta(days=2)) == "2 days"
+    assert duration_text(timedelta(weeks=1)) == "1 week"
