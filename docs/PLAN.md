@@ -381,6 +381,17 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   listed in `SyncSummary.failed`. Not used by `--demo` (no network). `CalendarList` shows feeds
   under "Other calendars".
 - **U2 Detail extras:** `ics.extras(event)` → `Extras(organizer, attendees (name, PARTSTAT),
-  alarms (offset from start or absolute time; RELATED=END folded in), url)` from `raw`. The detail
+  alarms, url)` from `raw`. The detail
   shows `#timezone` (event zone + its times, only when its UTC offset differs from local),
   `#url`, `#people`, `#alarms` ("Alert: 10 min before"; all-day: "1 day before at 09:00").
+
+### Detail, sync status, demo (feat-g3: QA3 #5, #6, #12, #14, #20)
+
+- `ics.Alarm(trigger, from_end)` keeps `RELATED=END`: "At end", "10 min before end".
+- The detail's `#dialog` is a `VerticalScroll`; `#title`/`#hints` are docked so they stay put;
+  `j`/`k` (`cursor_down/up`) scroll, the hints add "j/k scroll" when it overflows. `e`/`x` on a
+  read-only event only toast, the detail stays open.
+- `SyncStatus.failed_feeds` (from the worker's `SyncSummary`): status bar "⚠ synced 14:10 · X
+  failed", a ⚠ after the feed in the calendar list; `conflicts` → a warning toast.
+- `--demo` passes `fake.demo_feed()` (read-only "Team events" feed) as subscriptions; demo data
+  has an invitation (Budget planning, yesterday), an alarm (Dentist) and a New York call.

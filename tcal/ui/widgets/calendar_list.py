@@ -16,7 +16,7 @@ class CalendarList(TcalWidget, can_focus=True):
 
     j/k move the cursor, space/enter or a click toggles the calendar's
     visibility via ``app.toggle_calendar`` (hidden ones are in
-    ``state.hidden_calendars``).
+    ``state.hidden_calendars``). A feed the last sync could not fetch gets a ⚠.
     """
 
     BORDER_TITLE = "My calendars"
@@ -55,6 +55,8 @@ class CalendarList(TcalWidget, can_focus=True):
             row = Text()
             row.append("■ " if shown else "□ ", style=Style(color=cal.color, bold=True))
             row.append(cal.name, style=Style(color=p.foreground3 if shown else p.foreground1))
+            if cal.subscribed and cal.name in self.tcal.sync_status.failed_feeds:
+                row.append(" ⚠", style=Style(color=p.yellow))
             if self.has_focus and i == self.cursor:
                 row.pad_right(self.content_size.width - len(row))
                 row.stylize(Style(bgcolor=p.background3))

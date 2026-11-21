@@ -13,13 +13,14 @@ from tcal.config import ConfigError, SubscriptionConfig, load_config
 from tcal.model import SUBSCRIPTION_PREFIX
 from tcal.providers import ics_url
 from tcal.providers.base import ProviderError
-from tcal.providers.fake import FakeProvider
+from tcal.providers.fake import FakeProvider, demo_feed
 from tcal.providers.ics_url import IcsUrlProvider
 from tcal.source import StoreSource
 from tcal.store import Store
-from tcal.sync import SyncEngine
+from tcal.sync import SyncEngine, SyncSummary
 from tcal.ui.app import TcalApp
 from tcal.ui.widgets.calendar_list import CalendarList
+from tcal.ui.widgets.statusbar import StatusBar
 
 FEED = (Path(__file__).parent / "fixtures" / "holidays.ics").read_bytes()
 URL = "https://example.com/holidays.ics"
@@ -173,3 +174,32 @@ async def test_calendar_list_other_calendars(store: Store) -> None:
         ]
         assert occ.summary == "National Day"
         assert not app.check_writable(occ.calendar_id)
+
+
+async def test_failed_feed_and_conflicts_are_shown(store: Store) -> None:
+    def job() -> SyncSummary:  # the cache already has the feed; this sync could not fetch it
+        return SyncSummary(failed=["Holidays AT"], conflicts=1)
+
+    SyncEngine(FakeProvider(today=TODAY), store, today=TODAY, subscriptions=feeds()).sync()
+    app = TcalApp(StoreSource(store), load_config(), today=TODAY, sync=job)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        bar = str(app.query_one(StatusBar).render())
+        assert "⚠ synced" in bar and "Holidays AT failed" in bar
+        assert str(app.query_one(CalendarList).render()).splitlines()[-1] == "■ Holidays AT ⚠"
+        assert any("1 local change(s) conflicted" in str(n.message) for n in app._notifications)
+
+
+def test_demo_feed_is_a_read_only_subscription() -> None:
+    store = Store(":memory:")
+    SyncEngine(FakeProvider(today=TODAY), store, today=TODAY, subscriptions=demo_feed(TODAY)).sync()
+    feed = [c for c in store.calendars() if c.subscribed]
+    assert [(c.name, c.readonly) for c in feed] == [("Team events", True)]
+    events = store.events_between(*_engine().window())
+    assert {e.summary for e in events if e.calendar_id == feed[0].id} == {
+        "Team lunch",
+        "Office party",
+        "Hackathon",
+    }

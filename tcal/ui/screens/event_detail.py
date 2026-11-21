@@ -1,7 +1,8 @@
 """Event detail modal (enter/click on an event) and the delete confirmation.
 
-``EventDetail(occ)``: e = edit (``app.edit_occurrence``), x = delete, esc/q = close
-(a read-only calendar's event only hints "esc close"; e/x give a notice).
+``EventDetail(occ)``: e = edit (``app.edit_occurrence``), x = delete, j/k scroll,
+esc/q = close (a read-only calendar's event only hints "esc close"; e/x give a
+notice and keep the detail open).
 ``confirm_delete(app, occ)`` is the one delete flow, also used by the ``x`` key
 in the views: read-only calendars only get a notice; a recurring event asks
 "this event" vs "all events". ``EditScope`` asks the same before editing
@@ -15,7 +16,7 @@ from zoneinfo import ZoneInfo
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
 
@@ -108,19 +109,23 @@ def duration_text(delta: timedelta) -> str:
     return f"{hours} h {rest} min" if hours else f"{rest} min"
 
 
-def alarm_text(trigger: timedelta | datetime, occ: Occurrence) -> str:
-    """'10 min before', 'At start', all-day: '1 day before at 09:00', absolute: 'At …'."""
+def alarm_text(alarm: ics.Alarm, occ: Occurrence) -> str:
+    """'10 min before', 'At start', '10 min before end', all-day: '1 day before at 09:00',
+    absolute: 'At …'."""
+    trigger = alarm.trigger
     if isinstance(trigger, datetime):
         return f"At {trigger.astimezone(occ.start.tzinfo):%a %-d %b %Y, %H:%M}"
     if occ.all_day:
-        when = occ.start + trigger
+        when = (occ.end if alarm.from_end else occ.start) + trigger
         days = (occ.start.date() - when.date()).days
         side = "before" if days > 0 else "after"
         on = "On the day" if days == 0 else f"{abs(days)} day{'s' if abs(days) > 1 else ''} {side}"
         return f"{on} at {when:%H:%M}"
+    edge = "end" if alarm.from_end else "start"
     if not trigger:
-        return "At start"
-    return f"{duration_text(trigger)} {'before' if trigger < timedelta() else 'after'}"
+        return f"At {edge}"
+    side = "before" if trigger < timedelta() else "after"
+    return f"{duration_text(trigger)} {side}" + (" end" if alarm.from_end else "")
 
 
 def people_text(extras: ics.Extras) -> str:
@@ -218,11 +223,13 @@ class MoveScope(EditScope):
 
 
 class EventDetail(ModalScreen[None]):
-    """Read-only view of one occurrence."""
+    """Read-only view of one occurrence: title and hints stay put, the rest scrolls (j/k)."""
 
     BINDINGS = [
         binding("edit_event", "Edit", action="edit"),
         binding("delete_event", "Delete", action="delete"),
+        binding("cursor_down", action="scroll_body(1)"),
+        binding("cursor_up", action="scroll_body(-1)"),
         binding("quit", "Close", action="dismiss"),
         Binding("escape", "dismiss", "Close", show=False),
     ]
@@ -241,7 +248,8 @@ class EventDetail(ModalScreen[None]):
         name = calendar.name if calendar else occ.calendar_id
         if calendar is not None and calendar.readonly:
             name += " (read-only)"
-        with Vertical(id="dialog"):
+        # The dialog scrolls; the title and the hints are docked, so they stay put.
+        with VerticalScroll(id="dialog", can_focus=False):
             yield Static(Text(occ.summary or "(no title)", style="bold"), id="title")
             yield Static(
                 Text.assemble(("● ", self.tcal.calendar_color(occ.calendar_id)), name),
@@ -260,13 +268,30 @@ class EventDetail(ModalScreen[None]):
             ):
                 if value:
                     yield Static(value, id=widget_id)
-            hints = "esc close" if calendar and calendar.readonly else "e edit  x delete  esc close"
-            yield Static(Text(hints, style=p.foreground1), id="hints")
+            self.hints = (
+                "esc close" if calendar and calendar.readonly else "e edit  x delete  esc close"
+            )
+            yield Static(Text(self.hints, style=p.foreground1), id="hints")
+
+    def on_mount(self) -> None:
+        self.call_after_refresh(self._show_scroll_hint)
+
+    def _show_scroll_hint(self) -> None:
+        if self.query_one("#dialog", VerticalScroll).max_scroll_y:
+            hints = f"{self.hints}  j/k scroll"
+            self.query_one("#hints", Static).update(
+                Text(hints, style=self.tcal.palette.foreground1)
+            )
+
+    def action_scroll_body(self, lines: int) -> None:
+        self.query_one("#dialog", VerticalScroll).scroll_relative(y=lines, animate=False)
 
     def action_edit(self) -> None:
-        self.dismiss()
-        self.tcal.edit_occurrence(self.occ)
+        if self.tcal.check_writable(self.occ.calendar_id):
+            self.dismiss()
+            self.tcal.edit_occurrence(self.occ)
 
     def action_delete(self) -> None:
-        self.dismiss()
-        confirm_delete(self.tcal, self.occ)
+        if self.tcal.check_writable(self.occ.calendar_id):
+            self.dismiss()
+            confirm_delete(self.tcal, self.occ)

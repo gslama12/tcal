@@ -76,7 +76,7 @@ def cli(ctx: click.Context, demo: bool) -> None:
         return
     config = _config()
 
-    from tcal.providers.fake import FakeProvider
+    from tcal.providers.fake import FakeProvider, demo_feed
     from tcal.source import StoreSource
     from tcal.store import Store
     from tcal.sync import sync_job
@@ -86,7 +86,7 @@ def cli(ctx: click.Context, demo: bool) -> None:
         # A throwaway cache, fresh each run, so the demo never touches the real one.
         database = paths.demo_database_file()
         database.unlink(missing_ok=True)
-        sync = sync_job(FakeProvider(), database, config.sync)
+        sync = sync_job(FakeProvider(), database, config.sync, subscriptions=demo_feed())
         sync()  # fill the cache before the first frame
     else:
         database = paths.database_file()

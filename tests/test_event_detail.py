@@ -1,14 +1,16 @@
 """Event detail modal and the delete confirmation flow."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import icalendar
 from conftest import TODAY
+from textual.containers import VerticalScroll
 from textual.widgets import Static
 
 from tcal import ics
-from tcal.model import Occurrence
+from tcal.model import Calendar, Occurrence
 from tcal.providers.ics_url import split_feed
 from tcal.tz import local_zone
 from tcal.ui.app import TcalApp
@@ -159,7 +161,7 @@ async def test_detail_shows_people_alarms_url_and_zone(make_app) -> None:
         ]
         assert text(app, "alarms").splitlines() == [
             "Alert: 10 min before",
-            "Alert: 1 hour after",
+            "Alert: At end",
             f"Alert: At {datetime(2026, 11, 18, 18, tzinfo=UTC).astimezone(local):%a %-d %b %Y, %H:%M}",
         ]
 
@@ -178,9 +180,57 @@ def test_all_day_alarm_and_durations() -> None:
     texts = [t for t in split_feed(feed) if "UID:national-day" in t]
     [event] = ics.from_ics(texts[0], "h")
     occ = Occurrence(event, event.start, event.end)
-    assert ics.extras(event).alarms == (timedelta(hours=-15),)
-    assert alarm_text(timedelta(hours=-15), occ) == "1 day before at 09:00"
-    assert alarm_text(timedelta(hours=9), occ) == "On the day at 09:00"
+    assert ics.extras(event).alarms == (ics.Alarm(timedelta(hours=-15)),)
+    assert alarm_text(ics.Alarm(timedelta(hours=-15)), occ) == "1 day before at 09:00"
+    assert alarm_text(ics.Alarm(timedelta(hours=9)), occ) == "On the day at 09:00"
     assert duration_text(timedelta(minutes=-90)) == "1 h 30 min"
     assert duration_text(timedelta(days=2)) == "2 days"
     assert duration_text(timedelta(weeks=1)) == "1 week"
+
+
+def test_alarm_related_to_the_end() -> None:
+    [event] = ics.from_ics(MEETING, "work")
+    occ = Occurrence(event, event.start, event.end)
+    assert alarm_text(ics.Alarm(timedelta(), from_end=True), occ) == "At end"
+    assert alarm_text(ics.Alarm(timedelta(minutes=-10), from_end=True), occ) == "10 min before end"
+    assert alarm_text(ics.Alarm(timedelta(minutes=-10)), occ) == "10 min before"
+
+
+async def test_long_detail_scrolls_with_title_and_hints_pinned(make_app) -> None:
+    [event] = ics.from_ics(MEETING, "work")
+    notes = "\n".join(f"{i}. Item" for i in range(1, 20))
+    occ = Occurrence(replace(event, description=notes), event.start, event.end)
+    app = make_app()
+    async with app.run_test(size=(100, 35)) as pilot:
+        app.post_message(EventSelected(occ))
+        await pilot.pause()
+        await pilot.pause()
+        dialog = app.screen.query_one("#dialog", VerticalScroll)
+        assert dialog.max_scroll_y > 0
+        assert text(app, "hints").endswith("j/k scroll")
+        await pilot.press("j", "j")
+        assert dialog.scroll_y == 2
+        for pinned in ("title", "hints"):
+            assert dialog.region.contains_region(app.screen.query_one(f"#{pinned}").region)
+
+
+async def test_edit_and_delete_keep_a_read_only_detail_open(store, make_app) -> None:
+    store.upsert_calendars([Calendar("feed", "Feed", "#888888", readonly=True)])
+    [event] = ics.from_ics(MEETING, "feed")
+    occ = Occurrence(event, event.start, event.end)
+    app = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        app.post_message(EventSelected(occ))
+        await pilot.pause()
+        await pilot.press("e", "x")
+        assert isinstance(app.screen, EventDetail)
+        assert text(app, "hints") == "esc close"
+        assert [str(n.message) for n in app._notifications] == ["Feed is read-only"] * 2
+
+
+def test_demo_has_an_invitation_an_alarm_and_another_zone(provider) -> None:
+    events = {e.summary: e for e in provider.events.values()}
+    invite = ics.extras(events["Budget planning"])
+    assert invite.organizer == "Maria Lang" and len(invite.attendees) == 4 and invite.url
+    assert ics.extras(events["Dentist"]).alarms == (ics.Alarm(timedelta(hours=-1)),)
+    assert str(events["Call with New York"].start.tzinfo) == "America/New_York"

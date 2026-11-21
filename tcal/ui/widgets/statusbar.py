@@ -57,6 +57,9 @@ class StatusBar(TcalWidget):
             case SyncState.SYNCING:
                 frame = SPINNER[int(monotonic() * 10) % len(SPINNER)]
                 return Text(f"{frame} syncing…", style=p.primary)
+            case SyncState.SYNCED if status.failed_feeds:
+                feeds = ", ".join(status.failed_feeds)[:MAX_ERROR]
+                return Text(f"⚠ synced {status.last_sync:%H:%M} · {feeds} failed", style=p.yellow)
             case SyncState.SYNCED:
                 return Text(f"✓ synced {status.last_sync:%H:%M}", style=p.green)
             case SyncState.OFFLINE:
