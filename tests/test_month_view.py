@@ -7,7 +7,7 @@ from test_views import SIZE, RecordingApp
 from tcal.model import Event, Occurrence
 from tcal.store import Store
 from tcal.ui.calgrid import month_weeks
-from tcal.ui.messages import EventSelected
+from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.widgets.month_view import Grid, MonthView, layout_week
 
 WEEK = month_weeks(2026, 11, 0)[3]  # Mon 16 .. Sun 22 Nov 2026
@@ -94,3 +94,24 @@ async def test_month_cursor_reaches_todays_events(app: RecordingApp) -> None:
             seen.add((view.selected.summary, app.state.day))
         assert ("Conference", TODAY) in seen
         assert all(d.month == TODAY.month for _, d in seen)  # stays in the shown month
+
+
+async def test_month_double_click_requests_all_day_event(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("m")
+        view = app.query_one(MonthView)
+        grid = view.grid()
+        week, column = 1, 2  # Wed 4 Nov
+        target = grid.weeks[week][column]
+        y = grid.tops[week] + grid.rule + grid.slots(week)  # the cell's last chip line
+        offset = (grid.xs[column] + 2 + view.gutter.left, y + view.gutter.top)
+        await pilot.click(MonthView, offset=offset, times=2)
+        assert app.state.day == target and len(app.posted) == 1
+        assert isinstance(app.posted[0], NewEventRequested) and app.posted[0].start == target
+
+
+async def test_month_chip_times_are_zero_padded(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("m")
+        rendered = str(app.query_one(MonthView).render())
+        assert "09:00" in rendered and " 9:00" not in rendered

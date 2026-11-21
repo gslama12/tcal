@@ -9,7 +9,7 @@ from textual.app import RenderResult
 from tcal.model import Occurrence
 from tcal.ui.calgrid import by_day, month_weeks, occurrence_days, weekday_names
 from tcal.ui.keys import EVENT_BINDINGS
-from tcal.ui.messages import EventSelected
+from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.timelayout import is_bar, layout_bars
 from tcal.ui.widgets.base import join_lines
 from tcal.ui.widgets.day_cursor import DayCursorView
@@ -85,7 +85,8 @@ class MonthView(DayCursorView):
     h/j/k/l move the selected day, n/p select the shown events (``selected``),
     enter opens the selected event (``EventSelected``) or else the day in the
     Day view; a click on the day number or "+N more" opens the day, on an event
-    selects and opens it.
+    selects and opens it; a double-click on a cell's empty space requests a new
+    all-day event on that day (``NewEventRequested``).
     """
 
     BINDINGS = EVENT_BINDINGS
@@ -130,6 +131,10 @@ class MonthView(DayCursorView):
         self._picked = occ
         self.tcal.select_date(day)
         self.refresh()
+
+    def select(self, occ: Occurrence) -> None:
+        """Select ``occ`` on its first day (switching the month if needed)."""
+        self._pick(occ, occ.start.date())
 
     def action_cycle(self, step: int) -> None:
         stops = self._stops()
@@ -236,7 +241,7 @@ class MonthView(DayCursorView):
                 style = Style(color=p.background1, bgcolor=color, bold=True, reverse=selected)
                 text.append(label, style=style)
             else:
-                time = f"{chip.start:%-H:%M} " if chip.start.date() == day else ""
+                time = f"{chip.start:%H:%M} " if chip.start.date() == day else ""
                 text.append(f" {time}", style=Style(color=color, bold=True, reverse=selected))
                 text.append(chip.summary, style=Style(color=color, reverse=selected))
         text.truncate(width, pad=True)
@@ -259,3 +264,5 @@ class MonthView(DayCursorView):
         elif isinstance(chip, Occurrence):
             self._pick(chip, day)
             self.post_message(EventSelected(chip))
+        elif event.chain == 2:
+            self.post_message(NewEventRequested(day))

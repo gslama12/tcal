@@ -9,7 +9,14 @@ from tcal.store import Store
 from tcal.tz import local_zone
 from tcal.ui.messages import EventSelected
 from tcal.ui.state import AppState, ViewMode
-from tcal.ui.widgets.schedule_view import CHUNK_DAYS, ScheduleView, build_rows, time_range
+from tcal.ui.widgets.schedule_view import (
+    CHUNK_DAYS,
+    SCROLL_LINES,
+    ScheduleView,
+    build_rows,
+    day_of,
+    time_range,
+)
 
 ZONE = local_zone()
 
@@ -104,3 +111,37 @@ async def test_schedule_screenshot(app: RecordingApp, tmp_path) -> None:
         text = app.query_one(ScheduleView).render()
         assert "Wed 18 Nov" in str(text) and "Room 4" in str(text)
         app.save_screenshot(str(tmp_path / "schedule.svg"))
+
+
+def test_day_of_multi_day_events() -> None:
+    trip = occ(TODAY, "00:00", "00:00", TODAY + timedelta(days=3))
+    assert [day_of(trip, TODAY + timedelta(days=i)) for i in range(3)] == [
+        "Day 1/3",
+        "Day 2/3",
+        "Day 3/3",
+    ]
+    assert day_of(occ(TODAY, "09:00", "10:00"), TODAY) == ""
+
+
+async def test_schedule_scrolls_into_the_past(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("s")
+        view = app.query_one(ScheduleView)
+        assert view.selected is not None and view.selected.summary == "Anna's birthday"
+        await pilot.press("k")  # before the first loaded day: earlier days are loaded
+        assert view._start < TODAY and app.state.day < TODAY
+        assert view.selected is not None and view.selected.start.date() < TODAY
+        assert view._cursor is not None
+        assert view._top <= view._cursor < view._top + view.content_size.height
+        await pilot.press("j")
+        assert view.selected is not None and view.selected.summary == "Anna's birthday"
+        start = view._start
+        for _ in range(SIZE[1]):
+            view._scroll(-SCROLL_LINES)  # the wheel step: at the top it loads earlier days
+        assert view._start < start and view._top >= 0
+
+
+async def test_schedule_shows_position_in_multi_day_events(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("s")
+        assert "Conference (Day 3/3)" in str(app.query_one(ScheduleView).render())

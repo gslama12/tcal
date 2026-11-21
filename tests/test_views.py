@@ -58,6 +58,8 @@ async def test_minical_keyboard_and_click(app: RecordingApp) -> None:
         assert app.state.day == TODAY  # only enter commits
         await pilot.press("enter")
         assert app.state.day == TODAY + timedelta(days=8)
+        assert app.focused is app.query_one(f"#{app.state.view.value}")  # enter focuses the view
+        minical.focus()
         await pilot.press("H")
         assert minical.cursor == date(2026, 10, 26)
         assert app.state.day == TODAY + timedelta(days=8)

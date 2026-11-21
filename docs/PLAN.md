@@ -189,7 +189,8 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   weekday means the next one after today, `+2w` counts from today; `+Ny` works besides d/w/m.
 - **G2 Search:** searches the visible calendars over the sync window (today − past_months ..
   + future_months); a series is listed once (its next instance). `app.show_occurrence(occ)`
-  opens the day view with `occ` selected via the new public `TimeGrid.select(occ)`.
+  keeps the current view (QA2 #7): goes to `occ`'s day, selects it via `select(occ)`
+  (TimeGrid / MonthView / ScheduleView) and opens its detail, like Google.
 
 ### Detail notes (package 5, detail)
 
