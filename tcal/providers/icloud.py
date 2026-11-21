@@ -24,7 +24,7 @@ from lxml import etree
 
 from tcal import ics
 from tcal.model import Calendar, Event
-from tcal.providers.base import ConflictError, ProviderError
+from tcal.providers.base import AuthError, ConflictError, ProviderError
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +72,11 @@ class ICloudProvider:
     def connect(cls, apple_id: str, password: str, url: str = ICLOUD_URL) -> "ICloudProvider":
         """No network yet: the first request discovers the calendar home."""
         return cls(DAVClient(url=url, username=apple_id, password=password, timeout=TIMEOUT))
+
+    @property
+    def principal_url(self) -> str:
+        """The signed-in user's principal (the first request, so it checks the login)."""
+        return str(_call("principal discovery", lambda: self.client.principal().url))
 
     @property
     def home_url(self) -> str:
@@ -186,7 +191,7 @@ def _call(what: str, request: Callable[[], T]) -> T:
     try:
         return request()
     except AuthorizationError as e:
-        raise ProviderError(
+        raise AuthError(
             f"{what}: authentication failed (HTTP {e.status or 401}) - use your Apple ID "
             "e-mail and an app-specific password from appleid.apple.com"
         ) from e

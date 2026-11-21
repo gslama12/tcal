@@ -258,8 +258,18 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **I3 Robustness:** client timeout 60 s (caldav default 10 s); REPORT per ~quarter, resources
   deduped by href; any unreadable resource is skipped with a warning; caldav `AuthorizationError`/
   `DAVError` → `ProviderError` (auth hint mentions the app-specific password).
-- **Open:** `tcal doctor` command, iCloud-like XML/ICS fixture tests for the above, ics.py
-  edge cases (all-day DTEND == DTSTART).
+- **I4 Doctor (feat-doctor):** `tcal doctor` (`tcal/doctor.py`) runs account → password
+  (`credentials.find_password` names the source) → sign-in (`ICloudProvider.principal_url`) →
+  calendar home → calendars → this week's occurrences per calendar → write access (from the
+  privilege set, nothing is written); stops at the first failure with hints, exit 1.
+  `providers.base.AuthError(ProviderError)` marks rejected credentials (401/403) so the
+  app-specific-password hint can be shown.
+- **I5 Fixtures:** `tests/icloud_http.py` is a fake iCloud *below* caldav (patched
+  `DAVClient.session.request`, 401 + `WWW-Authenticate` without Basic auth, home-set on
+  `p42-caldav.icloud.com:443`, `#RRGGBBAA`, VTODO list, 404 propstats, TZID / EXDATE / override
+  / all-day ICS); used by `test_icloud_http.py` and `test_doctor.py`.
+- **I6 ics edge cases:** an all-day event without DTEND or with DTEND <= DTSTART lasts one day;
+  a timed event ending before it starts is clamped to an instant.
 
 ### Performance notes (feat-perf)
 
