@@ -151,7 +151,7 @@ async def test_year_view(app: RecordingApp) -> None:
         await pilot.press("y", "j", "l")
         assert app.state.day == TODAY + timedelta(days=8)
         view = app.query_one(YearView)
-        layout = Layout.build(*view.content_size, month=10)
+        layout = Layout.build(*view.content_size)
         x, y = layout.origin(2)  # March title
         await pilot.click(YearView, offset=content(view, x + 1, y))
         assert app.state.view is ViewMode.MONTH and app.state.day == date(2026, 3, 26)
@@ -166,3 +166,14 @@ async def test_screenshot_sanity(app: RecordingApp) -> None:
             await pilot.pause()
             svg = app.export_screenshot().replace("&#160;", " ")
             assert expected in svg and "My calendars" in svg and "November" in svg
+
+
+async def test_year_view_compact_click(app: RecordingApp) -> None:
+    async with app.run_test(size=(100, 35)) as pilot:
+        await pilot.press("y")
+        view = app.query_one(YearView)
+        layout = Layout.build(*view.content_size)
+        assert not layout.header  # QA #7: too small for weekday initials
+        x, y = layout.origin(11)  # December: first week row is right below the title
+        await pilot.click(YearView, offset=content(view, x + 3 * layout.cell, y + 1))
+        assert app.state.day == date(2026, 12, 3)
