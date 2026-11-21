@@ -249,3 +249,13 @@ def layout_bars(occs: Sequence[Occurrence], days: Sequence[date]) -> list[Bar]:
             spans.append((occ, first, last))
     lanes = pack_lanes([(first, last) for _, first, last in spans])
     return [Bar(occ, f, la, lane) for (occ, f, la), lane in zip(spans, lanes, strict=True)]
+
+
+def sub_columns(block: Block, xs: Sequence[int]) -> tuple[int, int]:
+    """[x0, x1) of ``block`` in its day column (``xs``: the column dividers), leaving
+    a 1-col gap to its right neighbour (the last one's gap is the divider)."""
+    x0, x1 = xs[block.day] + 1, xs[block.day + 1]
+    inner, end = x1 - x0 + 1, block.col + block.span
+    left = x0 + inner * block.col // block.cols
+    right = x0 + inner * end // block.cols - 1
+    return left, min(right, x1)

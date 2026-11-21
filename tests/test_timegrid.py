@@ -12,9 +12,10 @@ from tcal.config import load_config
 from tcal.source import StoreSource
 from tcal.store import Store
 from tcal.ui import app as app_module
-from tcal.ui import messages
+from tcal.ui import messages, timepaint
 from tcal.ui.app import TcalApp
 from tcal.ui.state import ViewMode
+from tcal.ui.timelayout import sub_columns
 from tcal.ui.widgets import timegrid
 from tcal.ui.widgets.timegrid import AXIS, DayView, TimeGrid, WeekView
 
@@ -300,7 +301,7 @@ async def test_overlaps_pack_google_style(app: RecordingApp) -> None:
         assert (review.col, review.cols) == (0, 2)
         assert (one.col, one.cols) == (dentist.col, dentist.cols) == (1, 2)
         xs = grid._columns()
-        left, right = grid._sub_columns(review, xs), grid._sub_columns(one, xs)
+        left, right = sub_columns(review, xs), sub_columns(one, xs)
         assert right[0] - left[1] == 1  # one-column gap
 
 
@@ -374,7 +375,7 @@ async def test_markers_and_hour_lines_leave_events_alone(app: RecordingApp) -> N
         grid = app.query_one(WeekView)
         xs, lines = grid._columns(), text(grid)
         for block in grid._block_list():
-            left, right = grid._sub_columns(block, xs)
+            left, right = sub_columns(block, xs)
             for row in range(max(block.top, grid._top_row()), block.bottom):
                 y = grid._header_height() + row - grid._top_row()
                 if y < len(lines):
@@ -384,11 +385,11 @@ async def test_markers_and_hour_lines_leave_events_alone(app: RecordingApp) -> N
 
 
 def test_wrap_breaks_titles_at_words() -> None:
-    assert timegrid._wrap("Design review", 8, 3) == ["Design", "review"]
-    assert timegrid._wrap("Design review", 4, 3) == ["Des…", "rev…"]
-    assert timegrid._wrap("Release party tonight", 13, 1) == ["Release part…"]
-    assert timegrid._wrap("Release party tonight", 6, 2) == ["Relea…", "party…"]
-    assert timegrid._wrap("", 5, 2) == []
+    assert timepaint.wrap("Design review", 8, 3) == ["Design", "review"]
+    assert timepaint.wrap("Design review", 4, 3) == ["Des…", "rev…"]
+    assert timepaint.wrap("Release party tonight", 13, 1) == ["Release part…"]
+    assert timepaint.wrap("Release party tonight", 6, 2) == ["Relea…", "party…"]
+    assert timepaint.wrap("", 5, 2) == []
 
 
 async def test_tall_blocks_wrap_the_title_before_the_time(app: RecordingApp) -> None:

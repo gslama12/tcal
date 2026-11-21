@@ -9,19 +9,16 @@ Layout (content area of the widget)::
          │        │ ██████ │         events as colored blocks, now-line, cursor
 
 The geometry (``TimeScale``, ``layout_blocks``, ``layout_bars``, ...) lives in
-``tcal.ui.timelayout``; ``TimeGrid`` keeps the cursor / scroll / zoom and draws
-with the line API from a cached frame.
+``tcal.ui.timelayout`` and the drawing in ``tcal.ui.timepaint``; ``TimeGrid`` keeps
+the cursor / scroll / zoom / selection and hands a ``GridFrame`` to ``paint`` (cached
+until the next redraw).
 Cursor and scroll position are stored in minutes so they survive zooming.
 """
 
 from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from fractions import Fraction
-from functools import lru_cache
 
-from rich.cells import cell_len
-from rich.segment import Segment
-from rich.style import Style
 from textual import events
 from textual.strip import Strip
 
@@ -38,10 +35,11 @@ from tcal.ui.timelayout import (
     is_bar,
     layout_bars,
     layout_blocks,
+    sub_columns,
 )
-from tcal.ui.widgets.base import CalendarView, fit
+from tcal.ui.timepaint import AXIS, GridFrame, paint
+from tcal.ui.widgets.base import CalendarView
 
-AXIS = 6  # width of the time axis: "HH:MM "
 MAX_LANES = 3  # all-day strip rows shown at most
 SCROLL_ROWS = 2  # rows per mouse-wheel step
 MIN_EVENT_WIDTH = 4  # narrowest side-by-side event (+ 1-col gap); else the cluster collapses
@@ -51,69 +49,6 @@ HEADER_FORMATS = ("%A, {day} %B", "%A {day}", "%a {day}", "{day}")  # widest fir
 def now() -> datetime:
     """Current local time (patched in tests)."""
     return datetime.now().astimezone()
-
-
-# ----- drawing --------------------------------------------------------------
-
-
-@lru_cache(maxsize=256)
-def _style(fg: str, bg: str, bold: bool = False, reverse: bool = False) -> Style:
-    return Style(color=fg, bgcolor=bg, bold=bold, reverse=reverse)
-
-
-def _readable(hex_color: str, *colors: str) -> str:
-    """The darkest or lightest of ``colors``, whichever reads better on ``hex_color``
-    (order-independent, so light themes work too)."""
-    dark, *_, light = sorted(colors, key=_luma)
-    return dark if _luma(hex_color) > 0.6 else light
-
-
-def _luma(hex_color: str) -> float:
-    r, g, b = (int(hex_color.lstrip("#")[i : i + 2], 16) for i in (0, 2, 4))
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255
-
-
-class _Canvas:
-    """A width x height grid of cells (char + style), converted to Strips."""
-
-    def __init__(self, width: int, height: int, style: Style) -> None:
-        self.width = width
-        self.chars = [[" "] * width for _ in range(height)]
-        self.styles = [[style] * width for _ in range(height)]
-
-    def fill(self, y: int, x0: int, x1: int, style: Style, char: str = " ") -> None:
-        x0, x1 = max(0, x0), min(self.width, x1)
-        self.chars[y][x0:x1] = [char] * (x1 - x0)
-        self.styles[y][x0:x1] = [style] * (x1 - x0)
-
-    def text(self, y: int, x0: int, x1: int, text: str, style: Style | None = None) -> None:
-        """Write ``text`` into [x0, x1), clipped; wide chars take two cells."""
-        x, x1 = x0, min(self.width, x1)
-        for ch in text:
-            w = cell_len(ch)
-            if w == 0:
-                continue
-            if x + w > x1:
-                break
-            self.chars[y][x : x + w] = [ch] + [""] * (w - 1)
-            if style is not None:
-                self.styles[y][x : x + w] = [style] * w
-            x += w
-
-    def strips(self) -> list[Strip]:
-        strips = []
-        for chars, styles in zip(self.chars, self.styles, strict=True):
-            segments: list[Segment] = []
-            run_start = 0
-            for x in range(1, self.width + 1):
-                if x == self.width or styles[x] != styles[run_start]:
-                    segments.append(Segment("".join(chars[run_start:x]), styles[run_start]))
-                    run_start = x
-            strips.append(Strip(segments, self.width))
-        return strips
-
-
-# ----- widget ---------------------------------------------------------------
 
 
 class TimeGrid(CalendarView):
@@ -237,13 +172,6 @@ class TimeGrid(CalendarView):
         xs = self._columns()
         inner = min(b - a - 1 for a, b in zip(xs, xs[1:], strict=False))
         return max(1, (inner + 1) // (MIN_EVENT_WIDTH + 1))
-
-    def _sub_columns(self, block: Block, xs: list[int]) -> tuple[int, int]:
-        x0, x1 = xs[block.day] + 1, xs[block.day + 1]
-        inner, end = x1 - x0 + 1, block.col + block.span
-        left = x0 + inner * block.col // block.cols
-        right = x0 + inner * end // block.cols - 1  # 1-col gap (the last one is the divider)
-        return left, min(right, x1)
 
     # ----- cursor & selection --------------------------------------------
 
@@ -421,7 +349,7 @@ class TimeGrid(CalendarView):
                     for b in self._block_list()
                     if b.day == column
                     and b.top <= row < b.bottom
-                    and self._sub_columns(b, xs)[0] <= x < self._sub_columns(b, xs)[1]
+                    and sub_columns(b, xs)[0] <= x < sub_columns(b, xs)[1]
                 ),
                 None,
             )
@@ -443,232 +371,27 @@ class TimeGrid(CalendarView):
 
     def render_line(self, y: int) -> Strip:
         if self._lines is None or len(self._lines) != self.size.height:
-            self._lines = self._render_frame()
+            self._lines = paint(self._frame(), *self.size)
         return self._lines[y] if y < len(self._lines) else Strip.blank(self.size.width)
 
-    def _render_frame(self) -> list[Strip]:
-        width, height = self.size
-        if width <= AXIS or height <= self._header_height():
-            return [Strip.blank(width)] * height
-        p = self.tcal.palette
-        canvas = _Canvas(width, height, _style(p.foreground1, p.background1))
-        xs = self._columns()
-        self._draw_header(canvas, xs)
-        self._draw_strip(canvas, xs)
-        self._draw_grid(canvas, xs)
-        return canvas.strips()
-
-    def _draw_header(self, canvas: _Canvas, xs: list[int]) -> None:
-        p = self.tcal.palette
-        today, selected = now().date(), self.tcal.state.day
-        days = self._load()[0]
-        narrowest = min(b - a - 1 for a, b in zip(xs, xs[1:], strict=False))
-        formats = self.header_formats
-        fmt = next(
-            (f for f in formats if max(len(_header(f, d)) for d in days) + 2 <= narrowest),
-            formats[-1],
+    def _frame(self) -> GridFrame:
+        days, _, bars = self._load()
+        return GridFrame(
+            days=days,
+            xs=self._columns(),
+            scale=self.scale,
+            top=self._top_row(),
+            strip_rows=self._strip_rows(),
+            bars=bars,
+            blocks=self._block_list(),
+            day=self.tcal.state.day,
+            cursor_row=self._cursor_row(),
+            selected=self.selected,
+            now=now(),
+            header_formats=self.header_formats,
+            palette=self.tcal.palette,
+            color=self.tcal.calendar_color,
         )
-        for i, day in enumerate(days):
-            x0, x1 = xs[i] + 1, xs[i + 1]
-            label = f" {_header(fmt, day)} "
-            if day == today:
-                style = _style(p.background1, p.primary, bold=True)
-            elif day == selected:
-                style = _style(p.foreground3, p.background3, bold=True)
-            else:
-                style = _style(p.foreground2, p.background1)
-            start = x0 + max(0, (x1 - x0 - len(label)) // 2)
-            canvas.text(0, start, x1, label, style)
-
-    def _draw_strip(self, canvas: _Canvas, xs: list[int]) -> None:
-        p = self.tcal.palette
-        rows, divider = self._strip_rows(), _style(p.background3, p.background1)
-        for y in range(1, rows + 1):
-            for x in xs[:-1]:
-                canvas.fill(y, x, x + 1, divider, "│")
-        selected, bars = self.selected, self._bars()
-        hidden = sum(1 for bar in bars if bar.lane >= rows)
-        if hidden:
-            canvas.text(rows, 0, AXIS, f"+{hidden}", _style(p.foreground1, p.background1))
-        days = self._load()[0]
-        n = len(days)
-        for bar in bars:
-            if bar.lane >= rows:
-                continue
-            color = self.tcal.calendar_color(bar.occ.calendar_id)
-            fg = _readable(color, p.background1, p.foreground3)
-            style = _style(fg, color, bold=True)
-            y, x0, x1 = 1 + bar.lane, xs[bar.first] + 1, xs[bar.last]
-            canvas.fill(y, x0, x1, style)
-            before = "◂" if bar.occ.start.date() < days[0] else " "
-            if bar.occ == selected:  # accent bar, as for selected blocks
-                before = "▌" if before == " " else before
-            after = bar.last == n and bar.occ.end > _midnight(days[-1] + timedelta(days=1))
-            title = fit(_clean(bar.occ.summary), x1 - x0 - 1 - after)
-            canvas.text(y, x0, x1, f"{before}{title}")
-            if bar.occ == selected:
-                canvas.text(y, x0, x0 + 1, before, _style(p.foreground3, color, bold=True))
-            if after:
-                canvas.text(y, x1 - 1, x1, "▸")
-        sep = 1 + rows
-        canvas.fill(sep, 0, canvas.width, divider, "─")
-        for x in xs[:-1]:
-            canvas.fill(sep, x, x + 1, divider, "┼")
-
-    def _draw_grid(self, canvas: _Canvas, xs: list[int]) -> None:
-        p = self.tcal.palette
-        scale, header, top = self.scale, self._header_height(), self._top_row()
-        days = self._load()[0]
-        bottom = min(scale.total_rows, top + len(canvas.chars) - header)
-        divider = _style(p.background3, p.background1)  # also the hour lines
-        label = _style(p.foreground1, p.background1)
-        cursor = _style(p.background1, p.primary)
-        cursor_label = _style(p.primary, p.background1, bold=True)
-        hour_rows = {scale.row_of(hour * 60): hour for hour in range(24)}
-        sel_col, cursor_row = days.index(self.tcal.state.day), self._cursor_row()
-        current = now()
-        now_col = days.index(current.date()) if current.date() in days else None
-        now_min = current.hour * 60 + current.minute
-
-        for row in range(top, bottom):
-            y = header + row - top
-            hour_start = row in hour_rows
-            if row == cursor_row:
-                minute = scale.minute_of(row)
-                canvas.text(y, 0, AXIS, f"{minute // 60:02d}:{minute % 60:02d}", cursor_label)
-            elif hour_start:
-                canvas.text(y, 0, AXIS, f"{hour_rows[row]:02d}:00", label)
-            for i, x in enumerate(xs[:-1]):
-                canvas.fill(y, x, x + 1, divider, "│")
-                if hour_start and scale.rows_per_hour >= 2:
-                    canvas.fill(y, x + 1, xs[i + 1], divider, "╌")
-            if row == cursor_row:
-                canvas.fill(y, xs[sel_col] + 1, xs[sel_col + 1], cursor)
-            if now_col is not None and row == scale.row_of(now_min):
-                # ● replaces the column's divider (never covered); events drawn later cover
-                # the line, so it never hides their text. The hour label stays.
-                red = Style(color=p.red, bold=True)
-                for x in range(xs[now_col], xs[now_col + 1]):
-                    canvas.chars[y][x] = "●" if x == xs[now_col] else "─"
-                    canvas.styles[y][x] = canvas.styles[y][x] + red
-
-        selected = self.selected
-        for block in self._block_list():
-            self._draw_block(canvas, xs, block, top, bottom, header, selected)
-        self._draw_hidden(canvas, xs, top, bottom, header)
-
-    def _draw_hidden(
-        self, canvas: _Canvas, xs: list[int], top: int, bottom: int, header: int
-    ) -> None:
-        """``▲ N earlier`` / ``▼ N later`` per column for events scrolled out of view,
-        one row further in where the edge row holds the column's cursor or now-line."""
-        p = self.tcal.palette
-        style = _style(p.foreground2, p.background2)
-        days, current = self._load()[0], now()
-        taken = {(days.index(self.tcal.state.day), self._cursor_row())}
-        if current.date() in days:
-            taken.add(
-                (days.index(current.date()), self.scale.row_of(current.hour * 60 + current.minute))
-            )
-        for i in range(len(xs) - 1):
-            blocks = [b for b in self._block_list() if b.day == i]
-            x1 = xs[i + 1]
-            for row, arrow, word, count in (
-                (top, "▲", "earlier", sum(len(b.occs) for b in blocks if b.bottom <= top)),
-                (bottom - 1, "▼", "later", sum(len(b.occs) for b in blocks if b.top >= bottom)),
-            ):
-                while (i, row) in taken and top <= row + (1 if arrow == "▲" else -1) < bottom:
-                    row += 1 if arrow == "▲" else -1
-                # right of the events on the edge row (plus a gap), never over them
-                ends = [self._sub_columns(b, xs)[1] + 1 for b in blocks if b.top <= row < b.bottom]
-                x0, y = max(ends, default=xs[i] + 1), header + row - top
-                if count:
-                    label = next(
-                        (
-                            t
-                            for t in (f" {arrow} {count} {word} ", f"{arrow}{count}", arrow)
-                            if len(t) <= x1 - x0
-                        ),
-                        "",
-                    )
-                    canvas.text(y, x1 - len(label), x1, label, style)
-
-    def _draw_block(
-        self,
-        canvas: _Canvas,
-        xs: list[int],
-        block: Block,
-        top: int,
-        bottom: int,
-        header: int,
-        selected_occ: Occurrence | None,
-    ) -> None:
-        first, last = max(block.top, top), min(block.bottom, bottom)
-        if first >= last:
-            return
-        p, selected = self.tcal.palette, selected_occ in block.occs
-        occ = selected_occ if selected and selected_occ is not None else block.occ
-        color = self.tcal.calendar_color(occ.calendar_id)
-        fg = _readable(color, p.background1, p.foreground3)
-        style = _style(fg, color, bold=selected)
-        x0, x1 = self._sub_columns(block, xs)
-        pad = " " if x1 - x0 >= 6 or selected else ""
-        width = x1 - x0 - len(pad)
-        title, span = _clean(occ.summary), _span(occ, width)
-        if block.group:
-            more = f" +{len(block.group) - 1}"
-            label = fit(title, width - len(more)) + more if width - len(more) >= 2 else ""
-            texts = [label or fit(f"{len(block.group)}×", width), span]
-        elif block.bottom - block.top == 1:
-            texts = [fit(f"{occ.start:%H:%M} {title}" if width >= 11 else title, width)]
-        else:  # the title wraps over the lines the time doesn't need, then the location
-            height = block.bottom - block.top
-            lines = _wrap(title, width, max(1, height - 1 if span else height))
-            texts = lines + [fit(t, width) for t in (span, _clean(occ.event.location)) if t]
-        gaps = [x for x in (x0 - 1, x1) if xs[block.day] < x < xs[block.day + 1]]
-        for row in range(first, last):
-            y = header + row - top
-            canvas.fill(y, x0, x1, style)
-            for x in gaps:  # the gap beside an event stays blank (no hour line)
-                if canvas.chars[y][x] == "╌":
-                    canvas.chars[y][x] = " "
-            index = row - first
-            if index < len(texts):
-                bold = _style(fg, color, bold=True) if index == 0 else None
-                canvas.text(y, x0, x1, pad + texts[index], bold)
-            if selected:  # Google-like: keep the colour, add a bright accent bar + bold text
-                canvas.text(y, x0, x0 + 1, "▌", _style(p.foreground3, color, bold=True))
-
-
-def _header(fmt: str, day: date) -> str:
-    return day.strftime(fmt).replace("{day}", str(day.day))
-
-
-def _midnight(day: date) -> datetime:
-    return datetime.combine(day, time(), now().tzinfo)
-
-
-def _clean(text: str) -> str:
-    return " ".join(text.split())
-
-
-def _wrap(text: str, width: int, max_lines: int) -> list[str]:
-    """``text`` word-wrapped to ``width`` cells in at most ``max_lines`` lines; a word
-    too long for a line, and the last line when text is left over, end with ``…``."""
-    lines: list[str] = []
-    words = text.split()
-    while words and len(lines) < max_lines - 1:
-        line = words.pop(0)
-        while words and cell_len(f"{line} {words[0]}") <= width:
-            line += " " + words.pop(0)
-        lines.append(fit(line, width))
-    return [*lines, fit(" ".join(words), width)] if words else lines
-
-
-def _span(occ: Occurrence, width: int) -> str:
-    """``HH:MM–HH:MM``, just the start if that doesn't fit, else nothing (digits never cut)."""
-    start, full = f"{occ.start:%H:%M}", f"{occ.start:%H:%M}–{occ.end:%H:%M}"
-    return next((t for t in (full, start) if len(t) <= width), "")
 
 
 class DayView(TimeGrid):
