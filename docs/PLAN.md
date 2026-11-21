@@ -165,8 +165,9 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 
 ### Goto / search notes (package 5)
 
-- **G1 Goto:** `tcal/ui/screens/goto.py` `parse_date(text, today)`; dates without a year are in
-  today's year, a weekday means the next one after today; `+Ny` works besides d/w/m.
+- **G1 Goto:** `tcal/ui/screens/goto.py` `parse_date(text, today)`; everything is relative to
+  the real today, not the selected day (QA #18): dates without a year are in today's year, a
+  weekday means the next one after today, `+2w` counts from today; `+Ny` works besides d/w/m.
 - **G2 Search:** searches the visible calendars over the sync window (today − past_months ..
   + future_months); a series is listed once (its next instance). `app.show_occurrence(occ)`
   opens the day view with `occ` selected via the new public `TimeGrid.select(occ)`.
@@ -193,3 +194,11 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **F3 Keys:** new `[keys] save = ["ctrl+s"]` (priority) and `cancel = ["escape"]`;
   `binding()` gained `priority`. Test apps that record view messages call `prevent_default()`
   so TcalApp's handlers don't also open the form.
+
+### QA fixes (feat-misc)
+
+- **Q1 Undo delete:** `Store.delete_event` returns the event's rows as they were;
+  `Store.restore(rows)` puts them back (cancels an unpushed delete op, else re-creates the
+  resource; a deleted instance updates the series again). `EventSource.restore` passes it
+  through; `app.delete_event` toasts `Deleted "X" · u undo` and `[keys] undo = ["u"]`
+  (`app.undo()`) restores the last delete once.

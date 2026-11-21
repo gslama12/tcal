@@ -122,3 +122,35 @@ def test_pull_keeps_events_with_pending_ops(db: Store) -> None:
     a = db.get_event("a")
     assert a and a.summary == "Local edit"
     assert db.get_event("b") is None  # deleted on the server
+
+
+def test_restore_cancels_unpushed_delete(db: Store) -> None:
+    db.upsert_events("cal", [_event(href="h", etag="1")])
+    db.restore(db.delete_event("e1"))
+    restored = db.get_event("e1")
+    assert restored and (restored.href, restored.etag) == ("h", "1")
+    assert [op.kind for op in db.pending_ops()] == ["update"]
+
+
+def test_restore_after_pushed_delete_creates_again(db: Store) -> None:
+    db.upsert_events("cal", [_event(href="h", etag="1")])
+    rows = db.delete_event("e1")
+    for op in db.pending_ops():
+        db.clear_op(op.id)  # the delete reached the server
+    db.restore(rows)
+    restored = db.get_event("e1")
+    assert restored and restored.href is None
+    assert [op.kind for op in db.pending_ops()] == ["create"]
+
+
+def test_restore_one_occurrence_brings_back_override(db: Store) -> None:
+    master, override = from_ics(SERIES, "cal", "h", "1")
+    db.upsert_events("cal", [master, override])
+    assert override.recurrence_id
+    db.restore(db.delete_event("series-1", override.recurrence_id))
+    saved = db.get_event("series-1")
+    assert saved and override.recurrence_id not in saved.exdates
+    assert "Weekly (moved)" in (saved.raw or "")
+    summaries = {e.summary for e in db.events_between(START, START + timedelta(days=30))}
+    assert summaries == {"Weekly", "Weekly (moved)"}
+    assert [op.kind for op in db.pending_ops()] == ["update"]
