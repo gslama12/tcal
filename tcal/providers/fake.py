@@ -4,7 +4,10 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from itertools import count
 
+from tcal import ics
 from tcal.model import Calendar, Event
+from tcal.providers.base import ConflictError
+from tcal.tz import local_zone
 
 CALENDARS = [
     Calendar("work", "Work", "#5E81AC"),
@@ -16,13 +19,15 @@ CALENDARS = [
 
 
 class FakeProvider:
+    """Behaves like a CalDAV server: events go through iCalendar text, etags are checked."""
+
     def __init__(self, today: date | None = None, demo: bool = True) -> None:
         self.calendars = [replace(c) for c in CALENDARS]
         self.events: dict[str, Event] = {}
         self._etags = count(1)
         if demo:
             for event in demo_events(today or date.today()):
-                self.events[event.uid] = event
+                self._store(event, f"fake://{event.uid}")
 
     def list_calendars(self) -> list[Calendar]:
         return list(self.calendars)
@@ -35,23 +40,33 @@ class FakeProvider:
         ]
 
     def create_event(self, event: Event) -> Event:
-        stored = replace(event, href=f"fake://{event.uid}", etag=str(next(self._etags)))
-        self.events[event.uid] = stored
-        return stored
+        if event.uid in self.events:
+            raise ConflictError(f"{event.uid} exists")
+        return self._store(event, f"fake://{event.uid}")
 
     def update_event(self, event: Event) -> Event:
-        if event.uid not in self.events:
-            raise KeyError(event.uid)
-        stored = replace(event, etag=str(next(self._etags)))
-        self.events[event.uid] = stored
-        return stored
+        self._check_etag(event)
+        return self._store(event, self.events[event.uid].href)
 
     def delete_event(self, event: Event) -> None:
-        del self.events[event.uid]
+        if event.uid in self.events:
+            self._check_etag(event)
+            del self.events[event.uid]
+
+    def _check_etag(self, event: Event) -> None:
+        current = self.events.get(event.uid)
+        if current is None or (event.etag and event.etag != current.etag):
+            raise ConflictError(f"{event.uid} changed on the server")
+
+    def _store(self, event: Event, href: str | None) -> Event:
+        text = ics.to_ics(event)
+        stored = ics.from_ics(text, event.calendar_id, href, str(next(self._etags)))[0]
+        self.events[event.uid] = stored
+        return stored
 
 
 def demo_events(today: date) -> list[Event]:
-    tz = datetime.now().astimezone().tzinfo
+    tz = local_zone()
     monday = today - timedelta(days=today.weekday())
     uids = count(1)
 
