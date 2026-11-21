@@ -27,12 +27,19 @@ uv run ruff check && uv run ruff format --check && uv run mypy
 - `tcal/credentials.py` — password: keyring -> `password_cmd` -> `$TCAL_PASSWORD`.
 - `tcal/source.py` — `EventSource`/`StoreSource`: the only way the UI gets data
   (`calendars()`, `occurrences(start_day, end_day)`, `save_event`, `delete_event`).
-- `tcal/ui/app.py` — `TcalApp`: layout, bindings, data seam, state changes.
+- `tcal/ui/app.py` — `TcalApp`: layout, bindings, data seam (incl. `save_event`/
+  `delete_event`/`undo`), sync, state changes, thin `action_*` methods.
+- `tcal/ui/editing.py` — `Editor` (`app.editor`): event form, quick add, yank/paste/
+  duplicate, moving; `tcal/ui/undo.py` — `UndoHistory` (`app.history`);
+  `tcal/ui/clipboard.py` — pure event transforms (`copy_at`, `shifted`, `instance_of`).
 - `tcal/ui/state.py` — immutable `AppState` (selected `day`, `view`, `hidden_calendars`).
 - `tcal/ui/keys.py` — `binding(action)`: every configurable binding has `id == action`
   from `[keys]`; the app applies the user's keys with `set_keymap`.
 - `tcal/ui/theme.py`, `styles.tcss` — todooit palettes as Textual themes
   (`$background1..3`, `$foreground1..3`, `$red`… plus `$primary`/`$secondary`).
+- `tcal/ui/timelayout.py` — time-grid geometry (`TimeScale`, blocks, bars, `sub_columns`);
+  `tcal/ui/timepaint.py` — pure `paint(GridFrame, w, h)` for Day/Week, on `canvas.Canvas`.
+  `widgets/timegrid.py` keeps cursor/scroll/zoom/selection/mouse only.
 - `tcal/ui/widgets/` — one widget per module; subclass `TcalWidget`/`CalendarView`
   from `base.py` and redraw in `on_state`.
 

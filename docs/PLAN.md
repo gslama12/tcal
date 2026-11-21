@@ -407,3 +407,13 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   (`_wrap`); `▲/▼ N` markers move one row in off the cursor/now row. Month chips/bars end cut
   titles with `…` (`widgets.base.fit`, shared with the grid). "Other calendars" is a rule with
   the title at the border title's column (the failing-feed marker is QA3 #5, not here).
+
+### Structure cleanup (feat-rev2a)
+
+- `app.py` split by responsibility: editing flows → `ui/editing.Editor` (composition,
+  `app.editor`; the app keeps `new_event`/`edit_event`/`edit_occurrence` as one-line
+  public entry points and the `action_*` methods, since bindings live on the app);
+  undo stack + move run → `ui/undo.UndoHistory` (`app.history`); `instance_of` → `clipboard.py`.
+- `timegrid.py` split: drawing → `ui/timepaint.py` (pure, takes a `GridFrame` snapshot),
+  `Canvas` → `ui/canvas.py`, `sub_columns` → `timelayout.py`; its private `_readable`/`_luma`
+  duplicated `theme.text_on`/`luma` and are gone. Behaviour unchanged.
