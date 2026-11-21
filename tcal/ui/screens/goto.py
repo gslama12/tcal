@@ -96,7 +96,7 @@ class GotoScreen(ModalScreen[date]):
         self.today = today
 
     def compose(self) -> ComposeResult:
-        prompt = Input(placeholder="today, fri, +2w, 24.12., dec 24, 2026-12-24")
+        prompt = Input(placeholder="fri, +2w (from today), 24.12., dec 24, 2026-12-24")
         prompt.border_title = "Go to date"
         yield prompt
 
