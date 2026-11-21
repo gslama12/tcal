@@ -1,0 +1,52 @@
+# tcal default configuration.
+# Copy any part of this to ~/.config/tcal/config.toml (or $TCAL_HOME/config.toml);
+# your file is merged over these defaults, so you only need what you change.
+
+[account]
+apple_id = ""                          # your Apple ID e-mail
+caldav_url = "https://caldav.icloud.com"
+password_cmd = ""                      # optional shell command printing the app-specific password
+
+[view]
+day_start = "06:30"                    # first time shown in day/week view (scroll for earlier)
+day_end = "24:00"                      # last time shown in day/week view
+rows_per_hour = 0                      # time-grid zoom, 1..8; 0 = fit the terminal height
+week_start = "monday"                  # monday .. sunday
+default_view = "week"                  # day | week | month | year
+
+[sync]
+interval = 300                         # seconds between background syncs
+past_months = 3                        # sync window before today
+future_months = 12                     # sync window after today
+
+[theme]
+name = "nord"                          # nord | tokyo-night
+
+# action -> list of keys (Textual key names: "plus", "minus", "slash",
+# "question_mark", "ctrl+up", "H" for shift+h, ...). Overriding an action
+# replaces its whole key list.
+[keys]
+cursor_left = ["h", "left"]
+cursor_down = ["j", "down"]
+cursor_up = ["k", "up"]
+cursor_right = ["l", "right"]
+prev_period = ["H"]
+next_period = ["L"]
+today = ["t"]
+view_day = ["d"]
+view_week = ["w"]
+view_month = ["m"]
+view_year = ["y"]
+zoom_in = ["plus", "ctrl+up"]
+zoom_out = ["minus", "ctrl+down"]
+open = ["enter"]
+new_event = ["a", "o"]
+edit_event = ["e"]
+delete_event = ["x"]
+goto_date = ["g"]
+search = ["slash"]
+sync = ["r"]
+focus_calendars = ["c"]
+focus_next = ["tab"]
+help = ["question_mark"]
+quit = ["q"]
