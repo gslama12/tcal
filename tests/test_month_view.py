@@ -115,3 +115,12 @@ async def test_month_chip_times_are_zero_padded(app: RecordingApp) -> None:
         await pilot.press("m")
         rendered = str(app.query_one(MonthView).render())
         assert "09:00" in rendered and " 9:00" not in rendered
+
+
+async def test_cut_chips_end_with_an_ellipsis(app: RecordingApp) -> None:
+    async with app.run_test(size=(100, 35)) as pilot:
+        await pilot.press("m")
+        await pilot.pause()
+        rendered = str(app.query_one(MonthView).render())
+        assert "09:00 Stand…" in rendered and "Call m…" in rendered
+        assert "09:00 Standu│" not in rendered and "Standup│" not in rendered
