@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 from conftest import TODAY
+from rich.style import Style
 from test_views import SIZE, RecordingApp
 
 from tcal.model import Event, Occurrence
@@ -9,6 +10,7 @@ from tcal.store import Store
 from tcal.tz import local_zone
 from tcal.ui.messages import EventSelected
 from tcal.ui.state import AppState, ViewMode
+from tcal.ui.widgets import schedule_view
 from tcal.ui.widgets.schedule_view import (
     CHUNK_DAYS,
     SCROLL_LINES,
@@ -145,3 +147,71 @@ async def test_schedule_shows_position_in_multi_day_events(app: RecordingApp) ->
     async with app.run_test(size=SIZE) as pilot:
         await pilot.press("s")
         assert "Conference (Day 3/3)" in str(app.query_one(ScheduleView).render())
+
+
+def test_build_rows_puts_the_now_line_before_the_next_event() -> None:
+    a, b, c = (
+        occ(TODAY, "09:00", "10:00"),
+        occ(TODAY, "11:00", "12:00"),
+        occ(TODAY, "13:00", "14:00"),
+    )
+    current = datetime.combine(TODAY, datetime.strptime("10:30", "%H:%M").time(), ZONE)
+    rows = build_rows([a, b, c], TODAY, TODAY + timedelta(days=1), current)
+    assert [(r.occ, r.now) for r in rows[1:]] == [(a, False), (None, True), (b, False), (c, False)]
+    assert not rows[2].header and rows[0].header
+    late = build_rows([a], TODAY, TODAY + timedelta(days=1), current + timedelta(hours=9))
+    assert late[-1].now
+    other_day = build_rows([a], TODAY, TODAY + timedelta(days=1), current - timedelta(days=1))
+    assert not any(r.now for r in other_day)
+
+
+async def test_schedule_marks_now_and_dims_past_events(
+    app: RecordingApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = datetime.combine(TODAY, datetime.strptime("12:00", "%H:%M").time(), ZONE)
+    monkeypatch.setattr(schedule_view, "now", lambda: current)
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("s")
+        view = app.query_one(ScheduleView)
+        now_row = next(i for i, r in enumerate(view._rows) if r.now)
+        assert view._rows[now_row].day == TODAY
+        before = [r.occ for r in view._rows[:now_row] if r.occ and r.day == TODAY]
+        assert before and all(o.all_day or o.start <= current for o in before)
+        assert "12:00 ●─" in str(view.render())
+        await pilot.press("l", "h")  # day jumps land on events, never on the now line
+        assert view.selected is not None
+        past = next(i for i, r in enumerate(view._rows[:now_row]) if r.occ and not r.occ.all_day)
+        line = view._line(view._rows[past], past + 1)  # not the cursor row
+        title = next(
+            span
+            for span in line.spans
+            if span.start > 3 and "●" not in line.plain[span.start : span.end]
+        )
+        assert title.style == Style(color=app.palette.foreground1, bold=False)
+
+
+async def test_schedule_date_follows_the_first_day_shown(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("s")
+        view = app.query_one(ScheduleView)
+        app.select_date(TODAY + timedelta(days=400))  # past every event: restarts there
+        await pilot.pause()
+        if view._rows:
+            assert app.state.day == view._rows[0].day
+        for _ in range(3):  # H never gets stuck on empty days before the list
+            day = app.state.day
+            await pilot.press("H")
+            assert app.state.day < day and view._cursor is not None
+            assert app.state.day == view._rows[view._cursor].day
+
+
+async def test_schedule_never_ends_with_a_day_header(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        await pilot.press("s")
+        view = app.query_one(ScheduleView)
+        height = view.content_size.height
+        header = next(i for i, r in enumerate(view._rows) if r.header and i >= height)
+        view._top = header - height + 1
+        lines = str(view.render()).split("\n")
+        assert len(lines) == height - 1 and "No upcoming" not in lines[-1]
+        assert lines[-1].strip() == ""  # the blank row before the dropped header

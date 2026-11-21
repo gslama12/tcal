@@ -3,6 +3,7 @@
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, cast
 
+from rich.cells import cell_len
 from rich.style import Style
 from rich.text import Text
 from textual.widget import Widget
@@ -53,3 +54,15 @@ class CalendarView(TcalWidget, can_focus=True):
 def join_lines(lines: Iterable[Text]) -> Text:
     """Rendered lines as one Text, cropped (not wrapped) to the widget width."""
     return Text("\n", no_wrap=True, overflow="crop").join(lines)
+
+
+def fit(text: str, width: int) -> str:
+    """``text`` cut to ``width`` cells, ending with ``…`` when cut."""
+    if cell_len(text) <= width:
+        return text
+    out = ""
+    for ch in text:
+        if cell_len(out + ch) >= width:
+            break
+        out += ch
+    return out.rstrip() + "…" if width > 0 else ""

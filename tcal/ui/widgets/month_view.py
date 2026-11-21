@@ -12,7 +12,7 @@ from tcal.ui.keys import EVENT_BINDINGS
 from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.theme import legible, text_on
 from tcal.ui.timelayout import is_bar, layout_bars
-from tcal.ui.widgets.base import join_lines
+from tcal.ui.widgets.base import fit, join_lines
 from tcal.ui.widgets.day_cursor import DayCursorView
 
 Chip = Occurrence | int | None  # an event, the count for "+N more", or an empty lane line
@@ -243,9 +243,9 @@ class MonthView(DayCursorView):
             if is_bar(chip):
                 days = occurrence_days(chip)
                 before = "◂" if days[0] < day else " "
-                label = f"{before}{chip.summary}".ljust(width)
-                if days[-1] > last:
-                    label = label[: width - 1] + "▸"
+                after = "▸" if days[-1] > last else ""
+                title = fit(chip.summary, width - 1 - len(after))
+                label = f"{before}{title}".ljust(width - len(after)) + after
                 fg = text_on(color, p)
                 style = Style(color=fg, bgcolor=color, bold=True, reverse=selected)
                 text.append(label, style=style)
@@ -253,7 +253,8 @@ class MonthView(DayCursorView):
                 color = legible(color, p)
                 time = f"{chip.start:%H:%M} " if chip.start.date() == day else ""
                 text.append(f" {time}", style=Style(color=color, bold=True, reverse=selected))
-                text.append(chip.summary, style=Style(color=color, reverse=selected))
+                title = fit(chip.summary, width - 1 - len(time))
+                text.append(title, style=Style(color=color, reverse=selected))
         text.truncate(width, pad=True)
         return text
 

@@ -3,12 +3,13 @@
 The list starts at the selected day; each day with events gets a date header
 (today accented) followed by its events: time range or "All day", calendar
 colour dot, title (multi-day events: "(Day 2/3)") and the location dimmed.
-Empty days are skipped. More days are loaded (``CHUNK_DAYS`` at a time) when
+Empty days are skipped. Today's past events are dimmed and a now line sits
+before its first event that hasn't started. More days are loaded (``CHUNK_DAYS`` at a time) when
 the cursor or the scroll reaches either end.
 """
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from rich.style import Style
 from rich.text import Text
@@ -19,7 +20,7 @@ from tcal.model import Occurrence
 from tcal.ui.calgrid import by_day, occurrence_days
 from tcal.ui.keys import EVENT_BINDINGS
 from tcal.ui.messages import EventSelected
-from tcal.ui.state import AppState
+from tcal.ui.state import AppState, ViewMode
 from tcal.ui.theme import legible
 from tcal.ui.widgets.base import CalendarView, join_lines
 
@@ -29,13 +30,23 @@ SCROLL_LINES = 3  # mouse wheel step
 TIME_WIDTH = 13  # "09:00 – 10:00"
 
 
+def now() -> datetime:
+    """The current local time (a seam for tests)."""
+    return datetime.now().astimezone()
+
+
 @dataclass(frozen=True)
 class Row:
-    """One list line: a day header (``occ`` None), an event of ``day``, or a blank."""
+    """One list line: a day header, an event of ``day``, a blank or the now line."""
 
     day: date
     occ: Occurrence | None = None
     blank: bool = False
+    now: bool = False
+
+    @property
+    def header(self) -> bool:
+        return self.occ is None and not self.blank and not self.now
 
 
 def _same_row(row: Row, other: Row | None) -> bool:
@@ -49,8 +60,11 @@ def _same_row(row: Row, other: Row | None) -> bool:
     )
 
 
-def build_rows(occurrences: list[Occurrence], start: date, end: date) -> list[Row]:
-    """Rows for the days [start, end): header + events per non-empty day, blank between."""
+def build_rows(
+    occurrences: list[Occurrence], start: date, end: date, current: datetime | None = None
+) -> list[Row]:
+    """Rows for the days [start, end): header + events per non-empty day, blank between;
+    on ``current``'s day a now line before the first event starting after it."""
     rows: list[Row] = []
     for day, occs in sorted(by_day(occurrences).items()):
         if not start <= day < end:
@@ -58,7 +72,11 @@ def build_rows(occurrences: list[Occurrence], start: date, end: date) -> list[Ro
         if rows:
             rows.append(Row(day, blank=True))
         rows.append(Row(day))
-        rows.extend(Row(day, occ) for occ in occs)
+        events = [Row(day, occ) for occ in occs]
+        if current is not None and day == current.date():
+            later = (i for i, occ in enumerate(occs) if not occ.all_day and occ.start > current)
+            events.insert(next(later, len(occs)), Row(day, now=True))
+        rows.extend(events)
     return rows
 
 
@@ -98,7 +116,7 @@ class ScheduleView(CalendarView):
 
     def _load(self) -> None:
         self._rows = build_rows(
-            self.tcal.occurrences(self._start, self._end), self._start, self._end
+            self.tcal.occurrences(self._start, self._end), self._start, self._end, now()
         )
 
     def _load_more(self) -> bool:
@@ -135,14 +153,23 @@ class ScheduleView(CalendarView):
     def selected(self) -> Occurrence | None:
         return self._rows[self._cursor].occ if self._cursor is not None else None
 
+    def on_mount(self) -> None:
+        super().on_mount()
+        self.set_interval(60, lambda: self.on_state(self.tcal.state))  # the now line
+
     def on_state(self, state: AppState) -> None:
         selected = self._rows[self._cursor] if self._cursor is not None else None
-        if state.day != self._anchor:  # navigated from outside: restart the list there
+        restart, previous = state.day != self._anchor, self._anchor
+        if restart:  # navigated from outside: restart the list there
             self._anchor, self._start, self._top, selected = state.day, state.day, 0, None
             self._end = state.day + timedelta(days=CHUNK_DAYS)
         self._load()
         while len(self._rows) < self.content_size.height and self._load_more():
             pass
+        back = restart and previous is not None and state.day < previous
+        if back and (not self._rows or self._rows[0].day >= (previous or state.day)):
+            self._load_earlier()  # H onto empty days would show the same list again
+            self._top = 0
         events_ = self._event_rows()
         # by row, not occurrence: a multi-day event has a row on each of its days
         same = [i for i in events_ if _same_row(self._rows[i], selected)]
@@ -154,6 +181,12 @@ class ScheduleView(CalendarView):
             self._cursor = min(events_, key=lambda i: abs(i - (self._cursor or 0)))
         self._clamp()
         self.refresh()
+        # the date (status bar, title) follows the first day shown, not an empty day before it
+        if state.view is ViewMode.SCHEDULE and self._cursor is not None:
+            first = self._rows[self._cursor].day
+            if first != state.day and (restart or self._rows[0].day > state.day):
+                self._anchor = first
+                self.tcal.select_date(first)
 
     def on_resize(self) -> None:
         self.on_state(self.tcal.state)
@@ -173,7 +206,7 @@ class ScheduleView(CalendarView):
         height = max(1, self.content_size.height)
         if self._cursor is not None:
             header = self._cursor
-            while header > 0 and self._rows[header].occ is not None:
+            while header > 0 and not self._rows[header].header:
                 header -= 1
             if self._cursor >= self._top + height:
                 self._top = self._cursor - height + 1
@@ -219,7 +252,10 @@ class ScheduleView(CalendarView):
 
     def _day_firsts(self) -> list[int]:
         """Row index of each listed day's first event."""
-        return [i for i in self._event_rows() if self._rows[i - 1].occ is None]
+        firsts: dict[date, int] = {}
+        for i in self._event_rows():
+            firsts.setdefault(self._rows[i].day, i)
+        return list(firsts.values())
 
     def _scroll(self, lines: int) -> None:
         height = self.content_size.height
@@ -282,6 +318,8 @@ class ScheduleView(CalendarView):
         if not self._rows:
             p = self.tcal.palette
             return Text(" No upcoming events", style=Style(color=p.foreground1))
+        if len(visible) > 1 and visible[-1].header:  # no day header without its events
+            visible = visible[:-1]
         lines = [self._line(row, self._top + i) for i, row in enumerate(visible)]
         return join_lines(lines)
 
@@ -289,16 +327,21 @@ class ScheduleView(CalendarView):
         p, width = self.tcal.palette, self.content_size.width
         if row.blank:
             return Text()
+        if row.now:
+            return Text(f"   {now():%H:%M} ●" + "─" * width, style=Style(color=p.red))
         if row.occ is None:
             return self._header(row.day)
         occ, selected = row.occ, index == self._cursor
+        past = occ.end <= now()
         text = Text(style=self.cursor_style() if selected else Style())
         text.append(
-            f"   {time_range(occ, row.day):<{TIME_WIDTH}}  ", style=Style(color=p.foreground2)
+            f"   {time_range(occ, row.day):<{TIME_WIDTH}}  ",
+            style=Style(color=p.foreground1 if past else p.foreground2),
         )
         color = legible(self.tcal.calendar_color(occ.calendar_id), p)
-        text.append("● ", style=Style(color=color))
-        text.append(occ.summary or "(no title)", style=Style(color=p.foreground3, bold=selected))
+        text.append("● ", style=Style(color=color, dim=past))
+        title = Style(color=p.foreground1 if past else p.foreground3, bold=selected)
+        text.append(occ.summary or "(no title)", style=title)
         if position := day_of(occ, row.day):
             text.append(f" ({position})", style=Style(color=p.foreground2))
         if occ.event.location:

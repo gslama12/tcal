@@ -68,7 +68,7 @@ async def test_week_renders_header_strip_events_and_now_line(app: RecordingApp) 
         # Default visible range: 06:30 (row 4, unlabelled half hour) .. 23:30 (last row).
         assert lines[5].startswith("07:00") and lines[-2].startswith("23:00")
         body = "\n".join(lines)
-        for title in ("Standup", "Sprint plan…", "Dinner", "Late movie", "Haircut"):
+        for title in ("Standup", "Sprint", "planning", "Dinner", "Late movie", "Haircut"):
             assert title in body
         assert "Early run" not in body  # 05:45: above the default range
         xs = grid._columns()
@@ -363,7 +363,7 @@ async def test_text_is_cut_with_ellipsis_never_mid_number(app: RecordingApp) -> 
     async with app.run_test(size=(100, 35)) as pilot:
         await pilot.pause()
         body = "\n".join(text(app.query_one(WeekView)))
-        assert "Sprint pla…" in body and "Anna's bir…" in body
+        assert "Anna's bir…" in body and "Rele…" in body
         assert "13:00–15:00" in body and "14:00  14:30" in body  # no "14:00–1"
         assert "–1 " not in body and "–1│" not in body
 
@@ -381,3 +381,32 @@ async def test_markers_and_hour_lines_leave_events_alone(app: RecordingApp) -> N
                     assert not {"▲", "▼"} & set(lines[y][left:right])
                     assert "╌" not in lines[y][right : right + 1] + lines[y][left - 1 : left]
         assert any("later" in line for line in lines)
+
+
+def test_wrap_breaks_titles_at_words() -> None:
+    assert timegrid._wrap("Design review", 8, 3) == ["Design", "review"]
+    assert timegrid._wrap("Design review", 4, 3) == ["Des…", "rev…"]
+    assert timegrid._wrap("Release party tonight", 13, 1) == ["Release part…"]
+    assert timegrid._wrap("Release party tonight", 6, 2) == ["Relea…", "party…"]
+    assert timegrid._wrap("", 5, 2) == []
+
+
+async def test_tall_blocks_wrap_the_title_before_the_time(app: RecordingApp) -> None:
+    async with app.run_test(size=(100, 35)) as pilot:
+        await pilot.pause()
+        lines = text(app.query_one(WeekView))
+        sprint = next(i for i, line in enumerate(lines) if "Sprint" in line)
+        assert "planning" in lines[sprint + 1] and "13:00–15:00" in lines[sprint + 2]
+
+
+async def test_later_marker_moves_off_the_cursor_row(app: RecordingApp) -> None:
+    async with app.run_test(size=(100, 35)) as pilot:
+        await pilot.press(*["plus"] * 7, *["j"] * 60)  # 8 rows/hour, cursor on the bottom row
+        await pilot.press(*["k"] * 20, *["j"] * 20)  # (scrolls down while moving, so back up)
+        grid = app.query_one(WeekView)
+        xs, lines = grid._columns(), text(grid)
+        cursor_y = grid._header_height() + grid._cursor_row() - grid._top_row()
+        column = slice(xs[2] + 1, xs[3])  # Wed, the selected day
+        assert cursor_y == len(lines) - 1
+        assert "▼" not in lines[-1][column] and "▼ 2 later" in lines[-2][column]
+        assert "▼ 1 later" in lines[-1][xs[1] + 1 : xs[2]]  # other columns: the edge row

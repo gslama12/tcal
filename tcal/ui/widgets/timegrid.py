@@ -39,7 +39,7 @@ from tcal.ui.timelayout import (
     layout_bars,
     layout_blocks,
 )
-from tcal.ui.widgets.base import CalendarView
+from tcal.ui.widgets.base import CalendarView, fit
 
 AXIS = 6  # width of the time axis: "HH:MM "
 MAX_LANES = 3  # all-day strip rows shown at most
@@ -504,7 +504,7 @@ class TimeGrid(CalendarView):
             if bar.occ == selected:  # accent bar, as for selected blocks
                 before = "▌" if before == " " else before
             after = bar.last == n and bar.occ.end > _midnight(days[-1] + timedelta(days=1))
-            title = _fit(_clean(bar.occ.summary), x1 - x0 - 1 - after)
+            title = fit(_clean(bar.occ.summary), x1 - x0 - 1 - after)
             canvas.text(y, x0, x1, f"{before}{title}")
             if bar.occ == selected:
                 canvas.text(y, x0, x0 + 1, before, _style(p.foreground3, color, bold=True))
@@ -560,9 +560,16 @@ class TimeGrid(CalendarView):
     def _draw_hidden(
         self, canvas: _Canvas, xs: list[int], top: int, bottom: int, header: int
     ) -> None:
-        """``▲ N earlier`` / ``▼ N later`` per column for events scrolled out of view."""
+        """``▲ N earlier`` / ``▼ N later`` per column for events scrolled out of view,
+        one row further in where the edge row holds the column's cursor or now-line."""
         p = self.tcal.palette
         style = _style(p.foreground2, p.background2)
+        days, current = self._load()[0], now()
+        taken = {(days.index(self.tcal.state.day), self._cursor_row())}
+        if current.date() in days:
+            taken.add(
+                (days.index(current.date()), self.scale.row_of(current.hour * 60 + current.minute))
+            )
         for i in range(len(xs) - 1):
             blocks = [b for b in self._block_list() if b.day == i]
             x1 = xs[i + 1]
@@ -570,6 +577,8 @@ class TimeGrid(CalendarView):
                 (top, "▲", "earlier", sum(len(b.occs) for b in blocks if b.bottom <= top)),
                 (bottom - 1, "▼", "later", sum(len(b.occs) for b in blocks if b.top >= bottom)),
             ):
+                while (i, row) in taken and top <= row + (1 if arrow == "▲" else -1) < bottom:
+                    row += 1 if arrow == "▲" else -1
                 # right of the events on the edge row (plus a gap), never over them
                 ends = [self._sub_columns(b, xs)[1] + 1 for b in blocks if b.top <= row < b.bottom]
                 x0, y = max(ends, default=xs[i] + 1), header + row - top
@@ -608,13 +617,14 @@ class TimeGrid(CalendarView):
         title, span = _clean(occ.summary), _span(occ, width)
         if block.group:
             more = f" +{len(block.group) - 1}"
-            label = _fit(title, width - len(more)) + more if width - len(more) >= 2 else ""
-            texts = [label or _fit(f"{len(block.group)}×", width), span]
+            label = fit(title, width - len(more)) + more if width - len(more) >= 2 else ""
+            texts = [label or fit(f"{len(block.group)}×", width), span]
         elif block.bottom - block.top == 1:
-            texts = [_fit(f"{occ.start:%H:%M} {title}" if width >= 11 else title, width)]
-        else:
-            location = _clean(occ.event.location)
-            texts = [_fit(t, width) for t in (title, span, location) if t]
+            texts = [fit(f"{occ.start:%H:%M} {title}" if width >= 11 else title, width)]
+        else:  # the title wraps over the lines the time doesn't need, then the location
+            height = block.bottom - block.top
+            lines = _wrap(title, width, max(1, height - 1 if span else height))
+            texts = lines + [fit(t, width) for t in (span, _clean(occ.event.location)) if t]
         gaps = [x for x in (x0 - 1, x1) if xs[block.day] < x < xs[block.day + 1]]
         for row in range(first, last):
             y = header + row - top
@@ -642,16 +652,17 @@ def _clean(text: str) -> str:
     return " ".join(text.split())
 
 
-def _fit(text: str, width: int) -> str:
-    """``text`` cut to ``width`` cells, ending with ``…`` when cut."""
-    if cell_len(text) <= width:
-        return text
-    out = ""
-    for ch in text:
-        if cell_len(out + ch) >= width:
-            break
-        out += ch
-    return out.rstrip() + "…" if width > 0 else ""
+def _wrap(text: str, width: int, max_lines: int) -> list[str]:
+    """``text`` word-wrapped to ``width`` cells in at most ``max_lines`` lines; a word
+    too long for a line, and the last line when text is left over, end with ``…``."""
+    lines: list[str] = []
+    words = text.split()
+    while words and len(lines) < max_lines - 1:
+        line = words.pop(0)
+        while words and cell_len(f"{line} {words[0]}") <= width:
+            line += " " + words.pop(0)
+        lines.append(fit(line, width))
+    return [*lines, fit(" ".join(words), width)] if words else lines
 
 
 def _span(occ: Occurrence, width: int) -> str:
