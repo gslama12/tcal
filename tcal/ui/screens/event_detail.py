@@ -1,9 +1,10 @@
 """Event detail modal (enter/click on an event) and the delete confirmation.
 
-``EventDetail(occ)``: e = edit (``app.edit_occurrence``), x = delete, esc/q = close.
+``EventDetail(occ)``: e = edit (``app.edit_occurrence``), x = delete, esc/q = close
+(a read-only calendar's event only hints "esc close"; e/x give a notice).
 ``confirm_delete(app, occ)`` is the one delete flow, also used by the ``x`` key
 in the views: read-only calendars only get a notice; a recurring event asks
-"this occurrence" vs "whole series". ``EditScope`` asks the same before editing
+"this event" vs "all events". ``EditScope`` asks the same before editing
 one instance of a series ("this event" vs "all events").
 """
 
@@ -132,14 +133,14 @@ class ScopeDialog(ModalScreen[Scope | None]):
 
 
 class ConfirmDelete(ScopeDialog):
-    """y = delete (o = this occurrence, s = whole series for repeating events), n/esc = cancel."""
+    """y = delete (o = this event, s = all events for repeating events), n/esc = cancel."""
 
     verb = "Delete"
 
     @property
     def scopes(self) -> list[tuple[str, Scope, str]]:
         if self.recurring:
-            return [("o", "occurrence", "This occurrence (o)"), ("s", "series", "Whole series (s)")]
+            return [("o", "occurrence", "This event (o)"), ("s", "series", "All events (s)")]
         return [("y", "series", "Delete (y)")]
 
 
@@ -191,7 +192,8 @@ class EventDetail(ModalScreen[None]):
             ):
                 if value:
                     yield Static(value, id=widget_id)
-            yield Static(Text("e edit  x delete  esc close", style=p.foreground1), id="hints")
+            hints = "esc close" if calendar and calendar.readonly else "e edit  x delete  esc close"
+            yield Static(Text(hints, style=p.foreground1), id="hints")
 
     def action_edit(self) -> None:
         self.dismiss()

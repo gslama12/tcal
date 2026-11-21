@@ -196,7 +196,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 
 - **E1 Detail:** `screens/event_detail.py`: `EventDetail(occ)` opens from `on_event_selected`
   (e edit, x delete, esc/q close). `confirm_delete(app, occ)` is the one delete flow (also the
-  app's `x`): read-only calendar -> notice; recurring -> o "this occurrence" / s "whole series".
+  app's `x`): read-only calendar -> notice; recurring -> o "this event" / s "all events".
 - **E2 Selection:** `app.selected_occurrence()` = the focused day/week grid's or month view's
   `selected`; the year view has no event cursor, so `x`/`e` there say "No event selected".
 - **E3 Edit hook:** `TcalApp.edit_occurrence(occ)` opens the event form (`edit_event(occ.event)`);
@@ -229,6 +229,18 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   uses the cursor slot. `app.new_event(date)` (all-day) stays for callers.
 - **F6 Notices:** `app.check_writable(calendar_id)` is the one read-only check
   ("<Calendar> is read-only"), used by edit and delete. Form errors clear on any field change.
+
+### Form/detail fixes (QA2 #6, #13–#16, #19)
+
+- **F7 Vocabulary:** scopes are "This event (o) / All events (s)" for edit and delete; form
+  titles "New event" / "Edit event" / "Edit this event" / "Edit all events" (a master with an
+  RRULE). The series form keeps the series' dates (no shift-by-delta) and says so in `#note`.
+- **F8 Repeat:** `REPEATS` maps choices to RRULEs and adds "Every weekday"
+  (`FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR`); other rules show `describe_rrule` as the custom choice.
+- **F9 Errors:** `FormError(message, field)`; the error `Static` moves below that field's row,
+  the field gets `-invalid` (red border) and focus. Dates parse with goto's `parse_date`.
+- **F10 Discard:** esc with changed fields (`values() != shown`) asks `ConfirmDiscard` (y/n).
+  Read-only events' detail hints only "esc close". The all-day box is empty when off, ✓ on.
 
 ### Month view notes (QA #9–#11)
 

@@ -9,6 +9,7 @@ from tcal.model import Event
 from tcal.tz import local_midnight, local_zone
 from tcal.ui.messages import NewEventRequested
 from tcal.ui.screens.event_form import (
+    ConfirmDiscard,
     EventForm,
     FormError,
     build_event,
@@ -41,6 +42,8 @@ def test_build_event_validates_and_maps_repeat() -> None:
     assert weekly.rrule == "FREQ=WEEKLY"
     custom = Event("u", "work", "S", at(10), at(11), rrule="FREQ=WEEKLY;BYDAY=MO")
     assert values_of(custom).repeat == "custom"
+    weekdays = replace(custom, rrule="FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR")
+    assert values_of(weekdays).repeat == "weekdays"
     kept = build_event(custom, values_of(custom), values_of(custom))
     assert kept.rrule == custom.rrule and kept.start is custom.start
 
@@ -204,3 +207,78 @@ async def test_new_event_key_is_timed_at_the_next_hour_off_the_grid(make_app, ke
         hour = min(datetime.now().hour + 1, 23)
         assert form.query_one("#start_date", Input).value == TODAY.isoformat()
         assert form.query_one("#start_time", Input).value == f"{hour:02d}:00"
+
+
+def test_dates_accept_goto_forms_and_errors_name_the_field() -> None:
+    event = Event("u", "work", "Old", at(10), at(11))
+    shown = values_of(event)
+    moved = build_event(event, shown, replace(shown, start_date="+1d", end_date="tomorrow"), TODAY)
+    assert moved.start == at(10, day=TODAY + timedelta(1))
+    with pytest.raises(FormError) as error:
+        build_event(event, shown, replace(shown, end_date="09:00"), TODAY)
+    assert error.value.field == "end_date"
+    with pytest.raises(FormError) as error:
+        build_event(event, shown, replace(shown, end_time="09:00"), TODAY)
+    assert error.value.field == "end_time"
+
+
+async def test_error_is_shown_below_the_invalid_field(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 50)) as pilot:
+        app.new_event(at(14))
+        await pilot.pause()
+        await pilot.press(*"Vet")
+        await type_into(pilot, "#end_date", "09:00")
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        form = app.screen
+        end_date = form.query_one("#end_date", Input)
+        assert end_date.has_class("-invalid") and end_date.has_focus
+        children = list(form.query_one("#form").children)
+        assert children.index(form.query_one("#error")) == children.index(end_date.parent) + 1
+        await type_into(pilot, "#end_date", "fri")
+        assert not end_date.has_class("-invalid")
+
+
+async def test_esc_asks_before_discarding_changes(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 50)) as pilot:
+        app.new_event(at(14))
+        await pilot.pause()
+        await pilot.press("escape")  # unchanged: closes at once
+        await pilot.pause()
+        assert not isinstance(app.screen, EventForm)
+        app.new_event(at(14))
+        await pilot.pause()
+        form = app.screen
+        await pilot.press(*"Vet", "tab", "escape")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmDiscard)
+        await pilot.press("n")
+        await pilot.pause()
+        assert app.screen is form and form.query_one("#title", Input).value == "Vet"
+        await pilot.press("escape", "y")
+        await pilot.pause()
+        assert not isinstance(app.screen, (EventForm, ConfirmDiscard))
+        assert not any(o.summary == "Vet" for o in app.occurrences(TODAY, TODAY + timedelta(1)))
+
+
+async def test_edit_all_events_form_wording(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 50)) as pilot:
+        app.edit_occurrence(find(app))
+        await pilot.pause()
+        await pilot.press("s")
+        await pilot.pause()
+        form = app.screen
+        assert form.query_one("#form").border_title == "Edit all events"
+        assert "first event" in str(form.query_one("#note").render())
+        repeat = form.query_one("#repeat", Select)
+        assert repeat.value == "weekdays" and ("Every weekday", "weekdays") in repeat._options
+        await pilot.press("escape")
+        await pilot.pause()
+        app.edit_occurrence(find(app))
+        await pilot.pause()
+        await pilot.press("o")
+        await pilot.pause()
+        assert app.screen.query_one("#form").border_title == "Edit this event"

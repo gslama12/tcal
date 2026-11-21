@@ -99,6 +99,7 @@ async def test_readonly_calendar_cannot_delete(make_app) -> None:
         app.post_message(EventSelected(holiday))
         await pilot.pause()
         assert "(read-only)" in text(app, "calendar")
+        assert text(app, "hints") == "esc close"
         await pilot.press("x")
         assert not isinstance(app.screen, ConfirmDelete)
         assert find(app, "Public holiday", days=30)

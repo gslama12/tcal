@@ -152,12 +152,12 @@ SearchScreen OptionList {
 
 /* ----- modals (tcal/ui/screens/) ----- */
 
-EventDetail, ScopeDialog, EventForm {
+EventDetail, ScopeDialog, EventForm, ConfirmDiscard {
     align: center middle;
     background: $background1 60%;
 }
 
-EventDetail #dialog, ScopeDialog #dialog {
+EventDetail #dialog, ScopeDialog #dialog, ConfirmDiscard #dialog {
     width: 60;
     height: auto;
     max-height: 80%;
@@ -174,7 +174,7 @@ EventDetail #dialog > #hints {
     margin-bottom: 0;
 }
 
-ScopeDialog #buttons {
+ScopeDialog #buttons, ConfirmDiscard #buttons {
     height: auto;
     margin-top: 1;
 
@@ -199,13 +199,17 @@ ScopeDialog #buttons {
         background: $background2;
         border: $border_type $background3;
         &:focus { border: $border_type $primary; }
+        &.-invalid { border: $border_type $red; }
     }
+    Checkbox > .toggle--button { color: $background3; background: $background3; }
+    Checkbox.-on > .toggle--button { color: $primary; }
     Select:focus > SelectCurrent { border: $border_type $primary; }
     .row { height: auto; }
     .label { width: 6; padding: 1 0 0 1; color: $foreground1; }
     #start_date, #end_date { width: 1fr; }
     .time { width: 12; }
     #notes { height: 5; }
-    #error { color: $red; height: auto; }
+    #error { color: $red; height: auto; padding: 0 1; }
+    #note { color: $foreground1; padding: 0 1; }
     #hint { color: $foreground1; }
 }

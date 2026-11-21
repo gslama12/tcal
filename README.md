@@ -23,7 +23,7 @@ and edits made offline are queued and pushed later.
 ```
 
 Day, week, month and year views · mini month and toggleable calendar list · create, edit and
-delete events (incl. recurring: this occurrence or whole series) · go to date · search · zoomable
+delete events (incl. recurring: this event or all events) · go to date · search · zoomable
 time grid · mouse support · `nord` and `tokyo-night` themes.
 
 ## Install & run
@@ -176,7 +176,7 @@ account (ideally `TCAL_HOME=.tcal` first, so a fresh cache is used):
 - [ ] Create, edit and delete an event in tcal → shows up on the iPhone / iCloud.com, and edits
       there show up in tcal after `r`. Then edit the same event again in tcal (this relies on the
       ETag iCloud returns after a PUT).
-- [ ] Delete "this occurrence" and "whole series" of a recurring event; edit a series.
+- [ ] Delete "this event" and "all events" of a recurring event; edit a series.
 - [ ] Move an event to another calendar (edit → calendar).
 - [ ] Conflict: change an event on the iPhone, then change it in tcal before syncing → the
       iPhone version wins and tcal doesn't get stuck.
