@@ -6,7 +6,7 @@ from test_views import SIZE, RecordingApp
 
 from tcal.model import Event, Occurrence
 from tcal.store import Store
-from tcal.ui.calgrid import month_weeks
+from tcal.ui.calgrid import month_weeks, occurrence_days
 from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.widgets.month_view import Grid, MonthView, layout_week
 
@@ -66,14 +66,18 @@ async def test_month_event_cursor(app: RecordingApp) -> None:
         await pilot.press("m")
         view = app.query_one(MonthView)
         assert view.selected is None and app.selected_occurrence() is None
-        await pilot.press("n")
+        today = app.state.day
+        await pilot.press("n")  # the first event on or after the selected day
         first = view.selected
         assert first is not None and app.selected_occurrence() == first
-        assert app.state.day == max(first.start.date(), view.grid().weeks[0][0])
+        assert max(occurrence_days(first)) >= today and app.state.day >= today
+        stops = [occ for occ, _ in view._stops()]
+        before = stops[: stops.index(first)]
+        assert before and all(max(occurrence_days(occ)) < today for occ in before)
         await pilot.press("n", "N")
         assert view.selected == first
-        await pilot.press("N")  # wraps to the last shown event
-        assert view.selected is not None and view.selected.start > first.start
+        await pilot.press("N")
+        assert view.selected == before[-1]
         await pilot.press("enter")
         assert isinstance(app.posted[-1], EventSelected)
         assert app.posted[-1].occurrence == view.selected

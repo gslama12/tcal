@@ -34,6 +34,12 @@ from tcal.ui.screens.goto import GotoScreen, parse_date
         ("Next  Month", date(2026, 12, 18)),
         ("last month", date(2026, 10, 18)),
         ("next year", date(2027, 11, 18)),
+        ("next fri", date(2026, 11, 27)),  # Friday of next week (Wed 18 -> 27, not 20)
+        ("next monday", date(2026, 11, 23)),
+        ("last wed", date(2026, 11, 11)),
+        ("in 2 days", date(2026, 11, 20)),
+        ("in 1 week", date(2026, 11, 25)),
+        ("in 3 months", date(2027, 2, 18)),
         ("2026-12-24", date(2026, 12, 24)),
         ("2027-1-5", date(2027, 1, 5)),
         ("24.12.", date(2026, 12, 24)),
