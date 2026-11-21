@@ -3,12 +3,16 @@ from rich.text import Text
 from textual import events
 from textual.app import RenderResult
 
+from tcal.model import Calendar
 from tcal.ui.keys import binding
 from tcal.ui.widgets.base import TcalWidget
 
+OTHER = "Other calendars"
+
 
 class CalendarList(TcalWidget, can_focus=True):
-    """ "My calendars": one row per calendar, a checkbox in its color and its name.
+    """ "My calendars": one row per calendar, a checkbox in its color and its name;
+    subscribed feeds follow under an "Other calendars" heading (like Google).
 
     j/k move the cursor, space/enter or a click toggles the calendar's
     visibility via ``app.toggle_calendar`` (hidden ones are in
@@ -23,13 +27,30 @@ class CalendarList(TcalWidget, can_focus=True):
         binding("open", action="toggle_visible"),
     ]
 
-    cursor = 0
+    cursor = 0  # index into ``ordered()``
+
+    def ordered(self) -> list[Calendar]:
+        calendars = self.tcal.calendars()
+        return [c for c in calendars if not c.subscribed] + [c for c in calendars if c.subscribed]
+
+    def lines(self) -> list[Calendar | str]:
+        """The rendered rows: calendars and headings (a blank line, then "Other calendars")."""
+        calendars = self.ordered()
+        others = [c for c in calendars if c.subscribed]
+        if not others:
+            return list(calendars)
+        return [*calendars[: -len(others)], "", OTHER, *others]
 
     def render(self) -> RenderResult:
         hidden = self.tcal.state.hidden_calendars
         p = self.tcal.palette
         rows = []
-        for i, cal in enumerate(self.tcal.calendars()):
+        calendars = iter(enumerate(self.ordered()))
+        for line in self.lines():
+            if isinstance(line, str):
+                rows.append(Text(line, style=Style(color=p.foreground2)))
+                continue
+            i, cal = next(calendars)
             shown = cal.id not in hidden
             row = Text()
             row.append("■ " if shown else "□ ", style=Style(color=cal.color, bold=True))
@@ -42,8 +63,11 @@ class CalendarList(TcalWidget, can_focus=True):
 
     def on_click(self, event: events.Click) -> None:
         offset = event.get_content_offset(self)
-        if offset is not None and offset.y < len(self.tcal.calendars()):
-            self.cursor = offset.y
+        lines = self.lines()
+        if offset is None or offset.y >= len(lines):
+            return
+        if isinstance(cal := lines[offset.y], Calendar):
+            self.cursor = self.ordered().index(cal)
             self.action_toggle_visible()
 
     def action_move(self, n: int) -> None:
@@ -51,7 +75,7 @@ class CalendarList(TcalWidget, can_focus=True):
         self.refresh()
 
     def action_toggle_visible(self) -> None:
-        calendars = self.tcal.calendars()
+        calendars = self.ordered()
         if calendars:
             self.tcal.toggle_calendar(calendars[min(self.cursor, len(calendars) - 1)].id)
 

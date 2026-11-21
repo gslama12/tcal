@@ -65,6 +65,29 @@ The password is looked up in this order:
 `tcal doctor` checks the whole setup step by step (without writing anything) and says what
 to fix when a step fails.
 
+## Subscribed calendars
+
+Read-only iCalendar feeds (holidays, sports fixtures, a shared team calendar, …) are added in
+the config file, one `[[subscription]]` block each. They are fetched on every sync, cached for
+offline use and listed under **Other calendars** in the sidebar (toggle them like the others;
+they cannot be edited). `webcal://` URLs work as they are.
+
+```toml
+[[subscription]]
+name = "US Holidays"
+url = "webcal://calendars.icloud.com/holidays/us_en.ics"
+color = "#BF616A"          # optional
+
+[[subscription]]
+name = "Feiertage"
+url = "https://calendars.icloud.com/holidays/at_de.ics"
+```
+
+Apple's holiday calendars follow the pattern
+`https://calendars.icloud.com/holidays/<country>_<language>.ics` (e.g. `us_en`, `gb_en`,
+`de_de`, `at_de`). To copy the URL of any subscription you already have in Calendar.app:
+right-click the calendar → *Get Info* → *Subscribed to*.
+
 ## Configuration
 
 The config file is `~/.config/tcal/config.toml` (`$XDG_CONFIG_HOME/tcal/config.toml`, also on

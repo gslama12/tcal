@@ -15,6 +15,8 @@ from typing import Any
 from tcal import paths
 
 VIEWS = ("day", "week", "month", "year", "schedule")
+SUBSCRIPTION = "subscription"  # [[subscription]]: a list of tables, not a section
+SUBSCRIPTION_COLOR = "#8FBCBB"
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
 
@@ -51,12 +53,22 @@ class ThemeConfig:
 
 
 @dataclass(frozen=True)
+class SubscriptionConfig:
+    """A read-only iCalendar feed (``[[subscription]]``); ``webcal://`` becomes ``https://``."""
+
+    name: str
+    url: str
+    color: str  # "#RRGGBB"
+
+
+@dataclass(frozen=True)
 class Config:
     account: AccountConfig
     view: ViewConfig
     sync: SyncConfig
     theme: ThemeConfig
     keys: dict[str, list[str]]  # action -> keys
+    subscriptions: tuple[SubscriptionConfig, ...] = ()
 
 
 def parse_hhmm(value: str) -> int:
@@ -115,6 +127,9 @@ def load_config(path: Path | None = None) -> Config:
 
 def _merge(base: dict[str, Any], user: dict[str, Any]) -> None:
     for section, values in user.items():
+        if section == SUBSCRIPTION:
+            base[SUBSCRIPTION] = values
+            continue
         if section not in base:
             raise ConfigError(f"unknown config section [{section}]")
         if not isinstance(values, dict):
@@ -123,6 +138,27 @@ def _merge(base: dict[str, Any], user: dict[str, Any]) -> None:
         if unknown:
             raise ConfigError(f"unknown setting(s) in [{section}]: {', '.join(sorted(unknown))}")
         base[section].update(values)
+
+
+def _subscriptions(values: Any) -> tuple[SubscriptionConfig, ...]:
+    if not (isinstance(values, list) and all(isinstance(v, dict) for v in values)):
+        raise ConfigError("subscriptions must be [[subscription]] tables")
+    subs = []
+    for i, sub in enumerate(values, 1):
+        where = f"[[subscription]] #{i}"
+        unknown = sub.keys() - {"name", "url", "color"}
+        if unknown:
+            raise ConfigError(f"unknown setting(s) in {where}: {', '.join(sorted(unknown))}")
+        if not all(isinstance(sub.get(k), str) and sub[k] for k in ("name", "url")):
+            raise ConfigError(f"{where} needs a name and a url")
+        url = re.sub(r"^webcals?://", "https://", sub["url"], flags=re.IGNORECASE)
+        if not url.lower().startswith(("https://", "http://")):
+            raise ConfigError(f"{where}: url must be webcal://, https:// or http://")
+        color = sub.get("color", SUBSCRIPTION_COLOR)
+        if not (isinstance(color, str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", color)):
+            raise ConfigError(f"{where}: color must be #RRGGBB")
+        subs.append(SubscriptionConfig(sub["name"], url, color.upper()))
+    return tuple(subs)
 
 
 def _section(cls: type, values: dict[str, Any]) -> Any:
@@ -158,6 +194,7 @@ def _build(data: dict[str, Any]) -> Config:
         sync=_section(SyncConfig, data["sync"]),
         theme=_section(ThemeConfig, data["theme"]),
         keys=dict(keys),
+        subscriptions=_subscriptions(data.get(SUBSCRIPTION, [])),
     )
 
 
