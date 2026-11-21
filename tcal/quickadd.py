@@ -8,7 +8,11 @@ Rules (case-insensitive; the pieces may come in any order):
 - ``#cal``: the first calendar in ``calendars`` whose name starts with ``cal``.
 - ``for 2h`` / ``for 90m`` / ``for 1h30``: the duration (default 1 h).
 - times: a range ``12:30-13:30`` / ``12-13`` / ``9-11am``, or one time ``12:30`` / ``9am`` /
-  ``18h`` (optionally after ``at`` / ``from``); an end before the start is on the next day.
+  ``18h`` / ``14.30`` / ``noon`` / ``midnight`` (optionally after ``at`` / ``from``); an end
+  before the start is on the next day. Right after a date or repeat a bare hour is a time
+  (``tomorrow 9``); ``12.11`` is a date unless a date is given elsewhere.
+- repeats: ``daily`` / ``weekly`` / ``monthly`` / ``yearly``, ``every day|week|month|year``,
+  ``every weekday`` (Mon–Fri) and ``every <weekday>``; the first one is on or after the date.
 - a date in any of goto's forms (``fri``, ``next fri``, ``in 2 days``, ``24.12.``, ``dec 24``,
   ``+2w``), optionally after ``on``; default: ``today``. A range ``dec 3 - dec 5`` /
   ``1.12.-3.12.`` spans several days (with a time: from the first day to the last).
@@ -20,7 +24,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
-from tcal.dates import parse_date
+from tcal.dates import WEEKDAYS, parse_date
 from tcal.tz import local_midnight, local_zone
 
 DEFAULT_DURATION = timedelta(hours=1)
@@ -41,8 +45,17 @@ _DURATION = re.compile(
     re.IGNORECASE,
 )
 _DASH = re.compile(r"\s*[-–]\s*")
+_DOT_TIME = re.compile(r"(?:\bat\s+)?(?<![\d.:/-])(\d{1,2})\.(\d{2})(?![\d.:/-])", re.IGNORECASE)
+_NAMED_TIME = re.compile(r"(?:\bat\s+)?\b(noon|midday|midnight)\b", re.IGNORECASE)
+_NAMED_TIMES = {"noon": time(12), "midday": time(12), "midnight": time(0)}
+_MARK = "\1"  # stands for a removed date or repeat: a bare hour may follow it
+_BARE_HOUR = re.compile(rf"{_MARK}\s+(?:at\s+)?(\d{{1,2}})(?![\d.:/-])\b", re.IGNORECASE)
 _LOCATION = re.compile(r"(?:^|\s)@")
 _CALENDAR = re.compile(r"#(\S+)")
+_REPEAT = re.compile(r"\b(?:every\s+([a-z]+)|(daily|weekly|monthly|yearly))\b", re.IGNORECASE)
+_FREQS = {"day": "DAILY", "week": "WEEKLY", "month": "MONTHLY", "year": "YEARLY"}
+_FREQS |= {"daily": "DAILY", "weekly": "WEEKLY", "monthly": "MONTHLY", "yearly": "YEARLY"}
+_WEEKDAYS = "MO,TU,WE,TH,FR"
 
 
 @dataclass(frozen=True)
@@ -54,6 +67,7 @@ class QuickAdd:
     location: str
     calendar: str | None  # a name from ``calendars``; None: no ``#`` given
     unknown_calendar: str = ""  # the ``#`` text that matched no calendar
+    rrule: str | None = None  # e.g. "FREQ=WEEKLY;BYDAY=MO"
 
 
 def _hour(h: str, m: str | None, suffix: str | None) -> time | None:
@@ -80,12 +94,40 @@ def _range(m: re.Match[str]) -> tuple[time, time] | None:
     return (start, end) if start is not None and end is not None else None
 
 
-def _take(pattern: re.Pattern[str], text: str) -> tuple[re.Match[str] | None, str]:
+def _take(
+    pattern: re.Pattern[str], text: str, mark: str = _GAP
+) -> tuple[re.Match[str] | None, str]:
     """The first match of ``pattern`` in ``text`` and ``text`` with it cut out."""
     m = pattern.search(text)
     if m is None:
         return None, text
-    return m, f"{text[: m.start()]} {_GAP} {text[m.end() :]}"
+    return m, f"{text[: m.start()]} {mark} {text[m.end() :]}"
+
+
+def _repeat(m: re.Match[str]) -> tuple[str, int | None] | None:
+    """The RRULE of a repeat phrase and the weekday (0 = Mon) its first day must be on
+    (-1: any of Mon–Fri), or None if it isn't one ("every other")."""
+    word = (m[1] or m[2]).lower()
+    if word in _FREQS:
+        return f"FREQ={_FREQS[word]}", None
+    if word in ("weekday", "weekdays"):
+        return f"FREQ=WEEKLY;BYDAY={_WEEKDAYS}", -1
+    stem = word.removesuffix("s")  # "every mondays"
+    weekday = next(
+        (i for i, d in enumerate(WEEKDAYS) if len(stem) >= 3 and d.startswith(stem)), None
+    )
+    if weekday is None:
+        return None
+    return f"FREQ=WEEKLY;BYDAY={WEEKDAYS[weekday][:2].upper()}", weekday
+
+
+def _first_on(day: date, weekday: int | None) -> date:
+    """``day``, or the next day on ``weekday`` (-1: the next of Mon–Fri)."""
+    while weekday is not None and not (
+        day.weekday() < 5 if weekday == -1 else day.weekday() == weekday
+    ):
+        day += timedelta(days=1)
+    return day
 
 
 def _dates(text: str, today: date) -> tuple[date, date] | None:
@@ -115,16 +157,34 @@ def _take_date(text: str, today: date) -> tuple[tuple[date, date] | None, str]:
     for size in range(min(9, len(words)), 0, -1):
         for i in range(len(words) - size + 1):
             run = words[i : i + size]
-            if _GAP in run or (days := _dates(" ".join(run), today)) is None:
+            if _GAP in run or _MARK in run or (days := _dates(" ".join(run), today)) is None:
                 continue
             if i and words[i - 1].lower() == "on":
                 i, size = i - 1, size + 1
-            return days, " ".join(words[:i] + [_GAP] + words[i + size :])
+            return days, " ".join(words[:i] + [_MARK] + words[i + size :])
     return None, text
 
 
 def _clean(text: str) -> str:
-    return " ".join(w for w in text.split() if w != _GAP)
+    return " ".join(w for w in text.split() if w not in (_GAP, _MARK))
+
+
+def _take_time(text: str, after_date: bool = False) -> tuple[str, time | None]:
+    """One time of day taken out of ``text``. ``after_date``: also a bare hour right after
+    a date or repeat, and any ``H.MM`` (else only one that can't be a date, ``14.30``)."""
+    m, rest = _take(_SINGLE, text)
+    if m and (start := _hour(m[1], m[2], m[3] or m[4])) is not None:
+        return rest, start
+    m, rest = _take(_DOT_TIME, text)
+    if m and (after_date or int(m[2]) > 12) and (start := _hour(m[1], m[2], None)) is not None:
+        return rest, start
+    m, rest = _take(_NAMED_TIME, text)
+    if m:
+        return rest, _NAMED_TIMES[m[1].lower()]
+    m, rest = _take(_BARE_HOUR, text, _MARK)
+    if after_date and m and (start := _hour(m[1], None, None)) is not None:
+        return rest, start
+    return text, None
 
 
 def parse(text: str, today: date, calendars: list[str]) -> QuickAdd:
@@ -142,21 +202,27 @@ def parse(text: str, today: date, calendars: list[str]) -> QuickAdd:
         minutes = int(m[2] or 0) + int(m[3] or 0) + int(m[4] or 0)
         duration = timedelta(hours=int(m[1] or 0), minutes=minutes) or DEFAULT_DURATION
 
+    rrule, weekday = None, None
+    m, after = _take(_REPEAT, rest, _MARK)
+    if m and (repeat := _repeat(m)):
+        (rrule, weekday), rest = repeat, after
+
     times: tuple[time, time | None] | None = None
     m, rest = _take(_RANGE, rest)
     if m and (span := _range(m)):
         times = span
     else:
-        before = rest
-        m, rest = _take(_SINGLE, rest)
-        start = _hour(m[1], m[2], m[3] or m[4]) if m else None
+        rest, start = _take_time(rest)
         if start is not None:
             times = (start, None)
-        else:
-            rest = before
 
     days, rest = _take_date(rest, today)
+    if times is None:  # "tomorrow 9", "tomorrow 12.11"
+        rest, start = _take_time(rest, after_date=True)
+        times = None if start is None else (start, None)
     day, last = days or (today, today)
+    offset = _first_on(day, weekday) - day  # "every mon" from a Wednesday: next Monday
+    day, last = day + offset, last + offset
     summary, *location = _LOCATION.split(_clean(rest), maxsplit=1)
 
     if times is None:
@@ -177,4 +243,5 @@ def parse(text: str, today: date, calendars: list[str]) -> QuickAdd:
         location[0].strip() if location else "",
         calendar,
         unknown,
+        rrule,
     )

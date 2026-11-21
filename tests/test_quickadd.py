@@ -117,6 +117,67 @@ def test_plain_words_stay_in_summary() -> None:
     assert (q.summary, q.location, q.all_day) == ("mail bob@x.com for the win", "", True)
 
 
+@pytest.mark.parametrize(
+    ("text", "summary", "start", "rrule"),
+    [
+        ("Yoga every monday 18:00", "Yoga", at(date(2026, 11, 23), 18), "FREQ=WEEKLY;BYDAY=MO"),
+        ("Gym every tue 7am", "Gym", at(date(2026, 11, 24), 7), "FREQ=WEEKLY;BYDAY=TU"),
+        ("Standup daily 9:00", "Standup", at(TODAY, 9), "FREQ=DAILY"),
+        ("Sync weekly 10:00", "Sync", at(TODAY, 10), "FREQ=WEEKLY"),
+        ("Bills every month 8:00", "Bills", at(TODAY, 8), "FREQ=MONTHLY"),
+        ("Standup every weekday 9", "Standup", at(TODAY, 9), "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"),
+        (
+            "Run every weekday sat 7:00",
+            "Run",
+            at(date(2026, 11, 23), 7),
+            "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
+        ),
+    ],
+)
+def test_repeats(text: str, summary: str, start: datetime, rrule: str) -> None:
+    q = parse(text, TODAY, NAMES)
+    assert (q.summary, q.start, q.rrule) == (summary, start, rrule)
+
+
+def test_every_without_a_unit_stays_in_summary() -> None:
+    q = parse("Talk every other week", TODAY, NAMES)
+    assert (q.summary, q.rrule) == ("Talk every other week", None)
+
+
+@pytest.mark.parametrize(
+    ("text", "summary", "start"),
+    [
+        ("Meet tomorrow 9", "Meet", at(TODAY + timedelta(1), 9)),
+        ("Meet fri at 14", "Meet", at(date(2026, 11, 20), 14)),
+        ("Doctor 14.30", "Doctor", at(TODAY, 14, 30)),
+        ("Doctor tomorrow 10.10", "Doctor", at(TODAY + timedelta(1), 10, 10)),
+        ("Lunch at noon", "Lunch", at(TODAY, 12)),
+        ("Release midnight", "Release", at(TODAY, 0)),
+    ],
+)
+def test_more_time_forms(text: str, summary: str, start: datetime) -> None:
+    q = parse(text, TODAY, NAMES)
+    assert (q.summary, q.start, q.all_day) == (summary, start, False)
+
+
+def test_ambiguous_dot_and_bare_numbers_stay_dates_or_words() -> None:
+    q = parse("Trip 12.11", TODAY, NAMES)
+    assert (q.start, q.all_day) == (local_midnight(date(2026, 11, 12)), True)
+    assert parse("Read 3 books", TODAY, NAMES).summary == "Read 3 books"
+
+
+async def test_quick_add_saves_a_series(make_app) -> None:
+    app = make_app()
+    async with app.run_test() as pilot:
+        await pilot.press("A", *"Yoga every monday 18:00")
+        preview = str(app.screen.query_one("#preview", Static).render())
+        assert "every week on Mon" in preview
+        await pilot.press("enter")
+        monday = TODAY + timedelta(days=-TODAY.weekday() + 7)
+        yogas = [o for o in app.occurrences(monday, monday + timedelta(15)) if o.summary == "Yoga"]
+        assert [o.start for o in yogas] == [at(monday + timedelta(7 * i), 18) for i in range(3)]
+
+
 async def test_quick_add_saves(make_app) -> None:
     app = make_app()
     async with app.run_test() as pilot:

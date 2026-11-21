@@ -15,12 +15,14 @@ from textual.widgets import Input, Static
 
 from tcal.quickadd import QuickAdd, parse
 from tcal.ui.keys import binding
+from tcal.ui.screens.event_detail import describe_rrule
 
 Mode = Literal["save", "form"]
 
 
 def describe(q: QuickAdd, default_calendar: str) -> str:
-    """One-line summary of ``q``: "“Lunch” · Thu 19 Nov 12:30–13:30 · @Cafe · Personal"."""
+    """One-line summary of ``q``: "“Lunch” · Thu 19 Nov 12:30–13:30 · every week · @Cafe ·
+    Personal"."""
     if q.all_day:
         last = q.end - timedelta(days=1)
         when = f"{q.start:%a %-d %b}" + (f" – {last:%a %-d %b}" if last > q.start else "")
@@ -29,6 +31,9 @@ def describe(q: QuickAdd, default_calendar: str) -> str:
         end = f"{q.end:%H:%M}" if q.end.date() == q.start.date() else f"{q.end:%a %-d %b %H:%M}"
         when = f"{q.start:%a %-d %b %H:%M}–{end}"
     parts = [f"“{q.summary}”" if q.summary else "(no title)", when]
+    if q.rrule:
+        repeat = describe_rrule(q.rrule)
+        parts.append(repeat[0].lower() + repeat[1:])
     if q.location:
         parts.append(f"@{q.location}")
     parts.append(q.calendar or default_calendar)

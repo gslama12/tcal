@@ -466,3 +466,13 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   the date also slides left of centre before anything is cut.
 - Search rows of a series add "· every week on Tue, Thu" (`describe_rrule`).
 - Help: space/shift+space page, home/end and g/G jump (pageup/down already worked).
+
+- **H4 (QA4 #3 #4 #11 #14 #17):** `clipboard.shifted` shifts plain BYDAY weekdays by the
+  days the start moves (an ordinal BYDAY like `2MO` returns None → "Change the days of this
+  series in the form"). `app.save_event(event, undo_message)`: moves pass "Undid move of “X”
+  (back to Mon 23 11:15)"; deletes toast "Deleted this “X” (Thu 19 09:00)" / "Deleted all “X”
+  events". A failed sync toasts "Couldn't reach iCloud: … · r retry" when the sync key asked
+  for it or nothing is cached yet (same error once in a row); `r` also toasts "Synced". With
+  nothing synced yet, new events say "Not synced yet". Quick add reads repeats (`daily`,
+  `every <weekday>`, `every weekday`, …; first day on/after the date), bare hours after a
+  date, `14.30` (`H.MM` with MM ≤ 12 only when a date is given elsewhere) and `noon`/`midnight`.

@@ -95,6 +95,9 @@ async def test_delete_one_occurrence_with_x_in_view(make_app) -> None:
         await pilot.press("o")
         left = find(app, "Standup", days=7, start=monday)
         assert len(left) == len(week) - 1 and picked.start not in [o.start for o in left]
+        day = f"{picked.start:%a %-d %H:%M}"
+        messages = [str(n.message) for n in app._notifications]
+        assert f"Deleted this “Standup” ({day}) · u undo" in messages
 
 
 async def test_delete_whole_series(make_app) -> None:
@@ -107,6 +110,9 @@ async def test_delete_whole_series(make_app) -> None:
         assert not find(app, "Standup", days=30)
         await pilot.press("u")
         assert len(find(app, "Standup", days=30)) == before
+        messages = [str(n.message) for n in app._notifications]
+        assert "Deleted all “Standup” events · u undo" in messages
+        assert "Restored all “Standup” events" in messages
 
 
 async def test_readonly_calendar_cannot_delete(make_app) -> None:

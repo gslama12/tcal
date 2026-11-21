@@ -20,7 +20,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
 
-from tcal import ics
+from tcal import ics, tz
 from tcal.model import Occurrence
 from tcal.tz import local_zone
 from tcal.ui.calgrid import WEEKDAY_NAMES
@@ -50,6 +50,12 @@ def time_range(occ: Occurrence) -> str:
     if start.date() == end.date():
         return f"{start:%a %-d %b %Y, %H:%M} – {end:%H:%M}"
     return f"{start:%a %-d %b %Y, %H:%M} – {end:%a %-d %b %Y, %H:%M}"
+
+
+def short_when(start: datetime, all_day: bool) -> str:
+    """'Mon 23 11:15' (local time), all-day: 'Mon 23'."""
+    local = start.astimezone(tz.local_zone())
+    return f"{local:%a %-d}" if all_day else f"{local:%a %-d %H:%M}"
 
 
 def describe_rrule(rrule: str) -> str:

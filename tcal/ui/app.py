@@ -44,12 +44,12 @@ from tcal.tz import local_zone
 from tcal.ui.editing import Editor
 from tcal.ui.keys import binding, keymap
 from tcal.ui.messages import EventSelected, NewEventRequested
-from tcal.ui.screens.event_detail import EventDetail, confirm_delete
+from tcal.ui.screens.event_detail import EventDetail, confirm_delete, short_when
 from tcal.ui.screens.goto import GotoScreen
 from tcal.ui.screens.help import HelpScreen
 from tcal.ui.screens.search import SearchScreen
 from tcal.ui.state import AppState, ViewMode, add_months
-from tcal.ui.sync_status import SyncStatus
+from tcal.ui.sync_status import SyncState, SyncStatus
 from tcal.ui.theme import PALETTES, make_theme
 from tcal.ui.undo import UndoHistory, UndoStep
 from tcal.ui.widgets.calendar_list import CalendarList
@@ -119,6 +119,8 @@ class TcalApp(App[None]):
         self.source = source
         self._sync = sync
         self.sync_status = SyncStatus()  # shown in the status bar
+        self._sync_by_key = False  # the running sync was asked for with the sync key
+        self._error_shown = ""  # the sync error last toasted (not again until it changes)
         self._wide: bool | None = None  # terminal >= SIDEBAR_MIN_WIDTH, None before layout
         self._sidebar_pinned = False  # the user toggled the sidebar: resizes leave it alone
         self.history = UndoHistory()
@@ -193,15 +195,17 @@ class TcalApp(App[None]):
         self._occ_cache.clear()
         self.state = self.state
 
-    def save_event(self, event: Event) -> Event:
+    def save_event(self, event: Event, undo_message: str = "") -> Event:
         """Create/update an event in the cache, redraw, and push it in the background.
-        The undo key takes it back."""
+        The undo key takes it back (and toasts ``undo_message``, default: "Undid edit of
+        “X”" / "Removed “X”")."""
         before = self.source.rows(event.uid)
         saved = self.source.save_event(event)
-        message = (
-            f"Undid the change to “{event.summary}”" if before else f"Removed “{event.summary}”"
-        )
-        self.history.push(UndoStep(event.uid, before, message))
+        if not undo_message:
+            undo_message = (
+                f"Undid edit of “{before[0].summary}”" if before else f"Removed “{event.summary}”"
+            )
+        self.history.push(UndoStep(event.uid, before, undo_message))
         self.refresh_data()
         self.request_sync()
         return saved
@@ -213,12 +217,24 @@ class TcalApp(App[None]):
         self.refresh_data()
         self.request_sync()
         if rows:
-            self.history.push(UndoStep(uid, rows, f"Restored “{rows[0].summary}”"))
-            self.notify(f"Deleted “{rows[0].summary}” · {self.undo_hint}")
+            first = next((r for r in rows if r.recurrence_id is None), rows[0])
+            if not first.rrule:
+                what = f"“{first.summary}”"
+            elif occurrence is not None:
+                what = f"this “{first.summary}” ({short_when(occurrence, first.all_day)})"
+            else:
+                what = f"all “{first.summary}” events"
+            self.history.push(UndoStep(uid, rows, f"Restored {what}"))
+            self.notify(f"Deleted {what} · {self.undo_hint}")
 
     @property
     def undo_hint(self) -> str:
         return f"{format_key(self.config.keys['undo'][0])} undo"
+
+    @property
+    def sync_hint(self) -> str:
+        """The sync key, e.g. "r"."""
+        return format_key(self.config.keys["sync"][0])
 
     def undo(self) -> None:
         """Take back the last create, edit, move or delete (up to ``UNDO_DEPTH`` in turn)."""
@@ -283,10 +299,30 @@ class TcalApp(App[None]):
                     severity="warning",
                     timeout=10,
                 )
+            if self._sync_by_key:
+                self.notify("Synced", title="Sync")
+            self._error_shown = ""
         else:
             self.sync_status = self.sync_status.failed(worker.error)
             self.log.error(f"sync failed: {worker.error!r}")
+            self._toast_sync_error()
+        self._sync_by_key = False
         self.refresh_data()
+
+    def _toast_sync_error(self) -> None:
+        """Toast why the sync failed if the user asked for it, or nothing is cached yet
+        (a first run offline); the same error only once in a row."""
+        status = self.sync_status
+        if not self._sync_by_key and (self._calendars or status.error == self._error_shown):
+            return
+        self._error_shown = status.error
+        what = "Couldn't reach iCloud" if status.state is SyncState.OFFLINE else "Sync failed"
+        self.notify(
+            f"{what}: {status.error} · {self.sync_hint} retry · `tcal doctor` checks the setup",
+            title="Sync",
+            severity="warning" if status.state is SyncState.OFFLINE else "error",
+            timeout=15,
+        )
 
     # ----- state changes --------------------------------------------------
 
@@ -482,6 +518,10 @@ class TcalApp(App[None]):
     def action_sync(self) -> None:
         if self._sync is None:
             self.notify("Syncing is off (no account)")
+            return
+        self._sync_by_key = True
+        if self.sync_status.state is SyncState.SYNCING:
+            self.notify("Already syncing…", title="Sync")
         self.request_sync()
 
     def action_help(self) -> None:

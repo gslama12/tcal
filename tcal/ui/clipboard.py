@@ -1,6 +1,7 @@
 """Pure event transforms for editing: copies (yank/paste/duplicate), moves
 (ctrl+h/j/k/l) and single instances of a series."""
 
+import re
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from uuid import uuid4
@@ -37,12 +38,29 @@ def copy_at(occ: Occurrence, at: date | datetime, calendar_id: str) -> Event:
     )
 
 
-def shifted(event: Event, delta: timedelta) -> Event:
-    """``event`` moved by ``delta`` (wall-clock); a series' deleted instances move along."""
+WEEKDAY_CODES = ("MO", "TU", "WE", "TH", "FR", "SA", "SU")
+_BYDAY = re.compile(r"(?<![A-Z])BYDAY=([^;]*)", re.IGNORECASE)
+
+
+def shifted(event: Event, delta: timedelta) -> Event | None:
+    """``event`` moved by ``delta`` (wall-clock); a series' deleted instances move along
+    and its BYDAY weekdays shift by the days the start moves (MO,FR -> TU,SA).
+    None if that can't be done: BYDAY with an ordinal ("2MO", "-1FR")."""
+    start = event.start + delta
+    rrule = event.rrule
+    if rrule and (days := (start.date() - event.start.date()).days % 7):
+        m = _BYDAY.search(rrule)
+        codes = m[1].upper().split(",") if m else []
+        if any(c not in WEEKDAY_CODES for c in codes):
+            return None
+        if m:
+            moved = [WEEKDAY_CODES[(WEEKDAY_CODES.index(c) + days) % 7] for c in codes]
+            rrule = f"{rrule[: m.start(1)]}{','.join(moved)}{rrule[m.end(1) :]}"
     return replace(
         event,
-        start=event.start + delta,
+        start=start,
         end=event.end + delta,
+        rrule=rrule,
         exdates=tuple(x + delta for x in event.exdates),
     )
 
