@@ -101,7 +101,16 @@ class TimeGrid(CalendarView):
             self._picked = next((o for o in self._occurrences() if o.key == key), None)
         self._redraw()
 
+    def on_show(self) -> None:
+        self._show_cursor()
+
     def on_resize(self) -> None:
+        self._show_cursor()
+
+    def _show_cursor(self) -> None:
+        """Scroll the cursor slot (now, or the selected event) into view: the grid has
+        no size until its view is shown, so on mount it can't be."""
+        self._ensure_visible()
         self._redraw()
 
     def _redraw(self) -> None:
@@ -351,6 +360,17 @@ class TimeGrid(CalendarView):
         if column is None:
             return
         event.stop()
+        marker = next(
+            (
+                m
+                for m in markers(self._frame(), self.size.height)
+                if m.day == column and m.y == y and m.x0 <= x < m.x1
+            ),
+            None,
+        )
+        if marker is not None:  # scroll to (and select) the first hidden event
+            self.select(marker.hidden[0])
+            return
         header = self._header_height()
         if y == 0:
             self._select_day(days[column])
@@ -365,17 +385,6 @@ class TimeGrid(CalendarView):
         elif y >= header:
             row = self._top_row() + y - header
             if row >= self.scale.total_rows:
-                return
-            marker = next(
-                (
-                    m
-                    for m in markers(self._frame(), self.size.height)
-                    if m.day == column and m.row == row and m.x0 <= x < m.x1
-                ),
-                None,
-            )
-            if marker is not None:  # scroll to (and select) the first hidden event
-                self.select(marker.hidden[0])
                 return
             block = next(
                 (

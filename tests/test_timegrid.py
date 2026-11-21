@@ -107,8 +107,9 @@ async def test_auto_zoom_follows_resize(app: RecordingApp) -> None:
             assert grid._top_row() + grid._grid_height() == grid.scale.total_rows
         await pilot.resize_terminal(140, 12)
         await pilot.pause()
-        assert grid.rows_per_hour == 1  # too small: smallest zoom, 06:30 row on top
-        assert grid.scale.row_of(6 * 60 + 30) == grid._top_row()
+        assert grid.rows_per_hour == 1  # too small: smallest zoom, scrolled to the cursor
+        top = grid._top_row()
+        assert top <= grid._cursor_row() < top + grid._grid_height()
 
 
 async def test_headers_share_one_format(store: Store) -> None:
@@ -371,7 +372,7 @@ async def test_tall_blocks_wrap_the_title_before_the_time(app: RecordingApp) -> 
         assert "planning" in lines[sprint + 1] and "13:00–15:00" in lines[sprint + 2]
 
 
-async def test_later_marker_moves_off_the_cursor_row(app: RecordingApp) -> None:
+async def test_later_marker_moves_to_the_header_off_the_cursor_row(app: RecordingApp) -> None:
     async with app.run_test(size=(100, 35)) as pilot:
         await pilot.press(*["plus"] * 7, *["j"] * 30)  # 8 rows/hour, cursor on the bottom rows
         await pilot.press(*["k"] * 10, *["j"] * 10)  # (scrolls down while moving, so back up)
@@ -380,8 +381,8 @@ async def test_later_marker_moves_off_the_cursor_row(app: RecordingApp) -> None:
         cursor_y = grid._header_height() + grid._cursor_row() - grid._top_row()
         column = slice(xs[2] + 1, xs[3])  # Wed, the selected day
         assert cursor_y == len(lines) - 2  # the 15-min slot: two rows
-        assert "▼" not in "".join(line[column] for line in lines[-2:])
-        assert "▼ 2 later" in lines[-3][column]
+        assert "▼" not in "".join(line[column] for line in lines[1:])  # never mid-grid
+        assert lines[0][column].endswith("▼2")  # in the day's header instead
         assert "▼ 1 later" in lines[-1][xs[1] + 1 : xs[2]]  # other columns: the edge row
 
 
@@ -409,7 +410,9 @@ async def test_max_zoom_keeps_the_cursor_on_quarter_hours(app: RecordingApp) -> 
         assert grid.cursor_time.minute % 15 == 0
 
 
-async def test_later_marker_shows_when_events_fill_the_edge_row(store: Store) -> None:
+async def test_later_marker_goes_to_the_header_when_events_fill_the_edge_row(
+    store: Store,
+) -> None:
     app = RecordingApp(store)
     async with app.run_test(size=(80, 24)) as pilot:  # 1 row/hour, 06:00-20:00 shown
         grid = app.query_one(WeekView)
@@ -420,9 +423,10 @@ async def test_later_marker_shows_when_events_fill_the_edge_row(store: Store) ->
         assert late.start.date() == TODAY
         assert grid.scale.row_of(late.start.hour * 60) >= frame.bottom(grid.size.height)
         marker = next(m for m in timepaint.markers(frame, grid.size.height) if m.day == col)
-        assert late in marker.hidden and marker.label == "▼1"
-        y = grid._header_height() + marker.row - grid._top_row()
-        assert "▼1" in text(grid)[y][xs[col] : xs[col + 1]]
+        assert late in marker.hidden and marker.label == "▼1" and marker.y == 0
+        assert text(grid)[0][xs[col] : xs[col + 1]].endswith("18▼1")  # not above Dinner
+        await pilot.click(WeekView, offset=(1 + marker.x0, 1))
+        assert grid.selected == late
 
 
 async def test_clicking_a_marker_scrolls_to_the_hidden_event(app: RecordingApp) -> None:
@@ -433,8 +437,61 @@ async def test_clicking_a_marker_scrolls_to_the_hidden_event(app: RecordingApp) 
         frame = grid._frame()
         marker = next(m for m in timepaint.markers(frame, grid.size.height) if "▲" in m.label)
         assert early in marker.hidden
-        y = grid._header_height() + marker.row - grid._top_row()
-        await pilot.click(WeekView, offset=(1 + marker.x0 + 1, 1 + y))
+        assert marker.y == grid._header_height()  # the top edge row
+        await pilot.click(WeekView, offset=(1 + marker.x0 + 1, 1 + marker.y))
         assert grid.selected == early
         assert grid._top_row() <= grid.scale.row_of(5 * 60 + 45)  # now in view
         assert not app.posted  # selects, doesn't open
+
+
+async def test_opening_the_week_scrolls_to_the_cursor(
+    store: Store, write_config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(timegrid, "now", lambda: at("19:30"))
+    config = write_config(
+        '[view]\nday_start = "08:00"\nday_end = "20:00"\nrows_per_hour = 4\n'
+        'default_view = "schedule"\n'
+    )
+    app = RecordingApp(store, config)
+    async with app.run_test(size=(100, 35)) as pilot:
+        await pilot.press("w")
+        await pilot.pause()
+        grid = app.query_one(WeekView)
+        top = grid._top_row()
+        assert top <= grid._cursor_row() < top + grid._grid_height()
+        assert grid.selected is not None and grid.selected.summary == "Dinner"
+        assert any("Dinner" in line for line in text(grid))  # what enter would open
+
+
+@pytest.mark.parametrize("size", [(100, 35), (200, 55)])
+async def test_a_time_never_sits_beside_a_neighbours_title(
+    app: RecordingApp, size: tuple[int, int]
+) -> None:
+    async with app.run_test(size=size) as pilot:
+        await pilot.pause()
+        grid = app.query_one(WeekView)
+        xs, lines = grid._columns(), text(grid)
+        thu = slice(xs[3] + 1, xs[4])  # Release 14:00 beside Interview 14:30
+        cells = [line[thu] for line in lines]
+        title = next(i for i, c in enumerate(cells) if "Inte" in c)
+        assert "14:00" not in cells[title]
+        assert any("14:00" in c for c in cells[:title] + cells[title + 1 :])  # still shown
+
+
+async def test_now_line_skips_the_gap_between_events(
+    app: RecordingApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    thu = TODAY + timedelta(days=1)
+    monkeypatch.setattr(timegrid, "now", lambda: at("15:00", thu))
+    async with app.run_test(size=(100, 35)) as pilot:
+        await pilot.pause()
+        grid = app.query_one(WeekView)
+        xs = grid._columns()
+        release, interview = (
+            next(b for b in grid._block_list() if b.occ.summary == name)
+            for name in ("Release", "Interview")
+        )
+        gap = sub_columns(release, xs)[1]
+        assert gap + 1 == sub_columns(interview, xs)[0]
+        line = next(line for line in text(grid) if line[xs[3]] == "●")
+        assert line[gap] == " "
