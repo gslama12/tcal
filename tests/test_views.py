@@ -182,9 +182,35 @@ async def test_sidebar_toggle_and_auto_hide(app: RecordingApp) -> None:
         assert sidebar.display
         await pilot.resize_terminal(100, 35)
         await pilot.pause()
+        assert sidebar.display  # an explicit toggle wins over resizes
+
+
+async def test_sidebar_hidden_by_toggle_stays_hidden_on_resize(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        sidebar = app.query_one("#sidebar")
+        await pilot.press("b")
+        await pilot.resize_terminal(100, 35)
+        await pilot.pause()
+        await pilot.resize_terminal(*SIZE)
+        await pilot.pause()
         assert not sidebar.display
-        await pilot.press("c")  # focusing the calendar list shows it again
+
+
+async def test_narrow_sidebar_auto_hides_when_focus_leaves(app: RecordingApp) -> None:
+    async with app.run_test(size=(100, 35)) as pilot:
+        sidebar = app.query_one("#sidebar")
+        assert not sidebar.display
+        await pilot.press("c")  # focusing the calendar list shows it
         assert sidebar.display
+        await pilot.press("question_mark")  # a modal on top keeps it
+        await pilot.pause()
+        assert sidebar.display
+        await pilot.press("escape")
+        await pilot.pause()
+        assert sidebar.display and isinstance(app.focused, CalendarList)
+        await pilot.press("tab")
+        await pilot.pause()
+        assert not sidebar.display and app.focused is not None
         await pilot.resize_terminal(*SIZE)
         await pilot.pause()
         assert sidebar.display

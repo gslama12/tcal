@@ -17,8 +17,8 @@ Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event form),
 ``check_writable()``, ``focus_view()``.
 
-The sidebar hides itself below ``SIDEBAR_MIN_WIDTH`` columns; the toggle key
-overrides that until the terminal crosses the threshold again.
+The sidebar hides itself below ``SIDEBAR_MIN_WIDTH`` columns (and again when focus
+leaves it there); once the user toggles it, that choice wins over resizes.
 """
 
 from collections.abc import Callable
@@ -34,7 +34,7 @@ from textual.reactive import reactive
 from textual.widgets import ContentSwitcher
 from textual.worker import Worker, WorkerState
 
-from tcal.config import Config, ConfigError, describe_conflicts, key_conflicts, load_config
+from tcal.config import Config, default_data, describe_conflicts, key_conflicts, load_config
 from tcal.model import Calendar, Event, Occurrence
 from tcal.source import EventSource
 from tcal.sync import SyncSummary
@@ -114,11 +114,17 @@ class TcalApp(App[None]):
         self._sync = sync
         self.sync_status = SyncStatus()  # shown in the status bar
         self._wide: bool | None = None  # terminal >= SIDEBAR_MIN_WIDTH, None before layout
+        self._sidebar_pinned = False  # the user toggled the sidebar: resizes leave it alone
         self._undo: list[Event] = []  # rows of the last deleted event
         self.config = config or load_config()
         name = self.config.theme.name
+        self._theme_notice = ""
         if name not in PALETTES:
-            raise ConfigError(f"unknown theme {name!r}; one of {', '.join(PALETTES)}")
+            fallback = default_data()["theme"]["name"]
+            self._theme_notice = (
+                f"Unknown theme {name!r}, using {fallback!r}; one of {', '.join(PALETTES)}"
+            )
+            name = fallback
         self.palette = PALETTES[name]
         self.register_theme(make_theme(name))
         self.theme = f"tcal-{name}"
@@ -307,6 +313,8 @@ class TcalApp(App[None]):
 
     def on_mount(self) -> None:
         self.set_keymap(keymap(self.config))
+        if self._theme_notice:
+            self.notify(self._theme_notice, title="Config", severity="warning", timeout=15)
         conflicts = describe_conflicts(key_conflicts(self.config))
         if conflicts:
             self.notify(
@@ -324,7 +332,24 @@ class TcalApp(App[None]):
         wide = event.size.width >= SIDEBAR_MIN_WIDTH
         if wide != self._wide:
             self._wide = wide
-            self._show_sidebar(wide)
+            if not self._sidebar_pinned:
+                self._show_sidebar(wide)
+
+    def on_descendant_blur(self, event: events.DescendantBlur) -> None:
+        """Narrow terminal: a sidebar shown just to reach it (``focus_calendars``)
+        hides again once focus leaves it."""
+        sidebar = self.query_one("#sidebar")
+        if self._wide or self._sidebar_pinned or not sidebar.display:
+            return
+        self.call_after_refresh(self._hide_unfocused_sidebar)
+
+    def _hide_unfocused_sidebar(self) -> None:
+        sidebar = self.query_one("#sidebar")
+        focused = self.focused
+        if self._sidebar_pinned or focused is None or focused.screen is not sidebar.screen:
+            return  # a modal on top keeps the sidebar for when it closes
+        if sidebar not in focused.ancestors:
+            sidebar.display = False
 
     def _show_sidebar(self, show: bool) -> None:
         sidebar = self.query_one("#sidebar")
@@ -335,6 +360,7 @@ class TcalApp(App[None]):
     # ----- actions --------------------------------------------------------
 
     def action_toggle_sidebar(self) -> None:
+        self._sidebar_pinned = True
         self._show_sidebar(not self.query_one("#sidebar").display)
 
     def action_prev_period(self) -> None:

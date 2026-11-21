@@ -10,6 +10,7 @@ from tcal.model import Occurrence
 from tcal.ui.calgrid import by_day, month_weeks, occurrence_days, weekday_names
 from tcal.ui.keys import EVENT_BINDINGS
 from tcal.ui.messages import EventSelected
+from tcal.ui.theme import legible, text_on
 from tcal.ui.timelayout import is_bar, layout_bars
 from tcal.ui.widgets.base import join_lines
 from tcal.ui.widgets.day_cursor import DayCursorView
@@ -233,9 +234,11 @@ class MonthView(DayCursorView):
                 label = f"{before}{chip.summary}".ljust(width)
                 if days[-1] > last:
                     label = label[: width - 1] + "▸"
-                style = Style(color=p.background1, bgcolor=color, bold=True, reverse=selected)
+                fg = text_on(color, p)
+                style = Style(color=fg, bgcolor=color, bold=True, reverse=selected)
                 text.append(label, style=style)
             else:
+                color = legible(color, p)
                 time = f"{chip.start:%-H:%M} " if chip.start.date() == day else ""
                 text.append(f" {time}", style=Style(color=color, bold=True, reverse=selected))
                 text.append(chip.summary, style=Style(color=color, reverse=selected))
