@@ -24,7 +24,7 @@ SIZE = (120, 40)
 class RecordingApp(TcalApp):
     """TcalApp that records the messages the views post for the CRUD screens."""
 
-    CSS_PATH = Path(app_module.__file__).parent / "styles.tcss"
+    CSS_PATH = str(Path(app_module.__file__).parent / "styles.tcss")
 
     def __init__(self, provider: FakeProvider) -> None:
         super().__init__(ProviderSource(provider), load_config(), today=TODAY)
