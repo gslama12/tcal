@@ -126,7 +126,7 @@ class MonthView(DayCursorView):
         picked = self._picked
         if picked is None or self.tcal.state.day not in occurrence_days(picked):
             return None
-        return picked if any(occ == picked for occ, _ in self._stops()) else None
+        return next((occ for occ, _ in self._stops() if occ.key == picked.key), None)
 
     def _pick(self, occ: Occurrence, day: date) -> None:
         self._picked = occ

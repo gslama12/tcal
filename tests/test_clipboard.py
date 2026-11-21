@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 
 from conftest import TODAY
@@ -156,3 +157,113 @@ async def test_move_one_instance_or_the_series(make_app) -> None:
         starts = {o.start for o in named(app, "Standup", TODAY - timedelta(2), 5)}
         assert at(8, 45, TODAY + timedelta(1)) in starts
         assert at(8, 45, TODAY - timedelta(1)) in starts
+
+
+def resynced(app, store, uid: str) -> None:
+    """What a background sync does to a pushed event: a new etag, then a redraw."""
+    event = store.get_event(uid)
+    store.set_remote(uid, event.href, f"{event.etag}-synced")
+    app.refresh_data()
+
+
+async def test_moved_event_stays_selected_after_a_sync(make_app, store) -> None:
+    app = make_app()
+    tomorrow = TODAY + timedelta(1)
+    store.save_event(
+        Event("other@x", "family", "Other", at(11, day=tomorrow), at(12, day=tomorrow))
+    )
+    async with app.run_test(size=(140, 50)) as pilot:
+        grid = app.query_one("#week", TimeGrid)
+        grid.select(find(app, "Dentist"))
+        await pilot.press("greater_than_sign")
+        await pilot.pause()
+        resynced(app, store, find(app, "Dentist", tomorrow).event.uid)
+        await pilot.pause()
+        assert grid.selected is not None and grid.selected.summary == "Dentist"
+
+
+async def test_month_view_keeps_the_copy_selected_for_repeated_moves(make_app, store) -> None:
+    app = make_app()
+    async with app.run_test(size=(140, 50)) as pilot:
+        app.query_one("#week", TimeGrid).select(find(app, "Dinner"))
+        await pilot.press("y", "m", "l", "l", "l", "p")  # Sat 21 (Thu is full: "+N more")
+        await pilot.pause()
+        month = app.query_one(MonthView)
+        copy = month.selected
+        assert copy is not None and copy.start == at(19, day=TODAY + timedelta(3))
+        resynced(app, store, copy.event.uid)
+        await pilot.press("greater_than_sign")
+        await pilot.pause()
+        resynced(app, store, copy.event.uid)
+        await pilot.press("greater_than_sign")
+        await pilot.pause()
+        assert month.selected is not None
+        assert month.selected.start == at(19, day=TODAY + timedelta(5))
+
+
+async def test_paste_and_duplicate_toast_and_name_another_calendar(make_app) -> None:
+    app = make_app()
+    holiday = TODAY + timedelta(16)
+    async with app.run_test(size=(140, 50)) as pilot:
+        app.query_one("#week", TimeGrid).select(find(app, "Dinner"))
+        await pilot.press("D")
+        await pilot.pause()
+        app.select_date(holiday)
+        await pilot.pause()
+        app.query_one("#week", TimeGrid).select(find(app, "Public holiday", holiday))
+        await pilot.press("D")
+        await pilot.pause()
+        messages = [str(n.message) for n in app._notifications]
+        assert "Duplicated “Dinner” to Thu 19 · u undo" in messages
+        writable = app.calendar(
+            named(app, "Public holiday", holiday + timedelta(1), 1)[0].calendar_id
+        )
+        day = holiday + timedelta(1)
+        assert (
+            f"Duplicated “Public holiday” to {day:%a} {day.day} · {writable.name} · u undo"
+            in messages
+        )
+
+
+async def test_override_moves_without_asking_and_a_series_run_asks_once(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(140, 50)) as pilot:
+        grid = app.query_one("#week", TimeGrid)
+        grid.select(find(app, "Standup"))
+        await pilot.press("J", "o")  # this event -> an override
+        await pilot.press("J")  # no dialog for the override
+        await pilot.pause()
+        assert not isinstance(app.screen, MoveScope)
+        assert grid.selected is not None and grid.selected.start == at(9, 30)
+
+        grid.select(find(app, "Standup", TODAY + timedelta(1)))
+        await pilot.press("K", "s", "K")  # all events, then again without asking
+        await pilot.pause()
+        assert not isinstance(app.screen, MoveScope)
+        starts = {o.start for o in named(app, "Standup", TODAY - timedelta(2), 5)}
+        assert at(8, 30, TODAY - timedelta(1)) in starts
+
+
+async def test_undo_takes_back_moves_pastes_and_edits_in_turn(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(140, 50)) as pilot:
+        grid = app.query_one("#week", TimeGrid)
+        grid.select(find(app, "Dinner"))
+        await pilot.press("greater_than_sign", "D")
+        await pilot.pause()
+        event = find(app, "Dentist").event
+        app.save_event(replace(event, summary="Dentist!"))
+        await pilot.press("u")
+        assert find(app, "Dentist").summary == "Dentist"
+        await pilot.press("u")  # the duplicate is gone
+        assert len(named(app, "Dinner", TODAY, 7)) == 1
+        await pilot.press("u")  # the move
+        assert find(app, "Dinner").start == at(19)
+        messages = [str(n.message) for n in app._notifications]
+        assert "Undid the change to “Dentist!”" in messages and "Removed “Dinner”" in messages
+        # a series moved by "all events" comes back whole
+        grid.select(find(app, "Standup"))
+        await pilot.press("J", "s", "u")
+        await pilot.pause()
+        starts = {o.start for o in named(app, "Standup", TODAY - timedelta(2), 5)}
+        assert at(9) in starts and at(9, day=TODAY - timedelta(1)) in starts

@@ -143,10 +143,11 @@ Themes: `nord` (default), `gruvbox`, `catppuccin-mocha`, `tokyo-night` (dark) an
 | `open` | `enter` | open event / day, or new event on an empty slot |
 | `next_event` / `prev_event` | `n` / `N` | cycle through events in view (day/week) |
 | `yank` / `paste` / `duplicate` | `y` / `p` `P` / `D` | copy event, paste at cursor slot or day, copy to next day |
-| `move_down` / `move_up` / `move_left` / `move_right` | `ctrl+j` / `ctrl+k` / `ctrl+h` / `ctrl+l` | move event ±15 min (day/week) / ±1 day |
+| `move_down` / `move_up` / `move_left` / `move_right` | `J` / `K` / `<` / `>` (also `ctrl+j/k/h/l`) | move event ±15 min (day/week) / ±1 day |
 | `new_event` | `a` `o` | new event |
 | `edit_event` | `e` | edit selected event |
 | `delete_event` | `x` | delete selected event |
+| `undo` | `u` | undo the last create / edit / move / paste / delete (repeatable) |
 | `goto_date` | `g` | go to date (`tomorrow`, `fri`, `24.12.`, `2026-12-24`, `+2w`, …) |
 | `search` | `/` | search events |
 | `sync` | `r` | sync now |

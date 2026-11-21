@@ -37,8 +37,13 @@ class EventSource(Protocol):
         Returns what ``restore`` needs to undo it."""
         ...
 
+    def rows(self, uid: str) -> list[Event]:
+        """The stored rows of ``uid`` (empty if none), for ``restore``."""
+        ...
+
     def restore(self, rows: list[Event]) -> None:
-        """Undo a ``delete_event`` with the value it returned."""
+        """Undo a ``delete_event`` (with the value it returned) or an edit (with ``rows``
+        from before it)."""
         ...
 
     def pending_count(self) -> int:
@@ -65,6 +70,9 @@ class StoreSource:
 
     def delete_event(self, uid: str, occurrence: datetime | None = None) -> list[Event]:
         return self.store.delete_event(uid, occurrence)
+
+    def rows(self, uid: str) -> list[Event]:
+        return self.store.rows(uid)
 
     def restore(self, rows: list[Event]) -> None:
         self.store.restore(rows)

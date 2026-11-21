@@ -38,6 +38,17 @@ class Row:
     blank: bool = False
 
 
+def _same_row(row: Row, other: Row | None) -> bool:
+    """The same event on the same day (its etag may have changed in a sync)."""
+    return (
+        other is not None
+        and row.day == other.day
+        and row.occ is not None
+        and other.occ is not None
+        and row.occ.key == other.occ.key
+    )
+
+
 def build_rows(occurrences: list[Occurrence], start: date, end: date) -> list[Row]:
     """Rows for the days [start, end): header + events per non-empty day, blank between."""
     rows: list[Row] = []
@@ -134,7 +145,7 @@ class ScheduleView(CalendarView):
             pass
         events_ = self._event_rows()
         # by row, not occurrence: a multi-day event has a row on each of its days
-        same = [i for i in events_ if self._rows[i] == selected]
+        same = [i for i in events_ if _same_row(self._rows[i], selected)]
         if same:
             self._cursor = same[0]
         elif selected is None or not events_:
@@ -224,7 +235,7 @@ class ScheduleView(CalendarView):
         day = occ.start.date()
         if not self._start <= day < self._end:
             self.tcal.select_date(day)
-        rows = [i for i, row in enumerate(self._rows) if row.occ == occ]
+        rows = [i for i, row in enumerate(self._rows) if row.occ and row.occ.key == occ.key]
         if rows:
             self._select(rows[0])
 

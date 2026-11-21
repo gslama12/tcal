@@ -160,8 +160,9 @@ class TimeGrid(CalendarView):
     def on_state(self, state: AppState) -> None:
         self._data = None
         self._blocks = None
-        if self._picked is not None and self._picked not in self._occurrences():
-            self._picked = None
+        if self._picked is not None:  # the reloaded copy (or None if it is gone)
+            key = self._picked.key
+            self._picked = next((o for o in self._occurrences() if o.key == key), None)
         self._redraw()
 
     def on_resize(self) -> None:

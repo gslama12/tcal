@@ -22,7 +22,7 @@ leaves it there); once the user toggles it, that choice wins over resizes.
 """
 
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from uuid import uuid4
 
@@ -68,8 +68,19 @@ from tcal.ui.widgets.timegrid import DayView, TimeGrid, WeekView
 from tcal.ui.widgets.view_switcher import ViewSwitcher
 from tcal.ui.widgets.year_view import YearView
 
+UNDO_DEPTH = 20  # changes the undo key can take back
+
 SIDEBAR_MIN_WIDTH = 120  # terminal columns below which the sidebar starts hidden
 OCC_CACHE_SIZE = 32  # date ranges whose occurrences are kept until the next data refresh
+
+
+@dataclass(frozen=True)
+class UndoStep:
+    """How to take back one change: ``uid``'s rows before it (empty: it was created)."""
+
+    uid: str
+    rows: list[Event]
+    message: str  # the toast after undoing it
 
 
 class TcalApp(App[None]):
@@ -127,8 +138,9 @@ class TcalApp(App[None]):
         self.sync_status = SyncStatus()  # shown in the status bar
         self._wide: bool | None = None  # terminal >= SIDEBAR_MIN_WIDTH, None before layout
         self._sidebar_pinned = False  # the user toggled the sidebar: resizes leave it alone
-        self._undo: list[Event] = []  # rows of the last deleted event
+        self._undo: list[UndoStep] = []  # last change at the end
         self._yanked: Occurrence | None = None  # the yank key's copy
+        self._move_run: tuple[tuple[str, datetime], Scope] | None = None  # see action_move
         self.config = config or load_config()
         name = self.config.theme.name
         self._theme_notice = ""
@@ -187,8 +199,14 @@ class TcalApp(App[None]):
         self.state = self.state
 
     def save_event(self, event: Event) -> Event:
-        """Create/update an event in the cache, redraw, and push it in the background."""
+        """Create/update an event in the cache, redraw, and push it in the background.
+        The undo key takes it back."""
+        before = self.source.rows(event.uid)
         saved = self.source.save_event(event)
+        message = (
+            f"Undid the change to “{event.summary}”" if before else f"Removed “{event.summary}”"
+        )
+        self._push_undo(UndoStep(event.uid, before, message))
         self.refresh_data()
         self.request_sync()
         return saved
@@ -196,21 +214,33 @@ class TcalApp(App[None]):
     def delete_event(self, uid: str, occurrence: datetime | None = None) -> None:
         """Delete an event, or one instance of a series: pass the instance's
         original start (``occ.event.recurrence_id or occ.start``). The undo key restores it."""
-        self._undo = self.source.delete_event(uid, occurrence)
+        rows = self.source.delete_event(uid, occurrence)
         self.refresh_data()
         self.request_sync()
-        if self._undo:
-            undo = format_key(self.config.keys["undo"][0])
-            self.notify(f"Deleted “{self._undo[0].summary}” · {undo} undo")
+        if rows:
+            self._push_undo(UndoStep(uid, rows, f"Restored “{rows[0].summary}”"))
+            self.notify(f"Deleted “{rows[0].summary}” · {self.undo_hint}")
+
+    @property
+    def undo_hint(self) -> str:
+        return f"{format_key(self.config.keys['undo'][0])} undo"
+
+    def _push_undo(self, step: UndoStep) -> None:
+        self._undo = [*self._undo[-(UNDO_DEPTH - 1) :], step]
+        self._move_run = None
 
     def undo(self) -> None:
-        """Restore the last deleted event (once)."""
+        """Take back the last create, edit, move or delete (up to ``UNDO_DEPTH`` in turn)."""
         if not self._undo:
             self.notify("Nothing to undo")
             return
-        self.source.restore(self._undo)
-        self.notify(f"Restored “{self._undo[0].summary}”")
-        self._undo = []
+        step = self._undo.pop()
+        if step.rows:
+            self.source.restore(step.rows)
+        else:
+            self.source.delete_event(step.uid)
+        self._move_run = None
+        self.notify(step.message)
         self.refresh_data()
         self.request_sync()
 
@@ -464,16 +494,17 @@ class TcalApp(App[None]):
             return
         focused = self.focused
         at = focused.cursor_time if isinstance(focused, TimeGrid) else self.state.day
-        self._save_copy(self._yanked, at)
+        self._save_copy(self._yanked, at, "Pasted")
 
     def action_duplicate(self) -> None:
         if occ := self.selected_occurrence():
-            self._save_copy(occ, occ.start + timedelta(days=1))
+            self._save_copy(occ, occ.start + timedelta(days=1), "Duplicated")
         else:
             self.notify("No event selected")
 
-    def _save_copy(self, occ: Occurrence, at: date | datetime) -> None:
-        """Save a copy of ``occ`` at ``at`` (its own calendar, or the first writable) and select it."""
+    def _save_copy(self, occ: Occurrence, at: date | datetime, verb: str) -> None:
+        """Save a copy of ``occ`` at ``at`` (its own calendar, or the first writable),
+        select it and toast "<verb> “X” to Sun 22" (+ " · Work" if the calendar differs)."""
         calendar = self.calendar(occ.calendar_id)
         writable = [calendar] if calendar and not calendar.readonly else self._writable()
         if not writable:
@@ -481,10 +512,15 @@ class TcalApp(App[None]):
             return
         copy = self.save_event(copy_at(occ, at, writable[0].id))
         self._select_moved(copy.uid, copy.start)
+        day = copy.start.date()
+        where = "" if writable[0] is calendar else f" · {writable[0].name}"
+        self.notify(f"{verb} “{copy.summary}” to {day:%a} {day.day}{where} · {self.undo_hint}")
 
     def action_move(self, minutes: int, days: int) -> None:
-        """Shift the selected event by ``minutes`` (timed events in a time grid) or ``days``;
-        for a series ask "this event" / "all events", as for editing."""
+        """Shift the selected event by ``minutes`` (timed events in a time grid) or ``days``.
+        For a series ask "this event" / "all events", as for editing; the answer holds
+        while the same occurrence is moved on (no other change in between). An override
+        just moves."""
         occ = self.selected_occurrence()
         if occ is None:
             self.notify("No event selected")
@@ -496,21 +532,23 @@ class TcalApp(App[None]):
             return
         delta = timedelta(days=days, minutes=minutes)
 
-        def move(event: Event) -> None:
+        def done(scope: Scope | None) -> None:
+            if scope is None:
+                return
+            if scope == "series":
+                event = self.source.get_event(occ.event.uid) or occ.event
+            else:
+                event = instance_of(occ) if is_recurring(occ) else occ.event
             self.save_event(shifted(event, delta))
             self._select_moved(occ.event.uid, occ.start + delta)
+            self._move_run = ((occ.event.uid, occ.start + delta), scope)
 
-        if not is_recurring(occ):
-            move(occ.event)
-            return
-
-        def done(scope: Scope | None) -> None:
-            if scope == "occurrence":
-                move(instance_of(occ))
-            elif scope == "series":
-                move(self.source.get_event(occ.event.uid) or occ.event)
-
-        self.push_screen(MoveScope(occ), done)
+        if not is_recurring(occ) or occ.event.recurrence_id is not None:
+            done("occurrence")
+        elif self._move_run is not None and self._move_run[0] == occ.key:
+            done(self._move_run[1])
+        else:
+            self.push_screen(MoveScope(occ), done)
 
     def _select_moved(self, uid: str, start: datetime) -> None:
         """Go to the day of event ``uid``'s occurrence at ``start`` and select it in the view."""

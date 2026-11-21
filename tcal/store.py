@@ -135,6 +135,11 @@ class Store:
         ).fetchone()
         return _event(row) if row else None
 
+    def rows(self, uid: str) -> list[Event]:
+        """All rows of ``uid`` (master first, then overrides), e.g. to ``restore`` them later."""
+        rows = self.db.execute("SELECT * FROM events WHERE uid = ? ORDER BY recurrence_id", (uid,))
+        return [_event(r) for r in rows]
+
     def upsert_events(self, calendar_id: str, events: Iterable[Event]) -> None:
         """Replace the calendar's events with ``events`` (from the server).
 
@@ -173,10 +178,7 @@ class Store:
         start, i.e. its recurrence id) just that instance of a series (EXDATE).
 
         Returns the event's rows as they were, for ``restore`` (undo)."""
-        rows = self.db.execute(
-            "SELECT * FROM events WHERE uid = ? ORDER BY recurrence_id", (uid,)
-        ).fetchall()
-        before = [_event(r) for r in rows]
+        before = self.rows(uid)
         master = self.get_event(uid)
         if master is None:
             return before
@@ -195,11 +197,12 @@ class Store:
         return before
 
     def restore(self, rows: list[Event]) -> None:
-        """Undo ``delete_event``: put back the rows it returned and queue the push.
+        """Undo ``delete_event`` or an edit: put back the rows ``rows``/``delete_event``
+        returned and queue the push.
 
         The event keeps its server resource if that still exists (an unpushed
-        delete is cancelled; a deleted instance updates the series), otherwise
-        it is created again."""
+        delete is cancelled, also the one a move to another calendar queued; a
+        deleted instance updates the series), otherwise it is created again."""
         if not rows:
             return
         master, *overrides = rows
@@ -208,10 +211,11 @@ class Store:
                 "DELETE FROM ops WHERE uid = ? AND kind = 'delete'", (master.uid,)
             ).rowcount
             current = self.get_event(master.uid)
-            if current is not None:
-                href, etag = current.href, current.etag
-            elif unpushed:
+            if unpushed:  # the old resource is still on the server
+                self.db.execute("DELETE FROM ops WHERE uid = ? AND kind = 'create'", (master.uid,))
                 href, etag = master.href, master.etag
+            elif current is not None:
+                href, etag = current.href, current.etag
             else:
                 href = etag = None
             self.db.execute("DELETE FROM events WHERE uid = ?", (master.uid,))

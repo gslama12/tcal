@@ -54,14 +54,16 @@ new_event = ["a", "o"]
 quick_add = ["A"]                      # one line: "Lunch fri 12-13 @Cafe #work"
 edit_event = ["e"]
 delete_event = ["x"]
-undo = ["u"]                           # restore the last deleted event
+undo = ["u"]                           # take back the last create/edit/move/delete (repeatable)
 yank = ["y"]                           # copy the selected event
 paste = ["p", "P"]                     # a copy at the cursor slot (day/week) or selected day
 duplicate = ["D"]                      # a copy of the selected event on the next day
-move_down = ["ctrl+j"]                 # selected event 15 min later (day/week)
-move_up = ["ctrl+k"]                   # selected event 15 min earlier (day/week)
-move_left = ["ctrl+h"]                 # selected event one day earlier
-move_right = ["ctrl+l"]                # selected event one day later
+# Moves: ctrl+h arrives as backspace in most terminals, and tmux often takes ctrl+h/j/k/l,
+# so the first keys are plain ones; ctrl+h/j/k/l work where the terminal passes them.
+move_down = ["J", "ctrl+j"]            # selected event 15 min later (day/week)
+move_up = ["K", "ctrl+k"]              # selected event 15 min earlier (day/week)
+move_left = ["less_than_sign", "ctrl+h"]     # "<": selected event one day earlier
+move_right = ["greater_than_sign", "ctrl+l"] # ">": selected event one day later
 goto_date = ["g"]
 search = ["slash"]
 sync = ["r"]

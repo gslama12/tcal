@@ -154,3 +154,14 @@ def test_restore_one_occurrence_brings_back_override(db: Store) -> None:
     summaries = {e.summary for e in db.events_between(START, START + timedelta(days=30))}
     assert summaries == {"Weekly", "Weekly (moved)"}
     assert [op.kind for op in db.pending_ops()] == ["update"]
+
+
+def test_restore_undoes_a_move_to_another_calendar(db: Store) -> None:
+    db.upsert_calendars([Calendar("cal", "Cal", "#123456"), Calendar("other", "Other", "#654321")])
+    db.upsert_events("cal", [_event(href="h", etag="1")])
+    before = db.rows("e1")
+    db.save_event(replace(before[0], calendar_id="other", summary="Moved"))
+    db.restore(before)
+    [row] = db.rows("e1")
+    assert (row.calendar_id, row.summary, row.href) == ("cal", before[0].summary, "h")
+    assert [(op.kind, op.event.calendar_id) for op in db.pending_ops()] == [("update", "cal")]

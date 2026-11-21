@@ -348,6 +348,18 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   (o this event = `instance_of` shifted / s all events = master shifted, EXDATEs along; existing
   overrides keep their RECURRENCE-IDs). The copy / moved event stays selected (`_select_moved`).
 
+- **Y3 QA3 fixes (feat-g1):** views keep their pick by `Occurrence.key` (uid + start) and
+  re-resolve it after a reload, so a sync's new etag no longer drops or swaps the selection.
+  Default move keys are now **`J`/`K` (±15 min) and `<`/`>` (±1 day)**, `ctrl+j/k/h/l` stay as
+  extras (`ctrl+h` arrives as backspace without the kitty protocol; tmux often takes ctrl+hjkl).
+  An override moves without `MoveScope`; the scope answered for a series holds while the same
+  occurrence keeps moving (`_move_run`, cleared by any other change). Paste/duplicate toast
+  "Pasted “X” to Sun 22 · <calendar if different> · u undo".
+- **Y4 Undo stack:** `app.save_event`/`delete_event` push an `UndoStep(uid, rows before, toast)`
+  (`EventSource.rows(uid)`; at most `UNDO_DEPTH` = 20); `u` pops one: no rows → delete the
+  created event, else `restore(rows)`. `Store.restore` now prefers an unpushed delete's old
+  resource (also the one a move to another calendar queued) over the current row's href.
+
 ### Subscriptions + detail extras (feat-subs)
 
 - **U1 Subscriptions:** `[[subscription]] name, url, color?` (`Config.subscriptions`, a list of

@@ -58,6 +58,11 @@ class Occurrence:
     end: datetime
 
     @property
+    def key(self) -> tuple[str, datetime]:
+        """Identity across reloads (a sync changes the etag and raw text): uid + start."""
+        return self.event.uid, self.start
+
+    @property
     def all_day(self) -> bool:
         return self.event.all_day
 
