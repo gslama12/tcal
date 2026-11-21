@@ -23,6 +23,7 @@ from tcal.config import (
 )
 from tcal.credentials import CredentialsError, get_password, store_password
 from tcal.providers.base import Provider
+from tcal.synclog import log_to_file
 
 
 def connect(config: Config, apple_id: str | None = None, password: str | None = None) -> Provider:
@@ -75,6 +76,7 @@ def cli(ctx: click.Context, demo: bool) -> None:
     if ctx.invoked_subcommand is not None:
         return
     config = _config()
+    log_to_file(paths.log_file())
 
     from tcal.providers.fake import FakeProvider, demo_feed
     from tcal.source import StoreSource
@@ -122,11 +124,14 @@ def sync() -> None:
     from tcal.sync import sync_job
 
     config = _config()
+    log_to_file(paths.log_file())
     job = sync_job(
         connect(config), paths.database_file(), config.sync, subscriptions=_feeds(config)
     )
     with _reported("sync failed"):
         summary = job()
+    for warning in summary.warnings:
+        click.echo(f"warning: {warning}", err=True)
     click.echo(f"Synced: {summary}")
 
 

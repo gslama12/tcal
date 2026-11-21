@@ -13,7 +13,7 @@ Layout::
 Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
 ``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``current_occurrence()``, ``save_event()``,
-``delete_event()``, ``undo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``,
+``delete_event()``, ``undo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``, ``sync_log``,
 ``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event form),
 ``check_writable()``, ``focus_view()``, ``selected_occurrence()``, ``select_in_view()``.
 
@@ -24,6 +24,8 @@ The sidebar hides itself below ``SIDEBAR_MIN_WIDTH`` columns (and again when foc
 leaves it there); once the user toggles it, that choice wins over resizes.
 """
 
+import logging
+from collections import deque
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import date, datetime, time, timedelta
@@ -36,10 +38,12 @@ from textual.reactive import reactive
 from textual.widgets import ContentSwitcher
 from textual.worker import Worker, WorkerState
 
+from tcal import paths
 from tcal.config import Config, default_data, describe_conflicts, key_conflicts, load_config
 from tcal.model import Calendar, Event, Occurrence
 from tcal.source import EventSource
 from tcal.sync import SyncSummary
+from tcal.synclog import LogEntry
 from tcal.tz import local_zone
 from tcal.ui.editing import Editor
 from tcal.ui.keys import binding, keymap
@@ -48,6 +52,7 @@ from tcal.ui.screens.event_detail import EventDetail, confirm_delete, short_when
 from tcal.ui.screens.goto import GotoScreen
 from tcal.ui.screens.help import HelpScreen
 from tcal.ui.screens.search import SearchScreen
+from tcal.ui.screens.sync_log import SyncLogScreen
 from tcal.ui.state import AppState, ViewMode, add_months
 from tcal.ui.sync_status import SyncState, SyncStatus
 from tcal.ui.theme import PALETTES, make_theme
@@ -64,6 +69,9 @@ from tcal.ui.widgets.year_view import YearView
 SIDEBAR_MIN_WIDTH = 120  # terminal columns below which the sidebar starts hidden
 OCC_CACHE_SIZE = 32  # date ranges whose occurrences are kept until the next data refresh
 SELECTING_VIEWS = TimeGrid | MonthView | ScheduleView  # views with a selected event
+SYNC_LOG_SIZE = 200  # warnings/errors kept for the sync log screen
+
+log = logging.getLogger(__name__)
 
 
 class TcalApp(App[None]):
@@ -94,6 +102,7 @@ class TcalApp(App[None]):
         binding("goto_date", "Go to date"),
         binding("search", "Search"),
         binding("sync", "Sync"),
+        binding("sync_log", "Sync log"),
         binding("focus_calendars", "Calendars"),
         binding("focus_next", "Next pane"),
         binding("toggle_sidebar", "Sidebar"),
@@ -121,6 +130,8 @@ class TcalApp(App[None]):
         self.sync_status = SyncStatus()  # shown in the status bar
         self._sync_by_key = False  # the running sync was asked for with the sync key
         self._error_shown = ""  # the sync error last toasted (not again until it changes)
+        self._warnings_shown: list[str] = []  # the last sync's warnings (toasted when new)
+        self.sync_log: deque[LogEntry] = deque(maxlen=SYNC_LOG_SIZE)  # oldest first
         self._wide: bool | None = None  # terminal >= SIDEBAR_MIN_WIDTH, None before layout
         self._sidebar_pinned = False  # the user toggled the sidebar: resizes leave it alone
         self.history = UndoHistory()
@@ -289,25 +300,31 @@ class TcalApp(App[None]):
         if event.state is WorkerState.SUCCESS:
             result = worker.result
             summary = result if isinstance(result, SyncSummary) else SyncSummary()
-            self.sync_status = self.sync_status.succeeded(datetime.now(), tuple(summary.failed))
-            if summary.conflicts:
-                names = ", ".join(f"“{name}”" for name in summary.conflicts)
-                self.notify(
-                    f"{names} changed on the server meanwhile: your change was dropped"
-                    " (server version kept)",
-                    title="Sync",
-                    severity="warning",
-                    timeout=10,
-                )
+            now = datetime.now()
+            self.sync_status = self.sync_status.succeeded(now, tuple(summary.failed))
+            self.sync_log.extend(LogEntry(now, False, w) for w in summary.warnings)
+            self._toast_warnings(summary.warnings)
             if self._sync_by_key:
                 self.notify("Synced", title="Sync")
             self._error_shown = ""
         else:
             self.sync_status = self.sync_status.failed(worker.error)
-            self.log.error(f"sync failed: {worker.error!r}")
+            log.error("sync failed: %s", worker.error or "unknown error")
+            self.sync_log.append(LogEntry(datetime.now(), True, self.sync_status.error))
             self._toast_sync_error()
         self._sync_by_key = False
         self.refresh_data()
+
+    def _toast_warnings(self, warnings: list[str]) -> None:
+        """One line: the count and the first warning; again only when they change
+        (a feed failing on every periodic sync is toasted once) or the user asked."""
+        if warnings and (self._sync_by_key or warnings != self._warnings_shown):
+            count = f"{len(warnings)} sync warning{'s' if len(warnings) > 1 else ''}"
+            log_key = format_key(self.config.keys["sync_log"][0])
+            self.notify(
+                f"{count}: {warnings[0]} · {log_key} sync log", severity="warning", timeout=10
+            )
+        self._warnings_shown = warnings
 
     def _toast_sync_error(self) -> None:
         """Toast why the sync failed if the user asked for it, or nothing is cached yet
@@ -523,6 +540,11 @@ class TcalApp(App[None]):
         if self.sync_status.state is SyncState.SYNCING:
             self.notify("Already syncing…", title="Sync")
         self.request_sync()
+
+    def action_sync_log(self) -> None:
+        keys = self.config.keys
+        scroll = (keys["cursor_down"], keys["cursor_up"])
+        self.push_screen(SyncLogScreen(self.sync_log, paths.log_file(), keys["sync_log"], scroll))
 
     def action_help(self) -> None:
         self.push_screen(HelpScreen(self.config.keys))

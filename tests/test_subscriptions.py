@@ -182,7 +182,8 @@ async def test_calendar_list_other_calendars(store: Store) -> None:
 
 async def test_failed_feed_and_conflicts_are_shown(store: Store) -> None:
     def job() -> SyncSummary:  # the cache already has the feed; this sync could not fetch it
-        return SyncSummary(failed=["Holidays AT"], conflicts=["Dinner"])
+        warnings = ["“Dinner” changed on the server meanwhile", "could not fetch “Holidays AT”"]
+        return SyncSummary(failed=["Holidays AT"], conflicts=["Dinner"], warnings=warnings)
 
     SyncEngine(FakeProvider(today=TODAY), store, today=TODAY, subscriptions=feeds()).sync()
     app = TcalApp(StoreSource(store), load_config(), today=TODAY, sync=job)
@@ -193,7 +194,8 @@ async def test_failed_feed_and_conflicts_are_shown(store: Store) -> None:
         bar = str(app.query_one(StatusBar).render())
         assert "⚠ synced" in bar and "Holidays AT failed" in bar
         assert str(app.query_one(CalendarList).render()).splitlines()[-1] == "■ Holidays AT ⚠"
-        assert any("“Dinner” changed on the server" in str(n.message) for n in app._notifications)
+        [toast] = [str(n.message) for n in app._notifications if "sync warning" in str(n.message)]
+        assert toast == "2 sync warnings: “Dinner” changed on the server meanwhile · R sync log"
 
 
 def test_demo_feed_is_a_read_only_subscription() -> None:

@@ -96,6 +96,44 @@ HelpScreen {
     }
 }
 
+/* ----- sync log (tcal/ui/screens/sync_log.py) ----- */
+
+SyncLogScreen {
+    align: center middle;
+    background: $background1 70%;
+
+    & > #synclog {
+        width: 90;
+        max-width: 95%;
+        height: auto;
+        max-height: 85%;
+        background: $background2;
+        border: $border_type $primary;
+        border-title-color: $foreground1;
+        padding: 0 1;
+    }
+
+    #synclog-panel {
+        height: auto;
+        max-height: 100%;
+        scrollbar-size-vertical: 1;
+    }
+
+    #synclog-hint {
+        dock: bottom;
+        color: $foreground1;
+        text-align: center;
+    }
+}
+
+EntryList {
+    background: $background2;
+
+    & > .synclog--time { color: $foreground1; }
+    & > .synclog--warning { color: $yellow; }
+    & > .synclog--error { color: $red; text-style: bold; }
+}
+
 KeyTable {
     background: $background2;
     color: $foreground3;

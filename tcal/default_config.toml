@@ -67,6 +67,7 @@ move_right = ["greater_than_sign", "ctrl+l"] # ">": selected event one day later
 goto_date = ["g"]
 search = ["slash"]
 sync = ["r"]
+sync_log = ["R"]                       # recent sync warnings and errors
 focus_calendars = ["c"]
 toggle_calendar = ["space"]           # in the calendar list (enter works too)
 focus_next = ["tab"]

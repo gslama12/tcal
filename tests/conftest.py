@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
@@ -26,6 +27,17 @@ def tcal_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     home = tmp_path / "tcal-home"
     monkeypatch.setenv("TCAL_HOME", str(home))
     return home
+
+
+@pytest.fixture(autouse=True)
+def tcal_log_handlers() -> Iterator[None]:
+    """Undo ``synclog.log_to_file`` (the CLI adds a file handler to the ``tcal`` logger)."""
+    logger = logging.getLogger("tcal")
+    handlers = list(logger.handlers)
+    yield
+    for handler in set(logger.handlers) - set(handlers):
+        logger.removeHandler(handler)
+        handler.close()
 
 
 class MemoryKeyring(KeyringBackend):

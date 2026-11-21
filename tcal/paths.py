@@ -6,7 +6,7 @@ one self-contained directory::
 
     $TCAL_HOME/
         config.toml
-        data/       # tcal.db (SQLite cache), demo.db
+        data/       # tcal.db (SQLite cache), demo.db, tcal.log (sync warnings)
 
 Lookups happen at call time, never at import time, so tests can point
 ``TCAL_HOME`` at a tmp dir.
@@ -49,3 +49,8 @@ def database_file() -> Path:
 def demo_database_file() -> Path:
     """The throwaway cache of ``tcal --demo``, separate from the real one."""
     return data_dir() / "demo.db"
+
+
+def log_file() -> Path:
+    """Sync warnings and errors (``tcal.synclog.log_to_file``)."""
+    return data_dir() / "tcal.log"

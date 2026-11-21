@@ -61,6 +61,7 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
     ],
     "App": [
         ("sync", "Sync now"),
+        ("sync_log", "Sync log (recent warnings and errors)"),
         ("help", "This help"),
         ("quit", "Quit"),
     ],

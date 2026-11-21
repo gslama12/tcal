@@ -5,6 +5,8 @@ dropped (and logged); the following pull brings in the server's version.
 Any other provider error aborts the sync and leaves the remaining ops queued.
 Subscribed feeds (``subscriptions``, read-only) are pulled after the account; a feed
 that fails keeps its cached events and is named in the summary.
+Everything a sync logs as a warning (also from the provider) ends up in
+``SyncSummary.warnings`` (see ``tcal.synclog``).
 """
 
 import logging
@@ -18,6 +20,7 @@ from dateutil.relativedelta import relativedelta
 from tcal.config import SyncConfig
 from tcal.providers.base import ConflictError, Provider, ProviderError
 from tcal.store import Store
+from tcal.synclog import collect
 from tcal.tz import local_midnight
 
 log = logging.getLogger(__name__)
@@ -30,6 +33,7 @@ class SyncSummary:
     pushed: int = 0
     conflicts: list[str] = field(default_factory=list)  # titles of the dropped local changes
     failed: list[str] = field(default_factory=list)  # subscriptions that could not be fetched
+    warnings: list[str] = field(default_factory=list)  # every warning logged during the sync
 
     def __str__(self) -> str:
         text = f"{self.calendars} calendars, {self.events} events"
@@ -69,8 +73,9 @@ class SyncEngine:
 
     def sync(self) -> SyncSummary:
         summary = SyncSummary()
-        self._push(summary)
-        self._pull(summary)
+        with collect() as summary.warnings:
+            self._push(summary)
+            self._pull(summary)
         return summary
 
     def _push(self, summary: SyncSummary) -> None:
@@ -88,7 +93,11 @@ class SyncEngine:
                 summary.pushed += 1
             except ConflictError as e:
                 log.warning(
-                    "%s of %r conflicts (%s); keeping the server version", op.kind, event.summary, e
+                    "“%s” changed on the server meanwhile: your %s was dropped"
+                    " (conflict: %s; server version kept)",
+                    event.summary,
+                    "deletion" if op.kind == "delete" else "change",
+                    e,
                 )
                 summary.conflicts.append(event.summary)
             self.store.clear_op(op.id)
@@ -105,7 +114,7 @@ class SyncEngine:
             except (ProviderError, OSError) as e:
                 if not cal.subscribed:
                     raise
-                log.warning("could not fetch subscription %r: %s", cal.name, e)
+                log.warning("could not fetch subscription “%s”: %s", cal.name, e)
                 summary.failed.append(cal.name)
                 continue
             self.store.upsert_events(cal.id, events)

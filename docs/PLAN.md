@@ -439,7 +439,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   event's cache rows on mount (etag/href ignored, so our own push isn't a change); if they
   differ at save, `ServerChanged` asks o overwrite (rebased on the current etag/href, or created
   again if deleted) / d discard / esc back. `SyncSummary.conflicts` is now the list of titles,
-  named in the toast. Open: `log.warning` still only reaches Textual's captured stderr.
+  named in the toast. (`log.warning` reaching only stderr: fixed in feat-warn.)
 - **H4 Detail wording:** durations "10 min" / "1 h" / "1 h 30 min"; people as "4 guests · 1 yes,
   1 maybe, 1 no, 1 awaiting" + one line per guest, the organizer marked, not repeated.
 
@@ -476,3 +476,17 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   nothing synced yet, new events say "Not synced yet". Quick add reads repeats (`daily`,
   `every <weekday>`, `every weekday`, …; first day on/after the date), bare hours after a
   date, `14.30` (`H.MM` with MM ≤ 12 only when a date is given elsewhere) and `noon`/`midnight`.
+
+### Sync warnings (feat-warn)
+
+- **W1 Collect:** `tcal/synclog.py`: `collect()` gathers the WARNING+ records the sync's own thread
+  logs under the `tcal` logger (so provider warnings like "skipping unreadable event" count too)
+  into `SyncSummary.warnings`. Conflict/feed messages are now user-readable sentences.
+- **W2 Toast:** after a sync, one line "N sync warning(s): <first> · R sync log" (replaces the
+  conflicts toast); repeated only when the warnings change or the sync key asked (a feed failing on
+  every periodic sync toasts once).
+- **W3 Sync log:** `app.sync_log` (deque of `LogEntry(at, error, message)`, last 200, this session;
+  failed syncs added as errors) shown by `SyncLogScreen` newest first. Key: **`R`**, not the
+  brief's `L` — `L` is `next_period` (and `l` cursor right); `R` sits next to sync `r`.
+- **W4 File:** `log_to_file(paths.log_file())` (`data/tcal.log`, rotating 256 kB, one backup) is
+  attached by the CLI (TUI, `--demo`, `tcal sync`); `tcal sync` also prints each warning to stderr.
