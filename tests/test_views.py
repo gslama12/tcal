@@ -185,3 +185,14 @@ async def test_escape_in_the_sidebar_returns_to_the_view(app: RecordingApp) -> N
         await pilot.press("escape")
         await pilot.pause()
         assert app.focused is app.query_one(f"#{app.state.view.value}")
+
+
+async def test_zoom_outside_the_time_grid_says_where_it_works(app: RecordingApp) -> None:
+    async with app.run_test(size=(120, 40)) as pilot:
+        for view in ("m", "Y", "s"):
+            await pilot.press(view)
+            app.clear_notifications()
+            await pilot.press("plus", "minus")
+            assert [str(n.message) for n in app._notifications] == [
+                "Zoom works in the day/week view"
+            ] * 2

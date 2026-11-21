@@ -123,7 +123,7 @@ async def test_readonly_calendar_cannot_delete(make_app) -> None:
         app.post_message(EventSelected(holiday))
         await pilot.pause()
         assert "(read-only)" in text(app, "calendar")
-        assert text(app, "hints") == "esc close"
+        assert text(app, "hints") == "y copy  esc close"
         await pilot.press("x")
         assert not isinstance(app.screen, ConfirmDelete)
         assert find(app, "Public holiday", days=30)
@@ -252,7 +252,7 @@ async def test_edit_and_delete_keep_a_read_only_detail_open(store, make_app) -> 
         await pilot.pause()
         await pilot.press("e", "x")
         assert isinstance(app.screen, EventDetail)
-        assert text(app, "hints") == "esc close"
+        assert text(app, "hints") == "y copy  esc close"
         assert [str(n.message) for n in app._notifications] == ["Feed is read-only"] * 2
 
 
@@ -278,3 +278,18 @@ async def test_scope_dialogs_name_the_instance_and_only_delete_is_red(make_app) 
             assert str(app.screen.query_one(Static).render()) == question
             assert {b.variant for b in app.screen.query("#o, #s").results(Button)} == {variant}
             await pilot.press("escape")
+
+
+async def test_yank_and_duplicate_from_detail(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        holiday = find(app, "Public holiday", days=30)[0]
+        app.post_message(EventSelected(holiday))
+        await pilot.pause()
+        await pilot.press("y")
+        assert isinstance(app.screen, EventDetail)  # copying keeps the detail open
+        assert app.editor.yanked == holiday
+        await pilot.press("D")
+        await pilot.pause()
+        assert not isinstance(app.screen, EventDetail)
+        assert len(find(app, "Public holiday", days=30)) == 2  # copied to a writable calendar

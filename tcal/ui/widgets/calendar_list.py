@@ -18,6 +18,7 @@ class CalendarList(SidebarWidget):
     j/k move the cursor, space/enter or a click toggles the calendar's
     visibility via ``app.toggle_calendar`` (hidden ones are in
     ``state.hidden_calendars``). A feed the last sync could not fetch gets a ⚠.
+    Before the first sync it shows ``app.unsynced_hint()``.
     """
 
     BORDER_TITLE = "My calendars"
@@ -45,6 +46,8 @@ class CalendarList(SidebarWidget):
     def render(self) -> RenderResult:
         hidden = self.tcal.state.hidden_calendars
         p = self.tcal.palette
+        if not self.ordered():
+            return Text(self.tcal.unsynced_hint(), style=Style(color=p.foreground1))
         rows = []
         calendars = iter(enumerate(self.ordered()))
         for line in self.lines():

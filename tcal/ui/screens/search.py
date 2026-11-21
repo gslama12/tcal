@@ -50,7 +50,10 @@ class ResultList(OptionList):
 
 
 class SearchScreen(ModalScreen[Occurrence]):
-    """Type to filter; up/down (j/k in the list) move, enter picks, esc cancels."""
+    """Type to filter; up/down (j/k in the list) move, enter picks, esc cancels.
+
+    ``occurrences()`` is asked again after every data refresh (e.g. a sync), so the
+    results follow server changes."""
 
     BINDINGS = [
         Binding("escape", "dismiss", "Cancel"),
@@ -59,7 +62,10 @@ class SearchScreen(ModalScreen[Occurrence]):
     ]
 
     def __init__(
-        self, occurrences: Sequence[Occurrence], now: datetime, color: Callable[[str], str]
+        self,
+        occurrences: Callable[[], Sequence[Occurrence]],
+        now: datetime,
+        color: Callable[[str], str],
     ) -> None:
         super().__init__()
         self.occurrences = occurrences
@@ -74,12 +80,23 @@ class SearchScreen(ModalScreen[Occurrence]):
             yield query
             yield ResultList()
 
-    def on_input_changed(self, event: Input.Changed) -> None:
-        self.results = search(self.occurrences, event.value, self.now)
+    def on_mount(self) -> None:
+        self.watch(self.app, "state", self._data_changed, init=False)
+
+    def on_input_changed(self) -> None:
+        self._run_query(0)
+
+    def _data_changed(self) -> None:
+        self._run_query(self.query_one(ResultList).highlighted or 0)
+
+    def _run_query(self, highlight: int) -> None:
+        """Fill the list for the query, highlighting row ``highlight`` (or the last)."""
+        query = self.query_one(Input).value
         results = self.query_one(ResultList)
+        self.results = search(self.occurrences(), query, self.now)
         results.set_options(Option(self._label(o)) for o in self.results)
-        results.highlighted = 0 if self.results else None
-        results.border_subtitle = f"{len(self.results)} found" if event.value.strip() else ""
+        results.highlighted = min(highlight, len(self.results) - 1) if self.results else None
+        results.border_subtitle = f"{len(self.results)} found" if query.strip() else ""
 
     def _label(self, occ: Occurrence) -> Text:
         when = "all day" if occ.all_day else f"{occ.start:%H:%M}"
