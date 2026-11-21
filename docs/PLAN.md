@@ -98,3 +98,17 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   `refresh_data()` re-fires watchers. The selected day field is `day`.
 - **S4 Time:** model datetimes are tz-aware; all-day events are local midnight → next
   midnight (exclusive). `Occurrence` times are converted to local time.
+
+### Views notes (package 4)
+
+- **V1 Messages:** `tcal/ui/messages.py` defines `NewEventRequested(start: date | datetime)`
+  (a `date` = a whole day, from month/year views) and `EventSelected(occurrence)`. Views post
+  them; the app (crud package) handles `on_new_event_requested` / `on_event_selected`.
+- **V2 Shared helpers:** `tcal/ui/calgrid.py` (pure month-grid date math, occurrences per
+  day), `widgets/minimonth.py` (small month block for MiniCal + YearView),
+  `widgets/day_cursor.py` (`DayCursorView`: h/l ±1 day, j/k ±1 week, enter → Day view).
+  `state.add_months` is now public (was `_add_months`).
+- **V3 Keys:** new `[keys] toggle_calendar = ["space"]` (calendar list; enter works too).
+  MiniCal reuses `cursor_*`/`prev_period`/`next_period`/`open` with its own cursor that
+  only commits on enter (click commits at once).
+- **V4 Titles:** kept the scaffold's `AppState.title()` format ("16 – 22 November 2026").
