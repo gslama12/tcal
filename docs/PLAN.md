@@ -274,3 +274,16 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   via `check` (non-zero exit) and a startup toast. Themes: nord, gruvbox,
   catppuccin-mocha, tokyo-night, catppuccin-latte (light: `theme.LIGHT`, `dark=False`);
   timegrid `_readable` now sorts its text colors by luminance so light palettes work.
+
+### Schedule view notes (feat-agenda)
+
+- **A1 Schedule:** `ViewMode.SCHEDULE` (`[keys] view_schedule = ["s"]`, tab "Schedule",
+  `default_view = "schedule"` allowed): `widgets/schedule_view.py` lists the days from the
+  selected day (header per non-empty day, today accented; events: time range / "All day", colour
+  dot, title, dim location). j/k and n/p step through events, h/l jump to the previous/next day's
+  first event; the cursor's day becomes `state.day` without restarting the list, any other change
+  of `state.day` (H/L = ±14 days, goto, minical, today) restarts it there. Loads `CHUNK_DAYS` (28)
+  more when the cursor or the mouse wheel reaches the end (one load scans ≤ 366 days). Own scroll
+  offset (no scrollbar), like the time grid. Title: the selected day's month. `selected` works
+  with the app's e/x. The view switcher drops the tabs' padding when even the short title does
+  not fit (5 tabs at 70 columns).

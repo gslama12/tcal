@@ -194,4 +194,4 @@ async def test_view_switcher_shortens_title_not_tabs(app: RecordingApp) -> None:
     async with app.run_test(size=(70, 24)) as pilot:
         await pilot.press("d")
         text = str(app.query_one(ViewSwitcher).render())
-        assert "Day │ Week │ Month │ Year" in text and "Wed 18 Nov 2026" in text
+        assert "Day│Week│Month│Year│Schedule" in text and "Wed 18 Nov 2026" in text

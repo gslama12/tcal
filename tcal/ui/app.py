@@ -5,8 +5,8 @@ Layout::
     ┌ sidebar ─┐┌ main ───────────────────────────┐
     │ MiniCal  ││ ViewSwitcher (tabs + title)     │
     │          ││ ContentSwitcher: Day/Week/      │
-    │ Calendar ││   Month/YearView (id = mode)    │
-    │ List     ││                                 │
+    │ Calendar ││   Month/Year/ScheduleView       │
+    │ List     ││   (id = mode)                   │
     └──────────┘└─────────────────────────────────┘
      StatusBar
 
@@ -58,6 +58,7 @@ from tcal.ui.theme import PALETTES, make_theme
 from tcal.ui.widgets.calendar_list import CalendarList
 from tcal.ui.widgets.minical import MiniCal
 from tcal.ui.widgets.month_view import MonthView
+from tcal.ui.widgets.schedule_view import ScheduleView
 from tcal.ui.widgets.statusbar import StatusBar
 from tcal.ui.widgets.timegrid import DayView, TimeGrid, WeekView
 from tcal.ui.widgets.view_switcher import ViewSwitcher
@@ -79,6 +80,7 @@ class TcalApp(App[None]):
         binding("view_week", "Week", action="set_view('week')"),
         binding("view_month", "Month", action="set_view('month')"),
         binding("view_year", "Year", action="set_view('year')"),
+        binding("view_schedule", "Schedule", action="set_view('schedule')"),
         binding("new_event", "New event"),
         binding("edit_event", "Edit event"),
         binding("delete_event", "Delete event"),
@@ -299,6 +301,7 @@ class TcalApp(App[None]):
                     yield WeekView(id=ViewMode.WEEK.value)
                     yield MonthView(id=ViewMode.MONTH.value)
                     yield YearView(id=ViewMode.YEAR.value)
+                    yield ScheduleView(id=ViewMode.SCHEDULE.value)
         yield StatusBar()
 
     def on_mount(self) -> None:
@@ -357,12 +360,13 @@ class TcalApp(App[None]):
         self.new_event(datetime.combine(self.state.day, time(hour), local_zone()))
 
     def selected_occurrence(self) -> Occurrence | None:
-        """The event selected in the focused day/week/month view, if any."""
+        """The event selected in the focused day/week/month/schedule view, if any."""
         focused = self.focused
-        return focused.selected if isinstance(focused, TimeGrid | MonthView) else None
+        views = TimeGrid | MonthView | ScheduleView
+        return focused.selected if isinstance(focused, views) else None
 
     def action_edit_event(self) -> None:
-        """Edit the event selected in the focused day/week/month view."""
+        """Edit the event selected in the focused day/week/month/schedule view."""
         if occ := self.selected_occurrence():
             self.edit_occurrence(occ)
         else:

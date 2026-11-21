@@ -12,7 +12,7 @@ day_start = "06:30"                    # first time shown in day/week view (scro
 day_end = "24:00"                      # last time shown in day/week view
 rows_per_hour = 0                      # time-grid zoom, 1..8; 0 = fit the terminal height
 week_start = "monday"                  # monday .. sunday
-default_view = "week"                  # day | week | month | year
+default_view = "week"                  # day | week | month | year | schedule
 
 [sync]
 interval = 300                         # seconds between background syncs
@@ -37,10 +37,11 @@ view_day = ["d"]
 view_week = ["w"]
 view_month = ["m"]
 view_year = ["y"]
+view_schedule = ["s"]                  # upcoming events as a list
 zoom_in = ["plus", "ctrl+up"]
 zoom_out = ["minus", "ctrl+down"]
 open = ["enter"]
-next_event = ["n"]                     # day/week/month: cycle through events in view
+next_event = ["n"]                     # day/week/month/schedule: cycle through events in view
 prev_event = ["p"]
 new_event = ["a", "o"]
 edit_event = ["e"]

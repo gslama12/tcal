@@ -13,13 +13,13 @@ Part = tuple[str, Style, Callable[[], None] | None]
 
 
 class ViewSwitcher(TcalWidget):
-    """Top bar: [Today] ‹ › range title on the left, Day | Week | Month | Year on the right.
+    """Top bar: [Today] ‹ › range title on the left, Day | Week | Month | Year | Schedule on the right.
 
     Every button is clickable: Today, prev/next period and the view tabs (the
     active one highlighted) call the app's actions.
     """
 
-    def _parts(self, short: bool) -> tuple[list[Part], list[Part]]:
+    def _parts(self, short: bool, compact: bool = False) -> tuple[list[Part], list[Part]]:
         app, p = self.tcal, self.tcal.palette
         button = Style(color=p.foreground3, bgcolor=p.background3, bold=True)
         arrow = Style(color=p.primary, bold=True)
@@ -41,17 +41,18 @@ class ViewSwitcher(TcalWidget):
                 if active
                 else Style(color=p.foreground1)
             )
-            right.append(
-                (f" {mode.value.title()} ", style, partial(app.action_set_view, mode.value))
-            )
+            label = mode.value.title() if compact else f" {mode.value.title()} "
+            right.append((label, style, partial(app.action_set_view, mode.value)))
         return left, right
 
     def _placed(self) -> list[tuple[int, Part]]:
-        """Every part with its x offset; the tabs are right-aligned (a short title if tight)."""
+        """Every part with its x offset; the tabs are right-aligned (if tight: a short
+        title, then unpadded tabs)."""
         width = self.content_size.width
-        left, right = self._parts(short=False)
-        if sum(len(part[0]) for part in left + right) + 2 > width:
-            left, right = self._parts(short=True)
+        for short, compact in ((False, False), (True, False), (True, True)):
+            left, right = self._parts(short, compact)
+            if sum(len(part[0]) for part in left + right) + 2 <= width:
+                break
         placed, x = [], 0
         for part in left:
             placed.append((x, part))

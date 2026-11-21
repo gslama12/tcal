@@ -14,7 +14,7 @@ from typing import Any
 
 from tcal import paths
 
-VIEWS = ("day", "week", "month", "year")
+VIEWS = ("day", "week", "month", "year", "schedule")
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
 
