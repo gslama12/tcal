@@ -20,8 +20,8 @@ class MiniCal(TcalWidget, can_focus=True):
     Shows the month of its own ``cursor`` (follows ``state.day``): today accented,
     the cursor highlighted, days with events bright (others dimmed), the shown
     week as a band. When focused, h/j/k/l move the cursor, H/L by a month and
-    enter jumps the main view to it; clicking a day jumps there and focuses the
-    main view, clicking ‹ › browses months.
+    enter jumps the main view to it (and focuses it, like clicking a day);
+    clicking ‹ › browses months.
     """
 
     BINDINGS = [
@@ -86,3 +86,4 @@ class MiniCal(TcalWidget, can_focus=True):
 
     def action_jump(self) -> None:
         self.tcal.select_date(self.cursor)
+        self.tcal.focus_view()

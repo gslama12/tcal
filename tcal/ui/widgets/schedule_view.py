@@ -2,8 +2,9 @@
 
 The list starts at the selected day; each day with events gets a date header
 (today accented) followed by its events: time range or "All day", calendar
-colour dot, title and the location dimmed. Empty days are skipped. More days
-are loaded (``CHUNK_DAYS`` at a time) when the cursor or the scroll reaches the end.
+colour dot, title (multi-day events: "(Day 2/3)") and the location dimmed.
+Empty days are skipped. More days are loaded (``CHUNK_DAYS`` at a time) when
+the cursor or the scroll reaches either end.
 """
 
 from dataclasses import dataclass
@@ -15,14 +16,14 @@ from textual import events
 from textual.app import RenderResult
 
 from tcal.model import Occurrence
-from tcal.ui.calgrid import by_day
+from tcal.ui.calgrid import by_day, occurrence_days
 from tcal.ui.keys import EVENT_BINDINGS
 from tcal.ui.messages import EventSelected
 from tcal.ui.state import AppState
 from tcal.ui.widgets.base import CalendarView, join_lines
 
 CHUNK_DAYS = 28  # days loaded at a time
-LOOKAHEAD_DAYS = 366  # one "load more" scans at most this far for events
+LOOKAHEAD_DAYS = 366  # one "load more/earlier" scans at most this far for events
 SCROLL_LINES = 3  # mouse wheel step
 TIME_WIDTH = 13  # "09:00 – 10:00"
 
@@ -59,10 +60,17 @@ def time_range(occ: Occurrence, day: date) -> str:
     return f"{begin} – {end}".strip() if begin != end else begin
 
 
+def day_of(occ: Occurrence, day: date) -> str:
+    """'Day 2/3' for a multi-day event on its second of three days, else ''."""
+    days = occurrence_days(occ)
+    return f"Day {days.index(day) + 1}/{len(days)}" if len(days) > 1 and day in days else ""
+
+
 class ScheduleView(CalendarView):
     """The schedule list. j/k (and n/p) move between events, h/l jump to the
     previous/next day's first event, enter opens the selected event (``selected``),
-    H/L (the app's prev/next period) re-start the list two weeks earlier/later."""
+    H/L (the app's prev/next period) re-start the list two weeks earlier/later.
+    Moving or scrolling past the first/last loaded day loads more days."""
 
     BINDINGS = EVENT_BINDINGS
 
@@ -89,6 +97,22 @@ class ScheduleView(CalendarView):
             self._end += timedelta(days=CHUNK_DAYS)
             self._load()
             if len(self._event_rows()) > events_before:
+                return True
+        return False
+
+    def _load_earlier(self) -> bool:
+        """Prepend days until the list gains events (or ``LOOKAHEAD_DAYS`` are scanned);
+        the cursor and scroll keep their rows."""
+        events_before, rows_before = len(self._event_rows()), len(self._rows)
+        limit = self._start - timedelta(days=LOOKAHEAD_DAYS)
+        while self._start > limit:
+            self._start -= timedelta(days=CHUNK_DAYS)
+            self._load()
+            if len(self._event_rows()) > events_before:
+                added = len(self._rows) - rows_before
+                self._top += added
+                if self._cursor is not None:
+                    self._cursor += added
                 return True
         return False
 
@@ -148,14 +172,19 @@ class ScheduleView(CalendarView):
     def _step(self, step: int) -> None:
         events_ = self._event_rows()
         if not events_:
-            if step > 0 and self._load_more():
-                self._select(self._event_rows()[0])
+            if self._load_more() if step > 0 else self._load_earlier():
+                self._select(self._event_rows()[0 if step > 0 else -1])
             return
         pos = events_.index(self._cursor) if self._cursor in events_ else -1
         if pos + step >= len(events_):
             if not self._load_more():
                 return
             events_ = self._event_rows()
+        elif pos + step < 0:
+            if not self._load_earlier():
+                return
+            events_ = self._event_rows()
+            pos = events_.index(self._cursor) if self._cursor in events_ else len(events_)
         if 0 <= pos + step < len(events_):
             self._select(events_[pos + step])
 
@@ -172,6 +201,8 @@ class ScheduleView(CalendarView):
                 self._select(later[0])
         else:
             earlier = [i for i in self._day_firsts() if self._rows[i].day < day]
+            if not earlier and self._load_earlier():
+                earlier = [i for i in self._day_firsts() if self._rows[i].day < day]
             self._select(earlier[-1] if earlier else self._day_firsts()[0])
 
     def _day_firsts(self) -> list[int]:
@@ -182,8 +213,19 @@ class ScheduleView(CalendarView):
         height = self.content_size.height
         if lines > 0 and self._top + height + lines > len(self._rows):
             self._load_more()
+        elif lines < 0 and self._top + lines < 0:
+            self._load_earlier()
         self._top = max(0, min(self._top + lines, len(self._rows) - height))
         self.refresh()
+
+    def select(self, occ: Occurrence) -> None:
+        """Select ``occ`` on its first day (the list restarts there if it isn't loaded)."""
+        day = occ.start.date()
+        if not self._start <= day < self._end:
+            self.tcal.select_date(day)
+        rows = [i for i, row in enumerate(self._rows) if row.occ == occ]
+        if rows:
+            self._select(rows[0])
 
     def action_cursor_down(self) -> None:
         self._step(1)
@@ -244,6 +286,8 @@ class ScheduleView(CalendarView):
         )
         text.append("● ", style=Style(color=self.tcal.calendar_color(occ.calendar_id)))
         text.append(occ.summary or "(no title)", style=Style(color=p.foreground3, bold=selected))
+        if position := day_of(occ, row.day):
+            text.append(f" ({position})", style=Style(color=p.foreground2))
         if occ.event.location:
             text.append(f"  {occ.event.location}", style=Style(color=p.foreground1, dim=True))
         text.truncate(width, pad=True)

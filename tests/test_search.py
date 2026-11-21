@@ -6,9 +6,11 @@ from conftest import TODAY
 from tcal.model import Event, Occurrence
 from tcal.recurrence import expand
 from tcal.ui.app import TcalApp
+from tcal.ui.screens.event_detail import EventDetail
 from tcal.ui.screens.search import ResultList, SearchScreen, search
 from tcal.ui.state import ViewMode
-from tcal.ui.widgets.timegrid import DayView
+from tcal.ui.widgets.month_view import MonthView
+from tcal.ui.widgets.timegrid import WeekView
 
 NOW = datetime.combine(TODAY, time(12, 0)).astimezone()
 
@@ -53,7 +55,7 @@ def app(make_app) -> TcalApp:
     return make_app()
 
 
-async def test_search_jumps_to_day_view_with_event_selected(app: TcalApp) -> None:
+async def test_search_keeps_the_view_selects_and_opens(app: TcalApp) -> None:
     async with app.run_test(size=(140, 45)) as pilot:
         await pilot.press("slash")
         assert isinstance(app.screen, SearchScreen)
@@ -63,10 +65,12 @@ async def test_search_jumps_to_day_view_with_event_selected(app: TcalApp) -> Non
         assert "Kids' play" in str(results.get_option_at_index(0).prompt)
         await pilot.press("enter")
         await pilot.pause()
-        assert not isinstance(app.screen, SearchScreen)
-        assert app.state.view is ViewMode.DAY
+        assert isinstance(app.screen, EventDetail)
+        assert app.screen.occ.summary == "Kids' play"
+        await pilot.press("escape")
+        assert app.state.view is ViewMode.WEEK
         assert app.state.day == TODAY - timedelta(days=5)
-        view = app.query_one(DayView)
+        view = app.query_one(WeekView)
         assert app.focused is view
         assert view.selected is not None and view.selected.summary == "Kids' play"
 
@@ -82,11 +86,14 @@ async def test_search_list_navigation(app: TcalApp) -> None:
         assert results.highlighted == 1
         await pilot.press("tab", "j", "j", "k")
         assert app.focused is results and results.highlighted == 2
-        picked = screen.results[2]
-        await pilot.press("enter")
+        await pilot.press("escape", "m", "slash", *"kids")  # in the month view
+        assert isinstance(app.screen, SearchScreen)
+        picked = app.screen.results[0]
+        await pilot.press("enter", "escape")
         await pilot.pause()
+        assert app.state.view is ViewMode.MONTH
         assert app.state.day == picked.start.date()
-        assert app.query_one(DayView).selected == picked
+        assert app.query_one(MonthView).selected == picked
 
 
 async def test_search_escape_cancels(app: TcalApp) -> None:

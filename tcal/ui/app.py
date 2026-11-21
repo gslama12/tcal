@@ -390,7 +390,7 @@ class TcalApp(App[None]):
         self.push_screen(GotoScreen(date.today()), jump)
 
     def action_search(self) -> None:
-        """Search the cached sync window; picking a result opens its day selected."""
+        """Search the cached sync window; picking a result shows it (``show_occurrence``)."""
         today, window = date.today(), self.config.sync
         occs = self.occurrences(
             add_months(today, -window.past_months), add_months(today, window.future_months)
@@ -399,14 +399,15 @@ class TcalApp(App[None]):
         self.push_screen(screen, self.show_occurrence)
 
     def show_occurrence(self, occ: Occurrence | None) -> None:
-        """Switch to the day view on ``occ``'s day with ``occ`` selected."""
+        """Go to ``occ``'s day in the current view, select it there and open its detail."""
         if occ is None:
             return
-        self.set_view(ViewMode.DAY)
         self.select_date(occ.start.date())
-        view = self.query_one(DayView)
+        view = self.query_one(f"#{self.state.view.value}")
         view.focus()
-        view.select(occ)
+        if isinstance(view, TimeGrid | MonthView | ScheduleView):
+            view.select(occ)
+        self.push_screen(EventDetail(occ))
 
     def action_sync(self) -> None:
         if self._sync is None:
