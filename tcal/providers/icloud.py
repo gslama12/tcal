@@ -14,6 +14,7 @@ import logging
 import re
 from collections.abc import Callable, Iterator
 from dataclasses import replace
+from functools import partial
 from datetime import UTC, datetime, timedelta
 from typing import Any, TypeVar
 from urllib.parse import quote, urljoin, urlsplit
@@ -128,7 +129,7 @@ class ICloudProvider:
         seen: dict[str, list[Event]] = {}
         for lo, hi in _chunks(start, end):
             query = REPORT_EVENTS.format(start=_utc(lo), end=_utc(hi))
-            response = _call("REPORT", lambda q=query: self.client.report(calendar.id, q, 1))
+            response = _call("REPORT", partial(self.client.report, calendar.id, query, 1))
             _check(response, "REPORT", calendar.id, ok=(207,))
             for resp in response.tree.iterfind("d:response", NS):
                 href = self._url(resp.findtext("d:href", "", NS))
