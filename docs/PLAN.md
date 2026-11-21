@@ -246,3 +246,17 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   resource; a deleted instance updates the series again). `EventSource.restore` passes it
   through; `app.delete_event` toasts `Deleted "X" · u undo` and `[keys] undo = ["u"]`
   (`app.undo()`) restores the last delete once.
+
+### iCloud hardening (feat-icloud, partial)
+
+- **I1 Review vs caldav 3.7:** discovery (principal → calendar-home-set) and the move to the
+  `pNN-caldav.icloud.com` host are done by caldav; tcal drops the home-set's `:443` and rebases
+  every href onto the home's host so calendar ids stay stable (iCloud may answer on caldav.icloud.com).
+- **I2 Parsing:** only 200 propstats are read (missing props come as empty 404 ones); colors
+  `#RRGGBBAA`/`#RRGGBB`/`#RGB` → `#RRGGBB`, anything else → default; etags stripped; a PUT answer
+  without `ETag` is followed by a Depth-0 PROPFIND for it.
+- **I3 Robustness:** client timeout 60 s (caldav default 10 s); REPORT per ~quarter, resources
+  deduped by href; any unreadable resource is skipped with a warning; caldav `AuthorizationError`/
+  `DAVError` → `ProviderError` (auth hint mentions the app-specific password).
+- **Open:** `tcal doctor` command, iCloud-like XML/ICS fixture tests for the above, ics.py
+  edge cases (all-day DTEND == DTSTART).
