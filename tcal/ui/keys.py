@@ -19,10 +19,15 @@ def default_keys() -> dict[str, list[str]]:
 
 
 def binding(
-    name: str, description: str = "", action: str | None = None, show: bool = False
+    name: str,
+    description: str = "",
+    action: str | None = None,
+    show: bool = False,
+    priority: bool = False,
 ) -> Binding:
     """A Binding for config action ``name``; ``action`` defaults to ``name``."""
-    return Binding(",".join(default_keys()[name]), action or name, description, show=show, id=name)
+    keys = ",".join(default_keys()[name])
+    return Binding(keys, action or name, description, show=show, priority=priority, id=name)
 
 
 def keymap(config: Config) -> dict[str, str]:

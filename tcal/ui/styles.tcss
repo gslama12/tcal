@@ -151,7 +151,7 @@ SearchScreen OptionList {
 
 /* ----- modals (tcal/ui/screens/) ----- */
 
-EventDetail, ConfirmDelete {
+EventDetail, ConfirmDelete, EventForm {
     align: center middle;
     background: $background1 60%;
 }
@@ -180,4 +180,31 @@ ConfirmDelete #buttons {
     Button {
         margin-right: 1;
     }
+}
+
+/* event form (tcal/ui/screens/event_form.py) */
+
+#form {
+    width: 64;
+    height: auto;
+    max-height: 100%;
+    background: $background2;
+    border: $border_type $primary;
+    border-title-color: $foreground3;
+    border-title-background: $background2;
+    padding: 0 1;
+
+    Input, SelectCurrent, TextArea, Checkbox {
+        background: $background2;
+        border: $border_type $background3;
+        &:focus { border: $border_type $primary; }
+    }
+    Select:focus > SelectCurrent { border: $border_type $primary; }
+    .row { height: auto; }
+    .label { width: 6; padding: 1 0 0 1; color: $foreground1; }
+    #start_date, #end_date { width: 1fr; }
+    .time { width: 12; }
+    #notes { height: 5; }
+    #error { color: $red; height: auto; }
+    #hint { color: $foreground1; }
 }

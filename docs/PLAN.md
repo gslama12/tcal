@@ -175,5 +175,18 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   app's `x`): read-only calendar -> notice; recurring -> o "this occurrence" / s "whole series".
 - **E2 Selection:** `app.selected_occurrence()` = the focused day/week grid's `selected`;
   month/year views have no event cursor, so `x`/`e` there say "No event selected" / do nothing.
-- **E3 Edit hook:** `TcalApp.edit_occurrence(occ)` is the placeholder the event form replaces;
+- **E3 Edit hook:** `TcalApp.edit_occurrence(occ)` opens the event form (`edit_event(occ.event)`);
   both `e` in the detail modal and the app's `edit_event` action call it.
+
+### Event form notes (package 5, form)
+
+- **F1 API:** `app.new_event(start)` (datetime → 1 h slot; date → all-day, 09:00–10:00 prefilled
+  for unticking) and `app.edit_event(event)` open `screens/event_form.EventForm`; the form
+  returns the edited `Event` and the app saves it (`save_event`). Read-only calendar → notice.
+  The `edit_event` key edits the focused view's `selected` occurrence (time grids only).
+- **F2 Fields:** the end date is always shown (timed events may cross midnight); end follows a
+  start change. Unchanged fields keep the event's own values (time zone, custom RRULE).
+  Repeat none/daily/weekly/monthly/yearly ↔ `FREQ=…`; disabled for an overridden instance.
+- **F3 Keys:** new `[keys] save = ["ctrl+s"]` (priority) and `cancel = ["escape"]`;
+  `binding()` gained `priority`. Test apps that record view messages call `prevent_default()`
+  so TcalApp's handlers don't also open the form.

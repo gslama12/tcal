@@ -13,12 +13,14 @@ Layout::
 Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
 ``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``save_event()``,
-``delete_event()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``.
+``delete_event()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``,
+``new_event()``, ``edit_event()`` (open the event form).
 """
 
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from uuid import uuid4
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -30,9 +32,11 @@ from tcal.config import Config, ConfigError, load_config
 from tcal.model import Calendar, Event, Occurrence
 from tcal.source import EventSource
 from tcal.sync import SyncSummary
+from tcal.tz import local_midnight
 from tcal.ui.keys import binding, keymap
 from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.screens.event_detail import EventDetail, confirm_delete
+from tcal.ui.screens.event_form import EventForm
 from tcal.ui.screens.goto import GotoScreen
 from tcal.ui.screens.help import HelpScreen
 from tcal.ui.screens.search import SearchScreen
@@ -143,6 +147,35 @@ class TcalApp(App[None]):
         self.refresh_data()
         self.request_sync()
 
+    # ----- event form ---------------------------------------------------
+
+    def new_event(self, start: date | datetime) -> None:
+        """Open the form for a new event at a time slot (1 h) or on a day (all-day)."""
+        if isinstance(start, datetime):
+            begin, end, all_day = start, start + timedelta(hours=1), False
+        else:
+            begin, end, all_day = local_midnight(start), local_midnight(start + timedelta(1)), True
+        writable = self._writable()
+        if not writable:
+            self.notify("No writable calendar", severity="warning")
+            return
+        draft = Event(f"{uuid4()}@tcal", writable[0].id, "", begin, end, all_day)
+        self.push_screen(EventForm(draft, writable, new=True), self._form_done)
+
+    def edit_event(self, event: Event) -> None:
+        """Open the form for an existing event (a series is edited as a whole)."""
+        if event.calendar_id not in {c.id for c in self._writable()}:
+            self.notify("This calendar is read-only", severity="warning")
+            return
+        self.push_screen(EventForm(event, self._writable(), new=False), self._form_done)
+
+    def _writable(self) -> list[Calendar]:
+        return [c for c in self._calendars if not c.readonly]
+
+    def _form_done(self, event: Event | None) -> None:
+        if event is not None:
+            self.save_event(event)
+
     # ----- sync -----------------------------------------------------------
 
     def request_sync(self) -> None:
@@ -221,21 +254,24 @@ class TcalApp(App[None]):
     def action_focus_calendars(self) -> None:
         self.query_one(CalendarList).focus()
 
-    # Filled in by the crud / backend packages.
     def action_new_event(self) -> None:
-        self.notify("New event: not implemented yet")
+        """Views post their own ``NewEventRequested``; elsewhere: the selected day."""
+        self.new_event(self.state.day)
 
     def selected_occurrence(self) -> Occurrence | None:
         """The event under the cursor of the focused day/week view, if any."""
         return self.focused.selected if isinstance(self.focused, TimeGrid) else None
 
     def action_edit_event(self) -> None:
+        """Edit the event selected in the focused day/week view."""
         if occ := self.selected_occurrence():
             self.edit_occurrence(occ)
+        else:
+            self.notify("No event selected")
 
     def edit_occurrence(self, occurrence: Occurrence) -> None:
-        """Hook for the event form (edit ``occurrence``'s event)."""
-        self.notify(f"Edit {occurrence.summary!r}: not implemented yet")
+        """Open the event form on ``occurrence``'s event (a series as a whole)."""
+        self.edit_event(occurrence.event)
 
     def action_delete_event(self) -> None:
         if occ := self.selected_occurrence():
@@ -281,4 +317,4 @@ class TcalApp(App[None]):
         self.push_screen(EventDetail(message.occurrence))
 
     def on_new_event_requested(self, message: NewEventRequested) -> None:
-        self.notify(f"New event at {message.start:%a %H:%M}: not implemented yet")
+        self.new_event(message.start)
