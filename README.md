@@ -195,6 +195,7 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `esc` | Cancel / close dialog |
 | **App** | |
 | `r` | Sync now |
+| `R` | Sync log (recent warnings and errors) |
 | `?` | This help |
 | `q` | Quit |
 <!-- keys:end -->
