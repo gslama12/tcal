@@ -1,0 +1,61 @@
+/* todooit look: dark palette, rounded borders, accent border on focus.
+   Palette variables ($background1, $red, ...) come from tcal/ui/theme.py. */
+
+$border_type: round;
+
+Screen {
+    background: $background1;
+    color: $foreground3;
+}
+
+#sidebar {
+    width: 28;
+}
+
+#main {
+    width: 1fr;
+}
+
+MiniCal, CalendarList, ViewSwitcher, #views > * {
+    background: $background1;
+    border: $border_type $background3;
+    border-title-color: $foreground1;
+    border-title-background: $background1;
+    padding: 0 1;
+
+    &:focus {
+        border: $border_type $primary;
+    }
+}
+
+MiniCal {
+    height: 10;
+}
+
+CalendarList {
+    height: 1fr;
+}
+
+ViewSwitcher {
+    height: 3;
+}
+
+#views {
+    height: 1fr;
+}
+
+StatusBar {
+    height: 1;
+    background: $background2;
+    color: $foreground3;
+}
+
+* {
+    scrollbar-size: 0 1;
+    scrollbar-background: $background3;
+    scrollbar-color: $primary;
+    scrollbar-background-hover: $background2;
+    scrollbar-color-hover: $secondary;
+    scrollbar-background-active: $background2;
+    scrollbar-color-active: $secondary;
+}
