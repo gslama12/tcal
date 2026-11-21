@@ -5,6 +5,7 @@ from pathlib import Path
 import keyring
 import pytest
 from keyring.backend import KeyringBackend
+from textual.message import Message
 
 from tcal import paths
 from tcal.config import Config, load_config
@@ -12,7 +13,9 @@ from tcal.providers.fake import FakeProvider
 from tcal.source import StoreSource
 from tcal.store import Store
 from tcal.sync import SyncEngine
+from tcal.ui import app as app_module
 from tcal.ui.app import TcalApp
+from tcal.ui.messages import EventSelected, NewEventRequested
 
 TODAY = date(2026, 11, 18)  # a Wednesday
 
@@ -83,3 +86,27 @@ def make_app(store: Store):
         return TcalApp(StoreSource(store), config or load_config(), today=TODAY)
 
     return make
+
+
+class RecordingApp(TcalApp):
+    """TcalApp that records the messages the views post for the CRUD screens
+    (instead of opening them)."""
+
+    CSS_PATH = str(Path(app_module.__file__).parent / "styles.tcss")
+
+    def __init__(self, store: Store, config: Config | None = None) -> None:
+        super().__init__(StoreSource(store), config or load_config(), today=TODAY)
+        self.posted: list[Message] = []
+
+    def on_new_event_requested(self, message: NewEventRequested) -> None:
+        message.prevent_default()
+        self.posted.append(message)
+
+    def on_event_selected(self, message: EventSelected) -> None:
+        message.prevent_default()
+        self.posted.append(message)
+
+
+@pytest.fixture
+def app(store: Store) -> RecordingApp:
+    return RecordingApp(store)
