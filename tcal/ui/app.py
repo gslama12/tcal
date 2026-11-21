@@ -44,7 +44,7 @@ from tcal.tz import local_zone
 from tcal.ui.editing import Editor
 from tcal.ui.keys import binding, keymap
 from tcal.ui.messages import EventSelected, NewEventRequested
-from tcal.ui.screens.event_detail import EventDetail, confirm_delete
+from tcal.ui.screens.event_detail import EventDetail, confirm_delete, short_when
 from tcal.ui.screens.goto import GotoScreen
 from tcal.ui.screens.help import HelpScreen
 from tcal.ui.screens.search import SearchScreen
@@ -180,15 +180,17 @@ class TcalApp(App[None]):
         self._occ_cache.clear()
         self.state = self.state
 
-    def save_event(self, event: Event) -> Event:
+    def save_event(self, event: Event, undo_message: str = "") -> Event:
         """Create/update an event in the cache, redraw, and push it in the background.
-        The undo key takes it back."""
+        The undo key takes it back (and toasts ``undo_message``, default: "Undid edit of
+        “X”" / "Removed “X”")."""
         before = self.source.rows(event.uid)
         saved = self.source.save_event(event)
-        message = (
-            f"Undid the change to “{event.summary}”" if before else f"Removed “{event.summary}”"
-        )
-        self.history.push(UndoStep(event.uid, before, message))
+        if not undo_message:
+            undo_message = (
+                f"Undid edit of “{before[0].summary}”" if before else f"Removed “{event.summary}”"
+            )
+        self.history.push(UndoStep(event.uid, before, undo_message))
         self.refresh_data()
         self.request_sync()
         return saved
@@ -200,8 +202,15 @@ class TcalApp(App[None]):
         self.refresh_data()
         self.request_sync()
         if rows:
-            self.history.push(UndoStep(uid, rows, f"Restored “{rows[0].summary}”"))
-            self.notify(f"Deleted “{rows[0].summary}” · {self.undo_hint}")
+            first = next((r for r in rows if r.recurrence_id is None), rows[0])
+            if not first.rrule:
+                what = f"“{first.summary}”"
+            elif occurrence is not None:
+                what = f"this “{first.summary}” ({short_when(occurrence, first.all_day)})"
+            else:
+                what = f"all “{first.summary}” events"
+            self.history.push(UndoStep(uid, rows, f"Restored {what}"))
+            self.notify(f"Deleted {what} · {self.undo_hint}")
 
     @property
     def undo_hint(self) -> str:

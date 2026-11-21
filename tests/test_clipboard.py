@@ -1,6 +1,7 @@
 from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 
+import pytest
 from conftest import TODAY
 
 from tcal.model import Event, Occurrence
@@ -45,8 +46,42 @@ def test_copy_at_all_day_keeps_its_days() -> None:
 def test_shifted_moves_exdates_along() -> None:
     event = Event("u", "work", "S", at(9), at(10), rrule="FREQ=DAILY", exdates=(at(9, day=TODAY),))
     moved = shifted(event, timedelta(days=1))
+    assert moved is not None
     assert moved.start == at(9, day=TODAY + timedelta(1))
     assert moved.exdates == (at(9, day=TODAY + timedelta(1)),)
+
+
+@pytest.mark.parametrize(
+    ("rrule", "days", "expected"),
+    [
+        ("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", 1, "FREQ=WEEKLY;BYDAY=TU,WE,TH,FR,SA"),
+        ("FREQ=WEEKLY;BYDAY=TU,TH", -1, "FREQ=WEEKLY;BYDAY=MO,WE"),
+        ("FREQ=WEEKLY;BYDAY=SU;COUNT=3", 1, "FREQ=WEEKLY;BYDAY=MO;COUNT=3"),
+        ("FREQ=WEEKLY;BYDAY=MO", 7, "FREQ=WEEKLY;BYDAY=MO"),
+        ("FREQ=DAILY", 1, "FREQ=DAILY"),
+        ("FREQ=MONTHLY;BYDAY=2MO", 1, None),
+    ],
+)
+def test_shifted_moves_byday_weekdays(rrule: str, days: int, expected: str | None) -> None:
+    moved = shifted(Event("u", "work", "S", at(9), at(10), rrule=rrule), timedelta(days=days))
+    assert (moved.rrule if moved else None) == expected
+    assert shifted(Event("u", "work", "S", at(9), at(10), rrule=rrule), timedelta(hours=1))
+
+
+async def test_move_weekday_series_by_a_day_keeps_every_instance(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(140, 50)) as pilot:
+        grid = app.query_one("#week", TimeGrid)
+        monday = TODAY - timedelta(TODAY.weekday())
+        grid.select(find(app, "Standup"))
+        await pilot.press(">", "s")
+        await pilot.pause()
+        days = [o.start.date() for o in named(app, "Standup", monday, 7)]
+        assert days == [monday + timedelta(i) for i in range(1, 6)]  # Tue..Sat
+        await pilot.press("u")
+        assert "Undid move of all “Standup” events (back to Wed 18 09:00)" in [
+            str(n.message) for n in app._notifications
+        ]
 
 
 async def test_yank_and_paste_at_the_cursor_slot(make_app) -> None:
@@ -260,7 +295,8 @@ async def test_undo_takes_back_moves_pastes_and_edits_in_turn(make_app) -> None:
         await pilot.press("u")  # the move
         assert find(app, "Dinner").start == at(19)
         messages = [str(n.message) for n in app._notifications]
-        assert "Undid the change to “Dentist!”" in messages and "Removed “Dinner”" in messages
+        assert "Undid edit of “Dentist”" in messages and "Removed “Dinner”" in messages
+        assert "Undid move of “Dinner” (back to Wed 18 19:00)" in messages
         # a series moved by "all events" comes back whole
         grid.select(find(app, "Standup"))
         await pilot.press("J", "s", "u")

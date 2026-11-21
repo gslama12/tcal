@@ -15,7 +15,7 @@ from tcal.model import Calendar, Event, Occurrence
 from tcal.quickadd import QuickAdd
 from tcal.tz import local_midnight
 from tcal.ui.clipboard import copy_at, instance_of, shifted
-from tcal.ui.screens.event_detail import EditScope, MoveScope, Scope, is_recurring
+from tcal.ui.screens.event_detail import EditScope, MoveScope, Scope, is_recurring, short_when
 from tcal.ui.screens.event_form import EventForm
 from tcal.ui.screens.quick_add import Mode, QuickAddScreen
 from tcal.ui.widgets.timegrid import TimeGrid
@@ -143,7 +143,12 @@ class Editor:
                 event = self._series(occ)
             else:
                 event = instance_of(occ) if is_recurring(occ) else occ.event
-            self.app.save_event(shifted(event, delta))
+            if (moved := shifted(event, delta)) is None:
+                self.app.notify("Change the days of this series in the form", severity="warning")
+                return
+            what = f"all “{occ.summary}” events" if scope == "series" else f"“{occ.summary}”"
+            back = short_when(occ.start, occ.all_day)
+            self.app.save_event(moved, f"Undid move of {what} (back to {back})")
             self._select_moved(occ.event.uid, occ.start + delta)
             history.move_run = ((occ.event.uid, occ.start + delta), scope)
 

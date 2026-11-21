@@ -45,7 +45,7 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("quick_add", "Quick add (one line)"),
         ("edit_event", "Edit event"),
         ("delete_event", "Delete event"),
-        ("undo", "Undo delete"),
+        ("undo", "Undo the last change"),
         ("yank", "Copy (yank) event"),
         ("paste", "Paste copy at cursor slot / selected day"),
         ("duplicate", "Duplicate event to the next day"),
