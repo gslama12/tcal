@@ -10,6 +10,10 @@ class ProviderError(Exception):
     """The server refused or failed a request."""
 
 
+class AuthError(ProviderError):
+    """The server rejected the credentials (HTTP 401/403)."""
+
+
 class ConflictError(ProviderError):
     """The server's copy changed since we read it (etag mismatch)."""
 

@@ -62,6 +62,9 @@ The password is looked up in this order:
    ```
 3. the `TCAL_PASSWORD` environment variable
 
+`tcal doctor` checks the whole setup step by step (without writing anything) and says what
+to fix when a step fails.
+
 ## Configuration
 
 The config file is `~/.config/tcal/config.toml` (`$XDG_CONFIG_HOME/tcal/config.toml`, also on
@@ -157,6 +160,10 @@ Tests need no network or keyring. Architecture and design decisions: [docs/PLAN.
 Everything iCloud-specific is only tested against a fake server; please check with a real
 account (ideally `TCAL_HOME=.tcal` first, so a fresh cache is used):
 
+- [ ] **First** `tcal login`, then `tcal doctor`: every step shows ✓ (account, password source,
+      sign-in, calendar home on `pNN-caldav.icloud.com`, your calendars with colors and
+      read-only marks, this week's event count per calendar, write access). It only reads.
+      If a step fails, please send me its whole output (it contains no password).
 - [ ] `tcal login` succeeds and prints the right number of calendars; the password lands in the
       Keychain (`security find-generic-password -s tcal -a you@icloud.com`); a wrong password
       gives a clean error.

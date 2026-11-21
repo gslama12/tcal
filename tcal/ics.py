@@ -114,7 +114,10 @@ def _event(comp: Any, calendar_id: str, href: str | None, etag: str | None, raw:
     elif "DURATION" in comp:
         end = start + comp["DURATION"].dt
     else:
-        end = start + timedelta(days=1) if all_day else start
+        end = start
+    if end <= start and all_day:
+        end = start + timedelta(days=1)  # no DTEND, or DTEND == DTSTART: one day
+    end = max(end, start)
     rrule = _first(comp.get("RRULE"))
     return Event(
         uid=str(comp.get("UID", "")),

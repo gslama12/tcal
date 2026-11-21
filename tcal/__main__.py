@@ -1,7 +1,8 @@
 """Command line: ``tcal`` starts the TUI; ``tcal --demo`` uses sample data.
 
 ``tcal login`` stores the iCloud account, ``tcal sync`` syncs once,
-``tcal calendars`` lists the account's calendars and ``tcal config path|edit|check``
+``tcal calendars`` lists the account's calendars, ``tcal doctor`` checks the
+connection step by step and ``tcal config path|edit|check``
 helps with the config file.
 """
 
@@ -128,6 +129,15 @@ def calendars() -> None:
         found = provider.list_calendars()
     for cal in found:
         click.echo(f"{cal.color}  {cal.name}{'  (read-only)' if cal.readonly else ''}")
+
+
+@cli.command()
+def doctor() -> None:
+    """Check the iCloud setup step by step (reads only, never writes)."""
+    from tcal import doctor as checks
+
+    if not checks.run(_config(), click.echo):
+        raise SystemExit(1)
 
 
 @cli.group(name="config")

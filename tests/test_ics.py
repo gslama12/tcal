@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from tcal.ics import from_ics, to_ics, without_instance
@@ -118,3 +118,24 @@ END:VCALENDAR
     assert no_end.all_day and no_end.end - no_end.start == timedelta(days=1)
     assert floating.start.tzinfo is not None
     assert floating.end - floating.start == timedelta(minutes=30)
+
+
+def _one_event(dates: str) -> str:
+    return f"BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:a\n{dates}\nSUMMARY:x\nEND:VEVENT\nEND:VCALENDAR\n"
+
+
+def test_all_day_without_or_with_equal_dtend_lasts_one_day() -> None:
+    for dates in (
+        "DTSTART;VALUE=DATE:20261119",
+        "DTSTART;VALUE=DATE:20261119\nDTEND;VALUE=DATE:20261119",
+        "DTSTART;VALUE=DATE:20261119\nDURATION:PT0S",
+    ):
+        (event,) = from_ics(_one_event(dates), "cal")
+        assert event.all_day and event.start.date() == date(2026, 11, 19)
+        assert event.end - event.start == timedelta(days=1)
+
+
+def test_timed_event_ending_before_its_start_is_instant() -> None:
+    text = _one_event("DTSTART:20261119T100000Z\nDTEND:20261119T090000Z")
+    (event,) = from_ics(text, "cal")
+    assert event.end == event.start
