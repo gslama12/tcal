@@ -246,3 +246,10 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   resource; a deleted instance updates the series again). `EventSource.restore` passes it
   through; `app.delete_event` toasts `Deleted "X" · u undo` and `[keys] undo = ["u"]`
   (`app.undo()`) restores the last delete once.
+
+### Performance notes (feat-perf)
+
+- **P1 Bench:** `scripts/bench.py` (5000 events / 3 years / 6 calendars, 100 series) prints CPU ms
+  per keypress (headless 160x50). `TcalApp` caches `source.occurrences` per day range until
+  `refresh_data()` (so any data change must go through it); `recurrence._rules` caches parsed
+  rule sets (dateutil `cache=True`) keyed by (rrule, start, exdates).

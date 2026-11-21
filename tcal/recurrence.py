@@ -6,7 +6,8 @@ Series are expanded in the wall-clock time of their own zone, so a weekly
 
 import re
 from collections.abc import Iterable, Iterator
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
+from functools import lru_cache
 
 from dateutil.rrule import rrule, rruleset, rrulestr
 
@@ -40,21 +41,30 @@ def expand(events: Iterable[Event], start: datetime, end: datetime) -> list[Occu
 def _starts(event: Event, lo: datetime, hi: datetime) -> Iterator[datetime]:
     """Instance starts of a series in [lo, hi], in the event's zone."""
     zone = event.start.tzinfo
+    rules = _rules(event.rrule or "", event.start, event.exdates)
+    for s in rules.between(_wall(lo, zone), _wall(hi, zone), inc=True):
+        yield s.replace(tzinfo=zone)
 
-    def wall(dt: datetime) -> datetime:
-        return dt.astimezone(zone).replace(tzinfo=None)
 
-    rule_text, until = _split_until(event.rrule or "")
-    rule = rrulestr(rule_text, dtstart=wall(event.start))
+@lru_cache(maxsize=1024)
+def _rules(text: str, start: datetime, exdates: tuple[datetime, ...]) -> rruleset:
+    """The series' rule set in wall-clock time of ``start``'s zone; cached, and
+    with dateutil's cache on, so redraws don't re-parse and re-iterate it."""
+    zone = start.tzinfo
+    rule_text, until = _split_until(text)
+    rule = rrulestr(rule_text, dtstart=_wall(start, zone))
     assert isinstance(rule, rrule)
     if until is not None:
-        rule = rule.replace(until=wall(until) if until.tzinfo else until)
-    rules = rruleset()
+        rule = rule.replace(until=_wall(until, zone) if until.tzinfo else until)
+    rules = rruleset(cache=True)
     rules.rrule(rule)
-    for exdate in event.exdates:
-        rules.exdate(wall(exdate))
-    for s in rules.between(wall(lo), wall(hi), inc=True):
-        yield s.replace(tzinfo=zone)
+    for exdate in exdates:
+        rules.exdate(_wall(exdate, zone))
+    return rules
+
+
+def _wall(dt: datetime, zone: tzinfo | None) -> datetime:
+    return dt.astimezone(zone).replace(tzinfo=None)
 
 
 def _split_until(text: str) -> tuple[str, datetime | None]:
