@@ -97,6 +97,7 @@ async def test_now_line_skips_the_gap_between_events(
 
 async def test_cursor_and_clicks_pick_the_topmost_block(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
+        app.set_grid_mode(True)  # the slot cursor
         grid = app.query_one(WeekView)
         await pilot.press("l", "l")  # Fri
         await pilot.press(*"jjjjjj")  # 13:00
@@ -115,6 +116,7 @@ async def test_cursor_and_clicks_pick_the_topmost_block(app: RecordingApp) -> No
 
 async def test_cycling_visits_stacked_and_side_by_side_events(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
+        app.set_grid_mode(True)  # the slot cursor
         grid = app.query_one(WeekView)
         await pilot.press("l", "l", *"jjjjj")  # Fri 12:30
         seen = []

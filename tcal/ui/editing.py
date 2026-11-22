@@ -130,15 +130,16 @@ class Editor:
         return f"{format_key(self.app.config.keys['paste'][0])} paste"
 
     def paste(self) -> None:
-        """A copy of the yanked event at the time grid's cursor slot, else on the selected
-        day; several: ``paste_all`` on the selected day."""
+        """A copy of the yanked event at the time grid's ``paste_at`` (cursor slot, or
+        the selected event's time), else on the selected day; several: ``paste_all`` on
+        the selected day."""
         if not self.yanked:
             self.app.notify("Nothing copied")
         elif len(self.yanked) > 1:
             self.paste_all(self.app.state.day)
         else:
             focused = self.app.focused
-            at = focused.cursor_time if isinstance(focused, TimeGrid) else self.app.state.day
+            at = focused.paste_at if isinstance(focused, TimeGrid) else self.app.state.day
             self.save_copy(self.yanked[0], at, "Pasted")
 
     def paste_all(self, day: date) -> None:

@@ -46,8 +46,13 @@ and edits made offline are queued and pushed later.
 - **Quick add** (`A`): one line like `Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal`.
 - **Yank / paste / duplicate / move** events with the keyboard (`y` `p` `D`, `J` `K` `<` `>`)
   and an **undo** stack (`u`, the last 20 changes).
+- **Event navigation** (day/week): the cursor keys jump between events — `j`/`k` the
+  previous/next event of the day, `h`/`l` the nearest one on the previous/next day; `a` adds
+  a new event right after the selected one, `p` pastes at its time. **Grid mode** (`v`, back
+  with `v` or esc; the status bar shows `WEEK · GRID`) moves a 15-min slot cursor instead.
 - **Flash jump** (`f`, day/week): red labels on every event and hour / half hour on screen;
-  type one to jump there (nearest get single keys, any other key cancels).
+  type one to jump there (an event label selects it, a slot label enters grid mode there;
+  nearest get single keys, any other key cancels).
 
 - **Batch copy:** mark events with `tab` (✓; marks stay while you browse), `y` copies them all,
   then `p` on another day pastes them with the same day offsets and times; `u` undoes the paste.
@@ -172,10 +177,11 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | Keys | Action |
 |---|---|
 | **Navigation** | |
-| `h` `←` | Previous day / move left |
-| `l` `→` | Next day / move right |
-| `k` `↑` | Up (earlier time / previous week) |
-| `j` `↓` | Down (later time / next week) |
+| `h` `←` | Previous day (time grid: its nearest event) / move left |
+| `l` `→` | Next day (time grid: its nearest event) / move right |
+| `k` `↑` | Up (time grid: previous event, grid mode: earlier slot) |
+| `j` `↓` | Down (time grid: next event, grid mode: later slot) |
+| `v` | Grid mode: cursor keys move a 15-min slot cursor (again / esc: back) |
 | `H` | Previous day/week/month/year (schedule: 2 weeks) |
 | `L` | Next day/week/month/year (schedule: 2 weeks) |
 | `t` | Jump to today |
@@ -197,15 +203,15 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `shift+tab` | Cycle panes |
 | `b` | Show/hide the sidebar |
 | **Events** | |
-| `⏎` | Open event / new event in empty slot |
-| `a` `o` | New event |
+| `⏎` | Open event / else a new event |
+| `a` `o` | New event (time grid: after the selected event / at the grid slot) |
 | `A` | Quick add (one line) |
 | `e` | Edit event |
 | `x` | Delete event |
 | `u` | Undo the last change |
 | `tab` | Mark / unmark event (several: y copies all, esc clears) |
 | `y` | Copy (yank) event, or all marked events |
-| `p` `P` | Paste at the cursor slot or selected day (several: from that day on) |
+| `p` `P` | Paste at the selected event / grid slot / day (several: from that day on) |
 | `D` | Duplicate event to the next day |
 | `K` `ctrl+k` | Move event 15 min earlier (time grid) |
 | `J` `ctrl+j` | Move event 15 min later (time grid) |
@@ -214,7 +220,7 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `/` | Search events |
 | **Event form** | |
 | `ctrl+s` | Save |
-| `esc` | Cancel / close dialog / clear marks |
+| `esc` | Cancel / close dialog / leave grid mode / clear marks |
 | **App** | |
 | `r` | Sync now |
 | `R` | Sync log (recent warnings and errors) |

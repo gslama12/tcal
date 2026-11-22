@@ -13,6 +13,10 @@ The geometry (``TimeScale``, ``layout_blocks``, ``layout_bars``, ...) lives in
 the cursor / scroll / zoom / selection and hands a ``GridFrame`` to ``paint`` (cached
 until the next redraw).
 Cursor and scroll position are stored in minutes so they survive zooming.
+
+Two modes (``state.grid``): in event mode (default) the cursor keys move between the
+events (up/down within the day, left/right to the nearest one on the next day); in
+grid mode (``grid_mode`` key, escape leaves) they move a 15-min slot cursor.
 """
 
 from dataclasses import replace
@@ -20,6 +24,7 @@ from datetime import date, datetime, time, timedelta
 from fractions import Fraction
 
 from textual import events
+from textual.binding import Binding
 from textual.strip import Strip
 
 from tcal.model import Occurrence
@@ -36,6 +41,7 @@ from tcal.ui.timelayout import (
     is_bar,
     layout_bars,
     layout_blocks,
+    minute_in,
     sub_columns,
 )
 from tcal.ui.timepaint import AXIS, GridFrame, markers, paint
@@ -55,13 +61,21 @@ def now() -> datetime:
 class TimeGrid(CalendarView):
     """Shared core of DayView / WeekView (``days()`` picks the columns).
 
-    Keys: j/k move the slot cursor, h/l the day, n/p cycle events (from the cursor),
-    enter opens the selected event (``EventSelected``) or requests a new one on an
-    empty slot (``NewEventRequested``), +/- zoom. Mouse: click selects a slot / opens
-    an event, double-click on an empty slot requests a new one, the wheel scrolls.
+    Keys: in event mode j/k select the previous/next event of the day, h/l the
+    nearest event on the previous/next day; in grid mode (v) j/k move the slot cursor,
+    h/l the day. n/p cycle events (from the cursor), enter opens the selected event
+    (``EventSelected``) or requests a new one (``NewEventRequested``), +/- zoom.
+    Mouse: click selects a slot / opens an event, double-click on an empty slot
+    requests a new one, the wheel scrolls.
     """
 
-    BINDINGS = [*EVENT_BINDINGS, binding("new_event", "New event"), binding("flash", "Flash")]
+    BINDINGS = [
+        *(b for b in EVENT_BINDINGS if not (isinstance(b, Binding) and b.id == "cancel")),
+        binding("cancel", "Leave grid mode / clear marks"),
+        binding("grid_mode", "Grid mode"),
+        binding("new_event", "New event"),
+        binding("flash", "Flash"),
+    ]
     header_formats: tuple[str, ...] = HEADER_FORMATS
 
     def __init__(self, *, id: str | None = None) -> None:
@@ -211,9 +225,16 @@ class TimeGrid(CalendarView):
         return datetime.combine(self.tcal.state.day, time(minute // 60, minute % 60), now().tzinfo)
 
     @property
+    def grid_mode(self) -> bool:
+        return self.tcal.state.grid
+
+    @property
     def selected(self) -> Occurrence | None:
-        """The picked event if still under the cursor, else the topmost event at the
-        cursor slot (the deepest in the cascade; of side-by-side ones the left)."""
+        """Event mode: the picked event while it is on the selected day. Grid mode: the
+        picked event if still under the cursor, else the topmost event at the cursor
+        slot (the deepest in the cascade; of side-by-side ones the left)."""
+        if not self.grid_mode:
+            return self._picked if self._picked in self._day_events() else None
         days = self._load()[0]
         day, rows = days.index(self.tcal.state.day), self._cursor_rows()
         at_cursor = sorted(
@@ -239,9 +260,10 @@ class TimeGrid(CalendarView):
         self._redraw()
 
     def _ensure_visible(self) -> None:
+        """Scroll the cursor slot (event mode: the selected event's rows) into view."""
         scale, rows, top, height = (
             self.scale,
-            self._cursor_rows(),
+            self._focus_rows(),
             self._top_row(),
             self._grid_height(),
         )
@@ -249,6 +271,16 @@ class TimeGrid(CalendarView):
             self._top_min = scale.minute_of(rows.start)
         elif rows.stop > top + height:
             self._top_min = scale.minute_of(min(rows.start, rows.stop - height))
+
+    def _focus_rows(self) -> range:
+        """The rows to keep on screen: the cursor slot, or the selected event's block."""
+        occ = self.selected if not self.grid_mode else None
+        if occ is not None:
+            day = self._load()[0].index(self.tcal.state.day)
+            block = next((b for b in self._block_list() if b.day == day and occ in b.occs), None)
+            if block is not None:
+                return range(block.top, block.bottom)
+        return self._cursor_rows()
 
     def _scroll(self, rows: int) -> None:
         top = max(0, min(self._top_row() + rows, self.scale.total_rows - self._grid_height()))
@@ -263,10 +295,69 @@ class TimeGrid(CalendarView):
         self._picked = occ
         if not is_bar(occ) and occ.start.date() == day:
             self._cursor_min = occ.start.hour * 60 + occ.start.minute
-        self._ensure_visible()
         if day != self.tcal.state.day:
             self.tcal.select_date(day)  # redraws via on_state, keeps the pick
+        self._ensure_visible()
         self._redraw()
+
+    def _day_events(self) -> list[Occurrence]:
+        """The events of the selected day in event-mode order: all-day bars first,
+        then the timed ones by start."""
+        days, day = self._load()[0], self.tcal.state.day
+        index = days.index(day)
+        bars = [bar.occ for bar in self._bars() if bar.first <= index < bar.last]
+        timed = [o for b in self._block_list() if b.day == index for o in b.occs]
+        return sorted(bars, key=lambda o: o.start) + sorted(timed, key=lambda o: (o.start, o.end))
+
+    def _span(self, occ: Occurrence) -> tuple[int, int]:
+        """``occ``'s [start, end) minutes on the selected day."""
+        day = self.tcal.state.day
+        return minute_in(day, occ.start), minute_in(day, occ.end)
+
+    def _reference(self) -> int | None:
+        """Where h/l look for the nearest event: the selected event's start minute, None
+        for an all-day one; with nothing selected the cursor minute."""
+        occ = self.selected
+        if occ is None:
+            return self._cursor_min
+        return None if is_bar(occ) else self._span(occ)[0]
+
+    def _nearest(self, minute: int | None) -> Occurrence | None:
+        """The selected day's event nearest ``minute`` (the earlier on a tie); for
+        None (all-day) its first all-day event. Falls back to the other kind."""
+        stops = self._day_events()
+        bars = [o for o in stops if is_bar(o)]
+        timed = [o for o in stops if not is_bar(o)]
+        if minute is None or not timed:
+            return next(iter(bars or timed), None)
+
+        def distance(occ: Occurrence) -> int:
+            start, end = self._span(occ)
+            return max(start - minute, minute - (end - 1), 0)
+
+        return min(timed, key=distance)
+
+    def _step_event(self, step: int) -> None:
+        """Select the next (``step`` 1) / previous (-1) event of the day; with none
+        selected the first / last. Stops at the ends."""
+        stops = self._day_events()
+        if not stops:
+            return
+        current = self.selected
+        if current is None:
+            self.select(stops[0 if step > 0 else -1])
+        elif 0 <= (index := stops.index(current) + step) < len(stops):
+            self.select(stops[index])
+
+    def _step_day(self, step: int) -> None:
+        """Event mode: go to the previous/next day and select the event nearest the
+        current one there (none on an empty day)."""
+        minute = self._reference()
+        self._select_day(self.tcal.state.day + timedelta(days=step))
+        if (occ := self._nearest(minute)) is not None:
+            self.select(occ)
+        elif minute is not None:
+            self._cursor_min = minute
 
     def _stop_key(self, occ: Occurrence) -> tuple[date, bool, datetime]:
         """n/p order: by day, all-day bars first, then by start."""
@@ -293,28 +384,79 @@ class TimeGrid(CalendarView):
     # ----- actions --------------------------------------------------------
 
     def action_cursor_down(self) -> None:
+        if not self.grid_mode:
+            self._step_event(1)
+            return
         row = min(self._cursor_row() + self._slot_rows(), self._snap(self.scale.total_rows - 1))
         self._move_cursor(self.scale.minute_of(row))
 
     def action_cursor_up(self) -> None:
+        if not self.grid_mode:
+            self._step_event(-1)
+            return
         self._move_cursor(self.scale.minute_of(max(self._cursor_row() - self._slot_rows(), 0)))
 
     def action_cursor_left(self) -> None:
-        self._select_day(self.tcal.state.day - timedelta(days=1))
+        if self.grid_mode:
+            self._select_day(self.tcal.state.day - timedelta(days=1))
+        else:
+            self._step_day(-1)
 
     def action_cursor_right(self) -> None:
-        self._select_day(self.tcal.state.day + timedelta(days=1))
+        if self.grid_mode:
+            self._select_day(self.tcal.state.day + timedelta(days=1))
+        else:
+            self._step_day(1)
 
     def _select_day(self, day: date) -> None:
         self._picked = None
         self.tcal.select_date(day)
 
     def action_open(self) -> None:
-        occ = self.selected
-        self.post_message(EventSelected(occ) if occ else NewEventRequested(self.cursor_time))
+        if occ := self.selected:
+            self.post_message(EventSelected(occ))
+        else:
+            self.action_new_event()
 
     def action_new_event(self) -> None:
-        self.post_message(NewEventRequested(self.cursor_time))
+        """Grid mode: at the cursor slot. Event mode: at the selected timed event's end,
+        else at the next full hour (as the app's default)."""
+        occ = self.selected
+        if self.grid_mode:
+            start = self.cursor_time
+        elif occ is not None and not is_bar(occ):
+            start = occ.end
+        else:
+            hour = min(now().hour + 1, 23)
+            start = datetime.combine(self.tcal.state.day, time(hour), now().tzinfo)
+        self.post_message(NewEventRequested(start))
+
+    @property
+    def paste_at(self) -> date | datetime:
+        """Where a paste lands: the cursor slot (grid mode), the selected timed event's
+        start (event mode), else the selected day."""
+        occ = self.selected
+        if self.grid_mode:
+            return self.cursor_time
+        return occ.start if occ is not None and not is_bar(occ) else self.tcal.state.day
+
+    def action_grid_mode(self) -> None:
+        """Toggle grid mode; leaving it selects the event under / nearest the cursor."""
+        if not self.grid_mode:
+            self.tcal.set_grid_mode(True)
+            return
+        occ = self.selected or self._nearest(self._cursor_min)
+        self._picked = occ
+        self.tcal.set_grid_mode(False)
+        if occ is not None:
+            self.select(occ)
+
+    def action_cancel(self) -> None:
+        """Escape: leave grid mode, else clear the marks."""
+        if self.grid_mode:
+            self.action_grid_mode()
+        else:
+            self.tcal.clear_marks()
 
     def _ladder(self) -> list[tuple[Fraction | int, int | None]]:
         """Zoom stops ``(rows_per_hour, zoom)``: the levels plus the fit (zoom None).
@@ -444,9 +586,11 @@ class TimeGrid(CalendarView):
             self._redraw()
 
     def _jump(self, target: Target) -> None:
+        """An event label selects the event; a slot label goes to grid mode there."""
         if target.occ is not None:
             self.select(target.occ)
             return
+        self.tcal.set_grid_mode(True)
         self._move_cursor(target.minute)
         day = self._load()[0][target.day]
         if day != self.tcal.state.day:
@@ -465,6 +609,12 @@ class TimeGrid(CalendarView):
                 self._lines = overlay(self._lines, self._flash, self.tcal.palette)
         return self._lines[y] if y < len(self._lines) else Strip.blank(self.size.width)
 
+    def _event_rows(self) -> range:
+        """Event mode has no slot cursor: an empty range at the selected event (or
+        the cursor minute), where flash labels start counting from."""
+        row = self._focus_rows().start
+        return range(row, row)
+
     def _frame(self) -> GridFrame:
         days, _, bars = self._load()
         return GridFrame(
@@ -476,7 +626,7 @@ class TimeGrid(CalendarView):
             bars=bars,
             blocks=self._block_list(),
             day=self.tcal.state.day,
-            cursor_rows=self._cursor_rows(),
+            cursor_rows=self._cursor_rows() if self.grid_mode else self._event_rows(),
             selected=self.selected,
             now=now(),
             header_formats=self.header_formats,

@@ -30,6 +30,7 @@ class AppState:
     week_start: int = 0  # 0 = Monday .. 6 = Sunday
     hidden_calendars: frozenset[str] = frozenset()
     marked: frozenset[tuple[str, datetime]] = frozenset()  # tab-marked ``Occurrence.key``s
+    grid: bool = False  # day/week: the cursor keys move a slot cursor, not between events
 
     def period(self) -> tuple[date, date]:
         """The [start, end) day range of the current view's period."""
