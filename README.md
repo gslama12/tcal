@@ -37,7 +37,7 @@ and edits made offline are queued and pushed later.
 
 ## Features
 
-- **Views:** day and week (zoomable time grid, overlaps side by side, now line), month (multi-day
+- **Views:** day and week (zoomable time grid, overlapping events stacked as translucent rounded blocks, now line), month (multi-day
   bars, "+N more"), year (12 mini months) and schedule (a scrolling list of upcoming events).
   Sidebar with mini month and a toggleable calendar list; mouse support.
 - **Events:** create, edit, delete, incl. recurring events ("this event" or "all events"),

@@ -203,13 +203,10 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   ≥ 15 min); zoom levels keep their exact slot starts (e.g. :20 at 3 rows/h). The fit is one stop
   on the `+`/`-` ladder (choosing it re-fits and puts `day_start` on top). Each column shows
   `▲ N earlier` / `▼ N later` (or `▲N`) for timed events scrolled out of view.
-- **T6 Overlaps (QA #2/#3/#8):** `pack_columns` returns `(col, span, cols)`: Google-style
-  clusters (touching is no overlap), greedy columns, and each event widens over the free columns
-  to its right. Side-by-side events keep a 1-col gap; if a cluster needs more columns than fit the
-  narrowest day column at `MIN_EVENT_WIDTH` (4) + gap, `layout_blocks(..., max_cols)` collapses
-  it into one `Block` with `group` (its events by start): drawn as "N events" (plus the selected
-  event's title/time), enter/click opens the first, n/p cycle through them. The now-line is drawn
-  behind events; only its `●` stays on a free left-edge cell of an event.
+- **T6 Overlaps (QA #2/#3/#8), superseded by "Stacked blocks" below:** clusters needing blocks
+  narrower than `MIN_WIDTH` (4) in the narrowest day column collapse into one `Block` with `group`
+  (its events by start): drawn as "N events" (plus the selected event's title/time), enter/click
+  opens the first, n/p cycle through them. The now-line `●` replaces the column's divider.
 - **T4 Strip:** all-day events and timed events lasting ≥ 24 h are bars in the all-day strip
   (max 3 lanes, "+N" in the axis for the rest); shorter events crossing midnight are split.
 
@@ -485,8 +482,8 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   (`TimeGrid._cursor_rows()`, `GridFrame.cursor_rows`), so it never shows 7.5-min times; an
   event under either row is selected. Zooming adopts the shown time only when it is a
   quarter hour, so a level that can't show it (:20/:10 rows) doesn't make the cursor drift.
-- Columns pack by `(row, minute)` edges: events overlap if their rows *or* their times do, so a
-  30-min overlap that rounds to touching rows is still drawn side by side.
+- Overlaps use `(row, minute)` edges: events overlap if their rows *or* their times do, so a
+  30-min overlap that rounds to touching rows is still stacked.
 - `timepaint.markers(frame, height)` places the `▲/▼` markers (also used for clicks): on the
   edge row, or the nearest row inwards that is not the cursor/now row and has room beside the
   events. Clicking one selects (and scrolls to) the first hidden event; it doesn't open it.
@@ -543,6 +540,26 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - *Supersedes the feat-h2 marker note:* `▲/▼` markers stay on the edge row (right of its
   events); if that row is the cursor/now row or has no room they go to the right end of the
   column's header line (`Marker.y` = widget line, 0 for the header). Never mid-grid.
-- A side-by-side block's time line moves down past rows where a block to its right shows a
-  title/location ("10:00  1:1…" read as 1:1's time), or is dropped if the block has no row left.
+- *(Superseded by "Stacked blocks": a covered block's text skips the rows its cover hides.)*
 - The now line is not drawn into the 1-col gap beside an event.
+
+### Stacked blocks (ui-grid; replaces side-by-side overlaps)
+
+- **Cascade:** `timelayout.cascade` takes spans by start (longer first) and puts each one level
+  (`Block.depth`) above the deepest earlier span it overlaps; `sub_columns` indents a level by
+  `INDENT` = 2 cells (Google-like), so the covered event keeps a 2-cell strip. Of two with the
+  same start the shorter goes on top. Only events with identical start *and* end would cover each
+  other completely: they share a level side by side (`col`/`cols`, 1-col gap). `layout_blocks`
+  returns blocks in drawing order (bottom first); `layout_blocks(..., width)` takes the
+  narrowest day column's width and collapses a cluster with a block under `MIN_WIDTH`.
+- **Text:** a block's lines go only on rows that no block drawn above it covers, so a covered
+  title moves below its cover (one free row: compact "HH:MM title"). Replaces `_place_time`.
+- **Look:** fills are the calendar colour at `ALPHA` 0.35 over whatever is below (grid
+  background or the lower block; the cursor stays hidden under events), `SELECTED_ALPHA` 0.6 plus
+  the `▌` accent for the selected one; text uses `text_on(fill)`, the title bold. Hour lines
+  (`╌`) and the now line show through in a blended tone (text covers them). Corners are rounded
+  with quarter blocks `▗▖▝▘` (`▐…▌` on one-row events) in the fill over the colour below, only on
+  blank corner cells, so no row or text cell is lost (a title filling the width keeps a square
+  corner). The left text pad doubles as the corner cell.
+- **Picking:** the cursor selects the deepest block at its slot (side by side: the left one);
+  clicks hit the topmost block under the pointer; n/p order is unchanged (by start).
