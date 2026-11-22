@@ -6,6 +6,7 @@ styles.tcss; ``primary``/``secondary`` map to Textual's own ``$primary`` and
 reads ``app.palette``.
 """
 
+import colorsys
 from dataclasses import asdict, dataclass
 from functools import lru_cache
 
@@ -81,6 +82,10 @@ PALETTES = {
     "catppuccin-latte": CATPPUCCIN_LATTE,
 }
 LIGHT = {"catppuccin-latte"}
+# Events (time grid blocks, all-day bars, month bars): the calendar colour at this
+# opacity over the background, with an accent bar in the full colour on the left.
+ALPHA, SELECTED_ALPHA = 0.3, 0.55
+EDGE, SELECTED_EDGE = "▎", "▌"
 MAX_TEXT_LUMA = 0.45  # brighter text (e.g. a pastel calendar colour) is hard to read on light
 
 
@@ -101,6 +106,22 @@ def blend(color: str, below: str, alpha: float) -> str:
 def _rgb(hex_color: str) -> tuple[int, int, int]:
     r, g, b = (int(hex_color.lstrip("#")[i : i + 2], 16) for i in (0, 2, 4))
     return r, g, b
+
+
+# Calendar colours are brought into these HLS ranges (hue kept): pastel enough to
+# sit calmly on a dark background, deep and muted enough on a light one.
+# (lightness range, max saturation) per background:
+DARK_TONE, LIGHT_TONE = ((0.62, 0.78), 0.9), ((0.38, 0.52), 0.7)
+
+
+def harmonize(color: str, palette: Palette) -> str:
+    """``color`` (e.g. a calendar's from iCloud) nudged toward the palette's tone:
+    lightness clamped for its background, saturation capped, hue unchanged."""
+    (lo, hi), max_s = LIGHT_TONE if luma(palette.background1) > 0.5 else DARK_TONE
+    h, lightness, s = colorsys.rgb_to_hls(*(c / 255 for c in _rgb(color)))
+    rgb = colorsys.hls_to_rgb(h, min(max(lightness, lo), hi), min(s, max_s))
+    r, g, b = (round(c * 255) for c in rgb)
+    return f"#{r:02X}{g:02X}{b:02X}"
 
 
 def legible(color: str, palette: Palette) -> str:
