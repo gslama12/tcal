@@ -15,15 +15,15 @@ from textual.strip import Strip
 
 from tcal.model import Occurrence
 from tcal.ui.canvas import Canvas, style
-from tcal.ui.theme import Palette, blend, text_on
+from tcal.ui.theme import ALPHA, EDGE, SELECTED_ALPHA, SELECTED_EDGE, Palette, blend, text_on
 from tcal.ui.timelayout import Bar, Block, TimeScale, sub_columns
 from tcal.ui.widgets.base import fit
 
 AXIS = 6  # width of the time axis: "HH:MM "
-ALPHA = 0.35  # event fill: the calendar colour over what is below it
-SELECTED_ALPHA = 0.6
-HOUR_ALPHA = 0.3  # hour lines through an event: its text colour over its fill
+HOUR_ALPHA = 0.1  # hour lines through an event: its text colour over its fill, faint
 NOW_ALPHA = 0.7  # the now line through an event
+CURSOR_ALPHA = 0.45  # the cursor slot: the primary colour over the background
+LINE_ALPHA = 0.6  # the grid's hour lines: the divider colour over the background
 
 
 @dataclass(frozen=True)
@@ -128,17 +128,21 @@ def _strip(canvas: Canvas, f: GridFrame) -> None:
         if bar.lane >= rows:
             continue
         color = f.color(bar.occ.calendar_id)
+        selected = bar.occ == f.selected
+        fill = blend(color, p.background1, SELECTED_ALPHA if selected else ALPHA)
         y, x0, x1 = 1 + bar.lane, xs[bar.first] + 1, xs[bar.last]
-        canvas.fill(y, x0, x1, style(text_on(color, p), color, bold=True))
-        before = "◂" if bar.occ.start.date() < f.days[0] else " "
-        if bar.occ == f.selected:  # accent bar, as for selected blocks
-            before = "▌" if before == " " else before
+        canvas.fill(y, x0, x1, style(text_on(fill, p), fill, bold=True))
+        continued = bar.occ.start.date() < f.days[0]
         after = bar.last == len(f.days) and bar.occ.end > period_end
-        canvas.text(y, x0, x1, f"{before}{fit(_clean(bar.occ.summary), x1 - x0 - 1 - after)}")
-        if bar.occ == f.selected:
-            canvas.text(y, x0, x0 + 1, before, style(p.foreground3, color, bold=True))
+        title = fit(_clean(bar.occ.summary), x1 - x0 - 1 - after)
+        canvas.text(y, x0, x1, f"{'◂' if continued else ' '}{title}")
+        # Like a timed block: an accent bar in the calendar colour (bright when selected).
+        edge = "◂" if continued else SELECTED_EDGE if selected else EDGE
+        canvas.text(
+            y, x0, x0 + 1, edge, style(p.foreground3 if selected else color, fill, bold=True)
+        )
         if after:
-            canvas.text(y, x1 - 1, x1, "▸")
+            canvas.text(y, x1 - 1, x1, "▸", style(color, fill, bold=True))
     sep = 1 + rows
     canvas.fill(sep, 0, canvas.width, divider, "─")
     for x in xs[:-1]:
@@ -147,9 +151,10 @@ def _strip(canvas: Canvas, f: GridFrame) -> None:
 
 def _grid(canvas: Canvas, f: GridFrame, bottom: int) -> None:
     p, xs, scale, top = f.palette, f.xs, f.scale, f.top
-    divider = style(p.background3, p.background1)  # also the hour lines
+    divider = style(p.background3, p.background1)
+    hour_line = style(blend(p.background3, p.background1, LINE_ALPHA), p.background1)
     label = style(p.foreground1, p.background1)
-    cursor = style(p.background1, p.primary)
+    cursor = style(p.foreground3, blend(p.primary, p.background1, CURSOR_ALPHA))
     cursor_label = style(p.primary, p.background1, bold=True)
     hour_rows = {scale.row_of(hour * 60): hour for hour in range(24)}
     sel_col = f.days.index(f.day)
@@ -166,7 +171,7 @@ def _grid(canvas: Canvas, f: GridFrame, bottom: int) -> None:
         for i, x in enumerate(xs[:-1]):
             canvas.fill(y, x, x + 1, divider, "│")
             if hour_start and scale.rows_per_hour >= 2:
-                canvas.fill(y, x + 1, xs[i + 1], divider, "╌")
+                canvas.fill(y, x + 1, xs[i + 1], hour_line, "╌")
         if row in f.cursor_rows:
             canvas.fill(y, xs[sel_col] + 1, xs[sel_col + 1], cursor)
         if now_col is not None and row == f.now_row():
@@ -272,9 +277,9 @@ def _shown(f: GridFrame, block: Block) -> Occurrence:
 
 
 def _text_box(f: GridFrame, block: Block) -> tuple[str, int]:
-    """The left pad (a rounded corner's cell) and the text width of ``block``."""
+    """The left pad (the accent bar's cell) and the text width of ``block``."""
     x0, x1 = sub_columns(block, f.xs)
-    pad = " " if x1 - x0 >= 6 or f.selected in block.occs else ""
+    pad = " " if x1 - x0 >= 3 or f.selected in block.occs else ""
     return pad, x1 - x0 - len(pad)
 
 
@@ -288,8 +293,9 @@ def _block(
     texts: list[str],
 ) -> None:
     """Draw ``block`` translucent over what is below (``under``: the fill colour of
-    each cell, updated): hour and now lines show through, corners are rounded
-    with quarter blocks, ``texts`` go on ``rows`` (the first, the title, in bold)."""
+    each cell, updated): hour and now lines show through faintly, an accent bar
+    in the calendar colour marks its left edge, ``texts`` go on ``rows`` (the
+    first, the title, in bold)."""
     first, last = max(block.top, f.top), min(block.bottom, bottom)
     if first >= last:
         return
@@ -321,34 +327,10 @@ def _block(
         canvas.text(y, x0, x1, text)
         for x in range(x0, min(x1, x0 + cell_len(text))):
             canvas.styles[y][x] = style(fg, under[y][x], bold=selected or row == title_row)
-        if x1 - x0 >= 3:
-            _corners(canvas, block, row, y, (x0, x1), (under[y], below), skip_left=selected)
         if selected:  # Google-like: a bright accent bar + bold text
-            canvas.text(y, x0, x0 + 1, "▌", style(p.foreground3, under[y][x0], bold=True))
-
-
-def _corners(
-    canvas: Canvas,
-    block: Block,
-    row: int,
-    y: int,
-    xs: tuple[int, int],
-    fills: tuple[list[str], list[str]],
-    skip_left: bool,
-) -> None:
-    """Round the block's corners on ``row`` (blank corner cells only): the quarter
-    block in the block's fill, the rest in the colour below it (``fills``: the
-    line's fill colours with and without the block, from ``x0``)."""
-    (x0, x1), (fill, below) = xs, fills
-    top, end = row == block.top, row == block.bottom - 1
-    if not (top or end):
-        return
-    for x, glyphs in ((x0, "▐▗▝"), (x1 - 1, "▌▖▘")):
-        if (x == x0 and skip_left) or canvas.chars[y][x] not in (" ", "╌", "─"):
-            continue
-        glyph = glyphs[0] if top and end else glyphs[1] if top else glyphs[2]
-        canvas.chars[y][x] = glyph
-        canvas.styles[y][x] = style(fill[x], below[x - x0])
+            canvas.text(y, x0, x0 + 1, SELECTED_EDGE, style(p.foreground3, under[y][x0], bold=True))
+        elif x1 - x0 >= 3:
+            canvas.text(y, x0, x0 + 1, EDGE, style(color, under[y][x0], bold=True))
 
 
 def _day(fmt: str, day: date) -> str:

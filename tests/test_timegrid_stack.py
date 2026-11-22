@@ -10,9 +10,8 @@ from tcal.model import Event
 from tcal.providers.fake import FakeProvider
 from tcal.tz import local_zone
 from tcal.ui import messages
-from tcal.ui.theme import blend
+from tcal.ui.theme import ALPHA, CATPPUCCIN_LATTE, EDGE, TOKYO_NIGHT, blend, harmonize
 from tcal.ui.timelayout import Block, sub_columns
-from tcal.ui.timepaint import ALPHA
 from tcal.ui.widgets import timegrid
 from tcal.ui.widgets.timegrid import TimeGrid, WeekView
 
@@ -128,7 +127,7 @@ async def test_cycling_visits_stacked_and_side_by_side_events(app: RecordingApp)
         assert sorted(seen[3:]) == ["Pickup A", "Pickup B"]
 
 
-async def test_blocks_are_translucent_and_rounded(app: RecordingApp) -> None:
+async def test_blocks_are_translucent_with_an_accent_bar(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         await pilot.pause()
         grid = app.query_one(WeekView)
@@ -148,12 +147,18 @@ async def test_blocks_are_translucent_and_rounded(app: RecordingApp) -> None:
         assert cell(workshop.top + 2, x1 - 1)[0] == "╌"  # the hour line shows through
         on_top = blend(personal, fill, ALPHA)  # Coffee over Workshop
         assert cell(coffee.top + 1, x1 - 2)[1].bgcolor.name == on_top.lower()  # type: ignore[union-attr]
-        assert cell(workshop.top, x0)[0] == "▗"  # rounded corners
-        assert cell(workshop.bottom - 1, x0)[0] == "▝"
-        assert cell(coffee.top, x1 - 1)[0] == "▖"
+        for row in (workshop.top + 2, workshop.bottom - 1):  # the accent bar, every row
+            char, style = cell(row, x0)
+            assert char == EDGE and style.color and style.color.name == work.lower()
 
 
 def test_blend() -> None:
     assert blend("#FF0000", "#000000", 1) == "#FF0000"
     assert blend("#FF0000", "#0000FF", 0.5) == "#800080"
     assert blend("#FFFFFF", "#000000", 0) == "#000000"
+
+
+def test_harmonize_keeps_hue_and_tames_tone() -> None:
+    assert harmonize("#7AA2F7", TOKYO_NIGHT) == "#7AA2F7"  # the theme's own accents stay
+    assert harmonize("#000080", TOKYO_NIGHT) == "#4747F5"  # navy: lifted for a dark background
+    assert harmonize("#FFFF80", CATPPUCCIN_LATTE) == "#DADA2F"  # pale yellow: deepened on light

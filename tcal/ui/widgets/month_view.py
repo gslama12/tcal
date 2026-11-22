@@ -10,7 +10,7 @@ from tcal.model import Occurrence
 from tcal.ui.calgrid import by_day, month_weeks, occurrence_days, weekday_names
 from tcal.ui.keys import EVENT_BINDINGS
 from tcal.ui.messages import EventSelected, NewEventRequested
-from tcal.ui.theme import legible, text_on
+from tcal.ui.theme import ALPHA, EDGE, SELECTED_ALPHA, SELECTED_EDGE, blend, legible, text_on
 from tcal.ui.timelayout import is_bar, layout_bars
 from tcal.ui.widgets.base import fit, join_lines
 from tcal.ui.widgets.day_cursor import DayCursorView
@@ -245,10 +245,13 @@ class MonthView(DayCursorView):
                 before = "◂" if days[0] < day else " "
                 after = "▸" if days[-1] > last else ""
                 title = fit(chip.summary, width - 1 - len(after))
-                label = f"{before}{title}".ljust(width - len(after)) + after
-                fg = text_on(color, p)
-                style = Style(color=fg, bgcolor=color, bold=True, reverse=selected)
-                text.append(label, style=style)
+                label = f"{title}".ljust(width - 1 - len(after)) + after
+                # Translucent with an accent bar, like the time grid's events.
+                fill = blend(color, p.background1, SELECTED_ALPHA if selected else ALPHA)
+                edge = before if before != " " else SELECTED_EDGE if selected else EDGE
+                accent = p.foreground3 if selected else color
+                text.append(edge, style=Style(color=accent, bgcolor=fill, bold=True))
+                text.append(label, style=Style(color=text_on(fill, p), bgcolor=fill, bold=True))
             else:
                 color = legible(color, p)
                 time = f"{chip.start:%H:%M} " if chip.start.date() == day else ""
