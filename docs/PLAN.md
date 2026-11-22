@@ -103,7 +103,8 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
   H/L prev/next period, t today, d/w/m/Y/s day/week/month/year/schedule view, +/- (or
   ctrl+up/down) zoom, enter open, n/N next/prev event, a/o new event, A quick add, e edit,
   x delete, u undo, y yank, p/P paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too), f flash
-  jump (day/week), g goto date, / search, r sync, c focus calendar list, M focus mini month, space toggle calendar, tab cycle focus,
+  jump (day/week), g goto date, / search, r sync, c focus calendar list, M focus mini month, space
+  toggle calendar, tab mark event (batch copy, B1), shift+tab cycle focus,
   b sidebar, ? help, q quit, ctrl+s save, esc cancel. (Originally `y` = year view and `dd`
   delete: see S2, Y1.)
 - **D7 Mouse:** click date in minical, click calendar checkbox, click view tabs,
@@ -590,3 +591,22 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **Quieter chrome:** hour lines are the divider colour at `LINE_ALPHA` over the background; the
   cursor slot is `primary` at `CURSOR_ALPHA` (not solid); the status bar's help chip is neutral
   (`foreground2` on `background3`), leaving `primary` for the mode chip and active view.
+
+### Batch copy (batch-copy)
+
+- **B1 Marks:** modelled on Apple Calendar (cmd-click several, copy, select a day, paste;
+  Google Calendar has no multi-paste). `[keys] toggle_mark = ["tab"]` marks/unmarks the
+  selected event in day/week/month/schedule (`AppState.marked`: `Occurrence.key`s, so marks
+  survive navigation and syncs); `cancel` (esc) clears them. Both are in `EVENT_BINDINGS`
+  (the focused view), so they win over the screen's built-in tab. Marked events get a ✓
+  (time grid: a badge in the block's/bar's top-right cell, a post-pass `timepaint._marks`;
+  month: before the chip; schedule: instead of the ●); the status bar shows "N selected".
+- **B2 Tab:** `focus_next` is now `shift+tab` (described "Cycle panes"; Textual's screen binds
+  shift+tab to focus-previous first, which cycles just as well). Quick add's "full form" key
+  is a fixed `tab` (it was `[keys] focus_next`; like its fixed enter).
+- **B3 Yank/paste:** `y` with marks copies the marked events still shown (by start) and clears
+  the marks; `Editor.yanked` is a list. `p` with several: the earliest lands on the selected
+  day, the others keep their day offsets, times of day and durations (all-day included); each
+  a one-off `copy_at` as for a single paste (also into the source calendar or the first
+  writable). Single yank/paste is unchanged. `app.save_events(events, message)` saves them
+  as **one undo step**: `UndoStep.changes` is now a list of (uid, rows before).

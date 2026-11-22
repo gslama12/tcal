@@ -1,5 +1,6 @@
 """Event editing flows behind TcalApp's keys: the event form (new, quick add,
-edit "this/all events"), the yank/paste/duplicate clipboard and moving events.
+edit "this/all events"), the yank/paste/duplicate clipboard (one event, or the
+tab-marked ones as a batch) and moving events.
 
 ``Editor(app)`` only opens screens and calls the app's data seam
 (``save_event`` / ``source``), so undo and syncing work as for any other edit.
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
 class Editor:
     def __init__(self, app: "TcalApp") -> None:
         self.app = app
-        self.yanked: Occurrence | None = None  # the yank key's copy
+        self.yanked: list[Occurrence] = []  # the yank key's copy, by start
 
     # ----- event form -----------------------------------------------------
 
@@ -113,18 +114,48 @@ class Editor:
     # ----- clipboard & moving ---------------------------------------------
 
     def yank(self, occ: Occurrence) -> None:
-        self.yanked = occ
-        paste = format_key(self.app.config.keys["paste"][0])
-        self.app.notify(f"Copied “{occ.summary}” · {paste} paste")
+        self.yanked = [occ]
+        self.app.notify(f"Copied “{occ.summary}” · {self._paste_hint}")
+
+    def yank_all(self, occs: list[Occurrence]) -> None:
+        """Copy several events (the marked ones, by start) for a batch paste."""
+        if len(occs) == 1:
+            self.yank(occs[0])
+        elif occs:
+            self.yanked = occs
+            self.app.notify(f"Copied {len(occs)} events · {self._paste_hint}")
+
+    @property
+    def _paste_hint(self) -> str:
+        return f"{format_key(self.app.config.keys['paste'][0])} paste"
 
     def paste(self) -> None:
-        """A copy of the yanked event at the time grid's cursor slot, else on the selected day."""
-        if self.yanked is None:
+        """A copy of the yanked event at the time grid's cursor slot, else on the selected
+        day; several: ``paste_all`` on the selected day."""
+        if not self.yanked:
             self.app.notify("Nothing copied")
-            return
-        focused = self.app.focused
-        at = focused.cursor_time if isinstance(focused, TimeGrid) else self.app.state.day
-        self.save_copy(self.yanked, at, "Pasted")
+        elif len(self.yanked) > 1:
+            self.paste_all(self.app.state.day)
+        else:
+            focused = self.app.focused
+            at = focused.cursor_time if isinstance(focused, TimeGrid) else self.app.state.day
+            self.save_copy(self.yanked[0], at, "Pasted")
+
+    def paste_all(self, day: date) -> None:
+        """Copies of all yanked events, as Apple Calendar does: the earliest lands on
+        ``day``, the others keep their day offsets from it, times and durations. One
+        undo step; the first copy is selected."""
+        app = self.app
+        offset = day - self.yanked[0].start.date()
+        copies = []
+        for occ in self.yanked:
+            if not (calendar := self._copy_calendar(occ)):
+                return
+            copies.append(copy_at(occ, occ.start.date() + offset, calendar.id))
+        n = len(copies)
+        saved = app.save_events(copies, f"Removed {n} pasted events")
+        self.select_event(saved[0].uid, saved[0].start)
+        app.notify(f"Pasted {n} events to {day:%a} {day.day} · {app.undo_hint}")
 
     def duplicate(self, occ: Occurrence) -> None:
         """A copy of ``occ`` on the next day."""
@@ -134,14 +165,12 @@ class Editor:
         """Save a copy of ``occ`` at ``at`` (its own calendar, or the first writable),
         select it and toast "<verb> “X” to Sun 22" (+ " · Work" if the calendar differs)."""
         app = self.app
-        calendar = app.calendar(occ.calendar_id)
-        writable = [calendar] if calendar and not calendar.readonly else self._writable()
-        if not writable:
+        if not (target := self._copy_calendar(occ)):
             return
-        copy = app.save_event(copy_at(occ, at, writable[0].id))
+        copy = app.save_event(copy_at(occ, at, target.id))
         self.select_event(copy.uid, copy.start)
         day = copy.start.date()
-        where = "" if writable[0] is calendar else f" · {writable[0].name}"
+        where = "" if target.id == occ.calendar_id else f" · {target.name}"
         app.notify(f"{verb} “{copy.summary}” to {day:%a} {day.day}{where} · {app.undo_hint}")
 
     def move(self, occ: Occurrence, delta: timedelta) -> None:
@@ -188,6 +217,15 @@ class Editor:
             else:
                 app.notify("No writable calendar", severity="warning")
         return writable
+
+    def _copy_calendar(self, occ: Occurrence) -> Calendar | None:
+        """Where a copy of ``occ`` goes: its calendar, or if that is read-only the first
+        writable one (None: there is none, warned)."""
+        calendar = self.app.calendar(occ.calendar_id)
+        if calendar and not calendar.readonly:
+            return calendar
+        writable = self._writable()
+        return writable[0] if writable else None
 
     def _default(self, writable: list[Calendar]) -> Calendar:
         """For new events: the first shown calendar of ``writable`` (else the first)."""

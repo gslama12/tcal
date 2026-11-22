@@ -240,9 +240,10 @@ class MonthView(DayCursorView):
             text.append(more if len(more) <= width else f" +{chip}", style=Style(bold=True))
         elif chip is not None:
             color = self.tcal.calendar_color(chip.calendar_id)
+            marked = chip.key in self.tcal.state.marked  # tab: a ✓ in front
             if is_bar(chip):
                 days = occurrence_days(chip)
-                before = "◂" if days[0] < day else " "
+                before = "✓" if marked else "◂" if days[0] < day else " "
                 after = "▸" if days[-1] > last else ""
                 title = fit(chip.summary, width - 1 - len(after))
                 label = f"{title}".ljust(width - 1 - len(after)) + after
@@ -255,7 +256,9 @@ class MonthView(DayCursorView):
             else:
                 color = legible(color, p)
                 time = f"{chip.start:%H:%M} " if chip.start.date() == day else ""
-                text.append(f" {time}", style=Style(color=color, bold=True, reverse=selected))
+                mark = Style(color=p.primary, bold=True, reverse=selected)
+                text.append("✓" if marked else " ", style=mark)
+                text.append(time, style=Style(color=color, bold=True, reverse=selected))
                 title = fit(chip.summary, width - 1 - len(time))
                 text.append(title, style=Style(color=color, reverse=selected))
         text.truncate(width, pad=True)

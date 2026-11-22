@@ -44,6 +44,7 @@ class GridFrame:
     header_formats: tuple[str, ...]  # widest first
     palette: Palette
     color: Callable[[str], str]  # calendar id -> colour
+    marked: frozenset[tuple[str, datetime]] = frozenset()  # ``Occurrence.key``s with a ✓
 
     @property
     def header(self) -> int:
@@ -79,7 +80,27 @@ def paint(frame: GridFrame, width: int, height: int) -> list[Strip]:
     _header(canvas, frame)
     _strip(canvas, frame)
     _grid(canvas, frame, frame.bottom(height))
+    _marks(canvas, frame, frame.bottom(height))
     return canvas.strips()
+
+
+MARK = "✓"
+
+
+def _marks(canvas: Canvas, f: GridFrame, bottom: int) -> None:
+    """A ✓ badge in the top-right cell of each marked (tab) bar and block."""
+    if not f.marked:
+        return
+    badge = style(f.palette.background1, f.palette.primary, bold=True)
+    for bar in f.bars:
+        if bar.lane < f.strip_rows and bar.occ.key in f.marked:
+            x = f.xs[bar.last] - 1
+            canvas.text(1 + bar.lane, x, x + 1, MARK, badge)
+    for block in f.blocks:
+        first = max(block.top, f.top)
+        if first < min(block.bottom, bottom) and any(o.key in f.marked for o in block.occs):
+            x = sub_columns(block, f.xs)[1] - 1
+            canvas.text(f.header + first - f.top, x, x + 1, MARK, badge)
 
 
 def _header(canvas: Canvas, f: GridFrame) -> None:

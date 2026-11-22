@@ -11,12 +11,16 @@ UNDO_DEPTH = 20  # changes the undo key can take back
 
 @dataclass(frozen=True)
 class UndoStep:
-    """How to take back one change: ``uid``'s rows before it (empty: it was created)."""
+    """How to take back one change: each changed event's uid with its rows before
+    it (empty: it was created). A batch paste is one step with several."""
 
-    uid: str
-    rows: list[Event]
+    changes: list[tuple[str, list[Event]]]
     message: str  # the toast after undoing it
-    at: datetime | None = None  # the occurrence (start) to select once it is undone
+    at: datetime | None = None  # the occurrence (start) of ``uid`` to select once undone
+
+    @property
+    def uid(self) -> str:
+        return self.changes[0][0]
 
 
 class UndoHistory:

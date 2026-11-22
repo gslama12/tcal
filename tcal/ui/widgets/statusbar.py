@@ -1,7 +1,7 @@
 """One-line bar at the bottom in todooit's style.
 
-Left: view-mode badge; middle: selected date; right: sync status, pending
-edits (if any) and the help key. When narrow, "↑N pending" becomes "↑N" and
+Left: view-mode badge; middle: selected date; right: "N selected" (tab marks),
+sync status, pending edits (if any) and the help key. When narrow, "↑N pending" becomes "↑N" and
 then the date is dropped, so the help key stays readable.
 """
 
@@ -52,7 +52,10 @@ class StatusBar(TcalWidget):
     def _right(self, pending: int, help_key: str, short: bool) -> Text:
         """Sync status, pending edits and the help badge."""
         p = self.tcal.palette
-        right = self._sync_text()
+        right = Text()
+        if marked := len(self.tcal.state.marked):
+            right.append(f"{marked} selected  ", style=f"bold {p.primary}")
+        right.append_text(self._sync_text())
         if pending:
             right.append(f"  ↑{pending}" if short else f"  ↑{pending} pending", style=p.yellow)
         right.append("  ")

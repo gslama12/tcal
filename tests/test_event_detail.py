@@ -259,7 +259,7 @@ async def test_yank_and_duplicate_from_detail(make_app) -> None:
         await pilot.pause()
         await pilot.press("y")
         assert isinstance(app.screen, EventDetail)  # copying keeps the detail open
-        assert app.editor.yanked == holiday
+        assert app.editor.yanked == [holiday]
         await pilot.press("D")
         await pilot.pause()
         assert not isinstance(app.screen, EventDetail)

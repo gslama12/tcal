@@ -56,7 +56,9 @@ edit_event = ["e"]
 delete_event = ["x"]
 undo = ["u"]                           # take back the last create/edit/move/delete (repeatable)
 yank = ["y"]                           # copy the selected event
-paste = ["p", "P"]                     # a copy at the cursor slot (day/week) or selected day
+paste = ["p", "P"]                     # a copy at the cursor slot (day/week) or selected day;
+                                       # several copied: the first on the selected day, the rest alongside
+toggle_mark = ["tab"]                  # mark/unmark the selected event; y copies all marked
 duplicate = ["D"]                      # a copy of the selected event on the next day
 # Moves: ctrl+h arrives as backspace in most terminals, and tmux often takes ctrl+h/j/k/l,
 # so the first keys are plain ones; ctrl+h/j/k/l work where the terminal passes them.
@@ -72,9 +74,9 @@ sync_log = ["R"]                       # recent sync warnings and errors
 focus_calendars = ["c"]
 focus_minical = ["M"]                  # the mini month: move with the cursor keys, enter jumps
 toggle_calendar = ["space"]           # in the calendar list (enter works too)
-focus_next = ["tab"]
+focus_next = ["shift+tab"]             # cycle sidebar panes / main view
 toggle_sidebar = ["b"]
 help = ["question_mark"]
 quit = ["q"]
 save = ["ctrl+s"]                      # event form
-cancel = ["escape"]                    # close a form / dialog
+cancel = ["escape"]                    # close a form / dialog; clear the marks
