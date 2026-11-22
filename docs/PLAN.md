@@ -547,8 +547,8 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 
 - `focus_minical` (`M`) focuses the mini month (shows the sidebar like `c`); esc / view keys
   return to the main view. The help, sync log and event detail scroll with the configured
-  `cursor_up`/`cursor_down` keys (detail hint shows them). Personal keymaps live in `configs/`
-  (`configs/georg.toml`: j k l ö on a German keyboard; Textual names ö/Ö by the character).
+  `cursor_up`/`cursor_down` keys (detail hint shows them).
+- Personal keymaps live only in the user's local config.
 
 ### Stacked blocks (ui-grid; replaces side-by-side overlaps)
 

@@ -41,6 +41,15 @@ async def test_keys_come_from_config(make_app, write_config) -> None:
         assert app.state.view is ViewMode.MONTH
 
 
+async def test_umlaut_keys_bind_by_character(make_app, write_config) -> None:
+    app = make_app(write_config('[keys]\ncursor_right = ["ö"]\nnext_period = ["Ö"]\n'))
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.press("d", "ö")  # day view, next day
+        assert app.state.day == TODAY + timedelta(days=1)
+        await pilot.press("Ö")
+        assert app.state.day == TODAY + timedelta(days=2)
+
+
 async def test_hidden_calendars_filter_occurrences(make_app) -> None:
     app = make_app()
     async with app.run_test():
