@@ -109,38 +109,6 @@ def zone_text(occ: Occurrence) -> str:
     return f"{zone.key}: {time_range(there)}"
 
 
-def duration_text(delta: timedelta) -> str:
-    """'10 min', '1 h', '1 h 30 min', '2 days', '1 week'."""
-    minutes = int(abs(delta).total_seconds()) // 60
-    for size, unit in ((7 * 24 * 60, "week"), (24 * 60, "day")):
-        if minutes >= size and minutes % size == 0:
-            n = minutes // size
-            return f"{n} {unit}{'s' if n > 1 else ''}"
-    hours, rest = divmod(minutes, 60)
-    if not hours:
-        return f"{rest} min"
-    return f"{hours} h {rest} min" if rest else f"{hours} h"
-
-
-def alarm_text(alarm: ics.Alarm, occ: Occurrence) -> str:
-    """'10 min before', 'At start', '10 min before end', all-day: '1 day before at 09:00',
-    absolute: 'At …'."""
-    trigger = alarm.trigger
-    if isinstance(trigger, datetime):
-        return f"At {trigger.astimezone(occ.start.tzinfo):%a %-d %b %Y, %H:%M}"
-    if occ.all_day:
-        when = (occ.end if alarm.from_end else occ.start) + trigger
-        days = (occ.start.date() - when.date()).days
-        side = "before" if days > 0 else "after"
-        on = "On the day" if days == 0 else f"{abs(days)} day{'s' if abs(days) > 1 else ''} {side}"
-        return f"{on} at {when:%H:%M}"
-    edge = "end" if alarm.from_end else "start"
-    if not trigger:
-        return f"At {edge}"
-    side = "before" if trigger < timedelta() else "after"
-    return f"{duration_text(trigger)} {side}" + (" end" if alarm.from_end else "")
-
-
 def people_text(extras: ics.Extras) -> str:
     """A Google-style heading ('3 guests · 1 yes, 1 no, 1 awaiting') and one line per
     guest with their reply; the organizer is marked (and listed first if not a guest)."""
@@ -291,7 +259,6 @@ class EventDetail(ModalScreen[None]):
                 ("location", occ.event.location),
                 ("url", extras.url),
                 ("people", people_text(extras)),
-                ("alarms", "\n".join(f"Alert: {alarm_text(a, occ)}" for a in extras.alarms)),
                 ("notes", occ.event.description),
             ):
                 if value:

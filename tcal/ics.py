@@ -75,25 +75,16 @@ def to_ics(event: Event) -> str:
 
 
 @dataclass(frozen=True)
-class Alarm:
-    """A VALARM trigger: an offset from the start (or the end), or an absolute time."""
-
-    trigger: timedelta | datetime
-    from_end: bool = False  # TRIGGER;RELATED=END
-
-
-@dataclass(frozen=True)
 class Extras:
     """Properties tcal shows but does not edit (kept in ``Event.raw``)."""
 
     organizer: str = ""
     attendees: tuple[tuple[str, str], ...] = ()  # (name or e-mail, PARTSTAT)
-    alarms: tuple[Alarm, ...] = ()
     url: str = ""
 
 
 def extras(event: Event) -> Extras:
-    """Organizer, attendees, alarms and URL of ``event`` from its ``raw`` text."""
+    """Organizer, attendees and URL of ``event`` from its ``raw`` text."""
     if not event.raw:
         return Extras()
     comp = _find(icalendar.Calendar.from_ical(event.raw), event.uid, event.recurrence_id)
@@ -106,7 +97,6 @@ def extras(event: Event) -> Extras:
             (_person(a), str(a.params.get("PARTSTAT", "NEEDS-ACTION")).upper())
             for a in _as_list(comp.get("ATTENDEE"))
         ),
-        alarms=tuple(_alarm(alarm) for alarm in comp.walk("VALARM") if "TRIGGER" in alarm),
         url=str(comp.get("URL", "")),
     )
 
@@ -115,14 +105,6 @@ def _person(prop: Any) -> str:
     """CN, else the address without ``mailto:``."""
     name = prop.params.get("CN")
     return str(name) if name else str(prop).removeprefix("mailto:").removeprefix("MAILTO:")
-
-
-def _alarm(alarm: Any) -> Alarm:
-    value = alarm["TRIGGER"].dt
-    if isinstance(value, timedelta):
-        related = str(alarm["TRIGGER"].params.get("RELATED", "START")).upper()
-        return Alarm(value, from_end=related == "END")
-    return Alarm(_as_datetime(value))
 
 
 def without_instance(event: Event, recurrence_id: datetime) -> Event:

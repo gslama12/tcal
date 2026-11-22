@@ -1,18 +1,16 @@
 """Event detail modal and the delete confirmation flow."""
 
 from dataclasses import replace
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import icalendar
 from conftest import TODAY
 from textual.containers import VerticalScroll
 from textual.widgets import Button, Static
 
 from tcal import ics
 from tcal.model import Calendar, Occurrence
-from tcal.providers.ics_url import split_feed
 from tcal.tz import local_zone
 from tcal.ui.app import TcalApp
 from tcal.ui.messages import EventSelected
@@ -21,9 +19,7 @@ from tcal.ui.screens.event_detail import (
     ConfirmDelete,
     EditScope,
     EventDetail,
-    alarm_text,
     describe_rrule,
-    duration_text,
     people_text,
     until_date,
 )
@@ -154,7 +150,7 @@ MEETING = (FIXTURES / "meeting.ics").read_text()
 FEED = (FIXTURES / "holidays.ics").read_text()
 
 
-async def test_detail_shows_people_alarms_url_and_zone(make_app) -> None:
+async def test_detail_shows_people_url_and_zone_but_no_alerts(make_app) -> None:
     [event] = ics.from_ics(MEETING, "work")
     local = local_zone()
     occ = Occurrence(event, event.start.astimezone(local), event.end.astimezone(local))
@@ -170,11 +166,8 @@ async def test_detail_shows_people_alarms_url_and_zone(make_app) -> None:
             "bob@example.com · no",
             "Cleo · awaiting",
         ]
-        assert text(app, "alarms").splitlines() == [
-            "Alert: 10 min before",
-            "Alert: At end",
-            f"Alert: At {datetime(2026, 11, 18, 18, tzinfo=UTC).astimezone(local):%a %-d %b %Y, %H:%M}",
-        ]
+        assert not app.screen.query("#alarms")
+        assert not any("Alert" in str(s.render()) for s in app.screen.query(Static))
 
 
 async def test_detail_without_extras_has_no_extra_rows(make_app) -> None:
@@ -182,22 +175,8 @@ async def test_detail_without_extras_has_no_extra_rows(make_app) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.post_message(EventSelected(find(app, "Design review")[0]))
         await pilot.pause()
-        for widget_id in ("timezone", "url", "people", "alarms"):
+        for widget_id in ("timezone", "url", "people"):
             assert not app.screen.query(f"#{widget_id}")
-
-
-def test_all_day_alarm_and_durations() -> None:
-    feed = icalendar.Calendar.from_ical(FEED)
-    texts = [t for t in split_feed(feed) if "UID:national-day" in t]
-    [event] = ics.from_ics(texts[0], "h")
-    occ = Occurrence(event, event.start, event.end)
-    assert ics.extras(event).alarms == (ics.Alarm(timedelta(hours=-15)),)
-    assert alarm_text(ics.Alarm(timedelta(hours=-15)), occ) == "1 day before at 09:00"
-    assert alarm_text(ics.Alarm(timedelta(hours=9)), occ) == "On the day at 09:00"
-    assert duration_text(timedelta(minutes=-90)) == "1 h 30 min"
-    assert duration_text(timedelta(days=2)) == "2 days"
-    assert duration_text(timedelta(weeks=1)) == "1 week"
-    assert duration_text(timedelta(hours=-1)) == "1 h"  # same unit style as "10 min"
 
 
 def test_people_text_lists_an_organizer_who_is_no_guest_once() -> None:
@@ -214,14 +193,6 @@ def test_until_is_shown_as_a_local_day(monkeypatch) -> None:
     monkeypatch.setattr(event_detail, "local_zone", lambda: ZoneInfo("America/New_York"))
     assert until_date("20270101T045959Z") == date(2026, 12, 31)
     assert until_date("20261231") == date(2026, 12, 31)
-
-
-def test_alarm_related_to_the_end() -> None:
-    [event] = ics.from_ics(MEETING, "work")
-    occ = Occurrence(event, event.start, event.end)
-    assert alarm_text(ics.Alarm(timedelta(), from_end=True), occ) == "At end"
-    assert alarm_text(ics.Alarm(timedelta(minutes=-10), from_end=True), occ) == "10 min before end"
-    assert alarm_text(ics.Alarm(timedelta(minutes=-10)), occ) == "10 min before"
 
 
 async def test_long_detail_scrolls_with_title_and_hints_pinned(make_app) -> None:
@@ -260,7 +231,7 @@ def test_demo_has_an_invitation_an_alarm_and_another_zone(provider) -> None:
     events = {e.summary: e for e in provider.events.values()}
     invite = ics.extras(events["Budget planning"])
     assert invite.organizer == "Maria Lang" and len(invite.attendees) == 4 and invite.url
-    assert ics.extras(events["Dentist"]).alarms == (ics.Alarm(timedelta(hours=-1)),)
+    assert "TRIGGER:-PT1H" in events["Dentist"].raw  # kept in raw, not shown
     assert str(events["Call with New York"].start.tzinfo) == "America/New_York"
 
 
