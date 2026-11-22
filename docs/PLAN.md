@@ -417,13 +417,13 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   listed in `SyncSummary.failed`. Not used by `--demo` (no network). `CalendarList` shows feeds
   under "Other calendars".
 - **U2 Detail extras:** `ics.extras(event)` → `Extras(organizer, attendees (name, PARTSTAT),
-  alarms, url)` from `raw`. The detail
+  url)` from `raw`. The detail
   shows `#timezone` (event zone + its times, only when its UTC offset differs from local),
-  `#url`, `#people`, `#alarms` ("Alert: 10 min before"; all-day: "1 day before at 09:00").
+  `#url`, `#people`. Alarms are not shown (the user doesn't use them; `ics.Alarm` and
+  `#alarms` were removed); VALARMs stay in `raw` and survive edits.
 
 ### Detail, sync status, demo (feat-g3: QA3 #5, #6, #12, #14, #20)
 
-- `ics.Alarm(trigger, from_end)` keeps `RELATED=END`: "At end", "10 min before end".
 - The detail's `#dialog` is a `VerticalScroll`; `#title`/`#hints` are docked so they stay put;
   `j`/`k` (`cursor_down/up`) scroll, the hints add "j/k scroll" when it overflows. `e`/`x` on a
   read-only event only toast, the detail stays open.
