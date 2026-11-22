@@ -1,6 +1,6 @@
 """One-line bar at the bottom in todooit's style.
 
-Left: view-mode badge; middle: selected date; right: "N selected" (tab marks),
+Left: view-mode badge ("WEEK · GRID" in grid mode); middle: selected date; right: "N selected" (tab marks),
 sync status, pending edits (if any) and the help key. When narrow, "↑N pending" becomes "↑N" and
 then the date is dropped, so the help key stays readable.
 """
@@ -11,6 +11,7 @@ from rich.text import Text
 from textual.app import RenderResult
 from textual.keys import format_key
 
+from tcal.ui.state import ViewMode
 from tcal.ui.sync_status import SyncState
 from tcal.ui.widgets.base import TcalWidget
 
@@ -30,7 +31,9 @@ class StatusBar(TcalWidget):
     def render(self) -> RenderResult:
         p = self.tcal.palette
         state = self.tcal.state
-        badge = Text(f" {state.view.value.upper()} ", style=f"bold {p.background1} on {p.primary}")
+        mode = " · GRID" if state.grid and state.view in (ViewMode.DAY, ViewMode.WEEK) else ""
+        label = f" {state.view.value.upper()}{mode} "
+        badge = Text(label, style=f"bold {p.background1} on {p.primary}")
         day = Text(f"{state.day:%a %-d %b %Y}", style=p.foreground2)
 
         pending = self.tcal.source.pending_count()

@@ -163,7 +163,7 @@ def is_bar(occ: Occurrence) -> bool:
     return occ.all_day or occ.end - occ.start >= timedelta(days=1)
 
 
-def _minute_in(day: date, moment: datetime) -> int:
+def minute_in(day: date, moment: datetime) -> int:
     """Wall-clock minute of ``moment`` relative to ``day``, clamped to [0, 1440]."""
     if moment.date() < day:
         return 0
@@ -223,7 +223,7 @@ def layout_blocks(
         for occ in occs:
             if is_bar(occ):
                 continue
-            start, end = _minute_in(day, occ.start), _minute_in(day, occ.end)
+            start, end = minute_in(day, occ.start), minute_in(day, occ.end)
             if start < end or (start == end and occ.start.date() == day and start < MINUTES):
                 top = scale.row_of(start)
                 spans.append((occ, top, max(top + 1, scale.row_of(end))))

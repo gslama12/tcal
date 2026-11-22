@@ -62,6 +62,8 @@ toggle_mark = ["tab"]                  # mark/unmark the selected event; y copie
 duplicate = ["D"]                      # a copy of the selected event on the next day
 # Moves: ctrl+h arrives as backspace in most terminals, and tmux often takes ctrl+h/j/k/l,
 # so the first keys are plain ones; ctrl+h/j/k/l work where the terminal passes them.
+grid_mode = ["v"]                      # day/week: the cursor keys move a 15-min slot cursor
+                                       # instead of between events (again or escape: back)
 move_down = ["J", "ctrl+j"]            # selected event 15 min later (day/week)
 move_up = ["K", "ctrl+k"]              # selected event 15 min earlier (day/week)
 move_left = ["less_than_sign", "ctrl+h"]     # "<": selected event one day earlier
@@ -79,4 +81,4 @@ toggle_sidebar = ["b"]
 help = ["question_mark"]
 quit = ["q"]
 save = ["ctrl+s"]                      # event form
-cancel = ["escape"]                    # close a form / dialog; clear the marks
+cancel = ["escape"]                    # close a form / dialog; leave grid mode; clear the marks

@@ -101,7 +101,7 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
 - **D6 Keybinds:** vim-like, all configurable in `[keys]` of config.toml (action -> list of keys).
   Current defaults (`tcal/default_config.toml`, README table): h/j/k/l move cursor,
   H/L prev/next period, t today, d/w/m/Y/s day/week/month/year/schedule view, +/- (or
-  ctrl+up/down) zoom, enter open, n/N next/prev event, a/o new event, A quick add, e edit,
+  ctrl+up/down) zoom, enter open, n/N next/prev event, v grid mode (E1), a/o new event, A quick add, e edit,
   x delete, u undo, y yank, p/P paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too), f flash
   jump (day/week), g goto date, / search, r sync, c focus calendar list, M focus mini month, space
   toggle calendar, tab mark event (batch copy, B1), shift+tab cycle focus,
@@ -610,3 +610,23 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   a one-off `copy_at` as for a single paste (also into the source calendar or the first
   writable). Single yank/paste is unchanged. `app.save_events(events, message)` saves them
   as **one undo step**: `UndoStep.changes` is now a list of (uid, rows before).
+
+### Event navigation (event-nav)
+
+- **E1 Modes:** day/week start in **event mode**: `cursor_up/down` select the previous/next
+  event of the selected day (all-day bars first, then by start; with none selected the
+  first/last; stop at the ends), `cursor_left/right` go to the adjacent day and select its
+  event nearest the current one (interval distance to its start minute, earlier on a tie; an
+  all-day one goes to the day's first all-day event; empty day: the day only, the minute is
+  kept for the next step). Crossing the week edge works as before (`select_date`).
+  **Grid mode** (`[keys] grid_mode = ["v"]`, toggles; `cancel`/esc also leaves it, else esc
+  clears marks as before) is the old 15-min slot cursor. Leaving selects the event under the
+  cursor, else the nearest on that day. The mode is `AppState.grid` (set via
+  `app.set_grid_mode`), shared by day and week; the status bar badge reads "WEEK · GRID".
+- **E2 Event mode details:** no slot cursor is drawn (`GridFrame.cursor_rows` empty, placed
+  at the selected event so flash labels still count from there); the view scrolls the selected
+  event's block into view. `a`/`o` (and enter with nothing selected): a new event at the
+  selected timed event's end, else at the next full hour; `p`: at the selected timed event's
+  start (`TimeGrid.paste_at`), else on the day. Flash: event label selects (mode unchanged),
+  slot label switches to grid mode at that slot. Clicks are unchanged in both modes.
+  Old grid-cursor tests now call `app.set_grid_mode(True)` first.

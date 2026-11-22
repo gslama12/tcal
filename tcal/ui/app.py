@@ -12,7 +12,7 @@ Layout::
 
 Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
-``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``current_occurrence()``, ``save_event()``,
+``set_view()``, ``set_grid_mode()``, ``toggle_calendar()``, ``refresh_data()``, ``current_occurrence()``, ``save_event()``,
 ``delete_event()``, ``undo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``, ``sync_log``,
 ``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event form),
 ``check_writable()``, ``focus_view()``, ``selected_occurrence()``, ``select_in_view()``,
@@ -385,6 +385,11 @@ class TcalApp(App[None]):
         self.state = replace(
             self.state, hidden_calendars=self.state.hidden_calendars ^ {calendar_id}
         )
+
+    def set_grid_mode(self, on: bool) -> None:
+        """Day/week: the cursor keys move the slot cursor (on) or between events (off)."""
+        if self.state.grid != on:
+            self.state = replace(self.state, grid=on)
 
     def toggle_mark(self, occ: Occurrence) -> None:
         self.state = replace(self.state, marked=self.state.marked ^ {occ.key})

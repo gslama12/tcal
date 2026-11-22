@@ -15,10 +15,11 @@ from textual.widgets import Static
 # (added to [keys] later) are still listed, under "Other".
 GROUPS: dict[str, list[tuple[str, str]]] = {
     "Navigation": [
-        ("cursor_left", "Previous day / move left"),
-        ("cursor_right", "Next day / move right"),
-        ("cursor_up", "Up (earlier time / previous week)"),
-        ("cursor_down", "Down (later time / next week)"),
+        ("cursor_left", "Previous day (time grid: its nearest event) / move left"),
+        ("cursor_right", "Next day (time grid: its nearest event) / move right"),
+        ("cursor_up", "Up (time grid: previous event, grid mode: earlier slot)"),
+        ("cursor_down", "Down (time grid: next event, grid mode: later slot)"),
+        ("grid_mode", "Grid mode: cursor keys move a 15-min slot cursor (again / esc: back)"),
         ("prev_period", "Previous day/week/month/year (schedule: 2 weeks)"),
         ("next_period", "Next day/week/month/year (schedule: 2 weeks)"),
         ("today", "Jump to today"),
@@ -42,15 +43,15 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("toggle_sidebar", "Show/hide the sidebar"),
     ],
     "Events": [
-        ("open", "Open event / new event in empty slot"),
-        ("new_event", "New event"),
+        ("open", "Open event / else a new event"),
+        ("new_event", "New event (time grid: after the selected event / at the grid slot)"),
         ("quick_add", "Quick add (one line)"),
         ("edit_event", "Edit event"),
         ("delete_event", "Delete event"),
         ("undo", "Undo the last change"),
         ("toggle_mark", "Mark / unmark event (several: y copies all, esc clears)"),
         ("yank", "Copy (yank) event, or all marked events"),
-        ("paste", "Paste at the cursor slot or selected day (several: from that day on)"),
+        ("paste", "Paste at the selected event / grid slot / day (several: from that day on)"),
         ("duplicate", "Duplicate event to the next day"),
         ("move_up", "Move event 15 min earlier (time grid)"),
         ("move_down", "Move event 15 min later (time grid)"),
@@ -60,7 +61,7 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
     ],
     "Event form": [
         ("save", "Save"),
-        ("cancel", "Cancel / close dialog / clear marks"),
+        ("cancel", "Cancel / close dialog / leave grid mode / clear marks"),
     ],
     "App": [
         ("sync", "Sync now"),

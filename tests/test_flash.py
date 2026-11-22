@@ -61,7 +61,7 @@ async def test_flash_jumps_to_a_slot_in_another_day(app: RecordingApp) -> None:
         body = "\n".join(grid.render_line(y).text for y in range(grid.size.height))
         assert label in body
         await pilot.press(*label)
-        assert not grid.flashing
+        assert not grid.flashing and app.state.grid  # a slot label enters grid mode
         assert app.state.day == TODAY + timedelta(days=2)
         assert grid.cursor_time == at("19:00", TODAY + timedelta(days=2))
 
@@ -73,6 +73,7 @@ async def test_flash_selects_an_event(app: RecordingApp) -> None:
         label = label_of(grid, lambda t: t.occ is not None and t.occ.summary == "Dinner")
         await pilot.press(*label)
         assert grid.selected is not None and grid.selected.summary == "Dinner"
+        assert not app.state.grid  # event labels stay in event mode
 
 
 async def test_nearest_gets_a_single_key(app: RecordingApp) -> None:
@@ -89,6 +90,7 @@ async def test_nearest_gets_a_single_key(app: RecordingApp) -> None:
 
 async def test_other_keys_cancel_without_acting(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
+        app.set_grid_mode(True)  # j moves the slot cursor
         grid = app.query_one(WeekView)
         before = grid.cursor_time
         await pilot.press("f", "escape")
