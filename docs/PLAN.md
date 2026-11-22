@@ -102,8 +102,8 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
   Current defaults (`tcal/default_config.toml`, README table): h/j/k/l move cursor,
   H/L prev/next period, t today, d/w/m/Y/s day/week/month/year/schedule view, +/- (or
   ctrl+up/down) zoom, enter open, n/N next/prev event, a/o new event, A quick add, e edit,
-  x delete, u undo, y yank, p/P paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too), g goto
-  date, / search, r sync, c focus calendar list, M focus mini month, space toggle calendar, tab cycle focus,
+  x delete, u undo, y yank, p/P paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too), f flash
+  jump (day/week), g goto date, / search, r sync, c focus calendar list, M focus mini month, space toggle calendar, tab cycle focus,
   b sidebar, ? help, q quit, ctrl+s save, esc cancel. (Originally `y` = year view and `dd`
   delete: see S2, Y1.)
 - **D7 Mouse:** click date in minical, click calendar checkbox, click view tabs,
@@ -121,6 +121,12 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
   unpinned on a narrow terminal, a sidebar shown by `focus_calendars` hides again when focus
   leaves it. Month/schedule text in calendar colours goes through `theme.legible` (darkened on
   light themes); the time grid keeps its own `_readable`.
+- Flash jump (`f`, day/week): `tcal/ui/flash.py` (pure: targets from the `GridFrame`, labels,
+  overlay over the painted lines; `timepaint` untouched). todooit's alphabet and red labels, but
+  labels mix single keys and pairs (prefix-free) so the targets nearest the cursor get one key;
+  targets are events (incl. all-day bars) plus each column's hours, and half hours at ≥2
+  rows/hour. While labels are up the grid's `on_key` swallows every key; a non-label key
+  cancels and is used up (as in todooit).
 
 ## Work packages (≈ issues)
 

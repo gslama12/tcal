@@ -46,6 +46,8 @@ and edits made offline are queued and pushed later.
 - **Quick add** (`A`): one line like `Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal`.
 - **Yank / paste / duplicate / move** events with the keyboard (`y` `p` `D`, `J` `K` `<` `>`)
   and an **undo** stack (`u`, the last 20 changes).
+- **Flash jump** (`f`, day/week): red labels on every event and hour / half hour on screen;
+  type one to jump there (nearest get single keys, any other key cancels).
 - **Go to date** (`g`: `fri`, `next fri`, `+2w`, `in 3 days`, `24.12.`, `dec 24`, `dec`, `2027`, `2026-12-24`)
   and **search** (`/`).
 - **iCloud sync** in the background, offline edits queued, server wins on conflicts;
@@ -175,6 +177,7 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `L` | Next day/week/month/year (schedule: 2 weeks) |
 | `t` | Jump to today |
 | `g` | Go to date |
+| `f` | Flash jump: type a label to jump to an event or slot (time grid) |
 | `n` | Next event in view |
 | `N` | Previous event in view |
 | **Views** | |

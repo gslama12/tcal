@@ -64,6 +64,7 @@ move_down = ["J", "ctrl+j"]            # selected event 15 min later (day/week)
 move_up = ["K", "ctrl+k"]              # selected event 15 min earlier (day/week)
 move_left = ["less_than_sign", "ctrl+h"]     # "<": selected event one day earlier
 move_right = ["greater_than_sign", "ctrl+l"] # ">": selected event one day later
+flash = ["f"]                          # day/week: labels on events and slots, type one to jump there
 goto_date = ["g"]
 search = ["slash"]
 sync = ["r"]
