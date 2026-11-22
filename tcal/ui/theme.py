@@ -73,10 +73,10 @@ CATPPUCCIN_LATTE = Palette(
 )  # fmt: skip
 
 PALETTES = {
+    "tokyo-night": TOKYO_NIGHT,  # default, same colours as todooit's TokyoNight
     "nord": NORD,
     "gruvbox": GRUVBOX,
     "catppuccin-mocha": CATPPUCCIN_MOCHA,
-    "tokyo-night": TOKYO_NIGHT,
     "catppuccin-latte": CATPPUCCIN_LATTE,
 }
 LIGHT = {"catppuccin-latte"}

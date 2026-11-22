@@ -336,8 +336,8 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **C1 Config UX:** `tcal config path|edit|check`. `edit` seeds a missing file with
   `commented_defaults()` (every default line commented out). Key conflicts
   (`config.key_conflicts`: one key in several actions' lists) are not errors — they warn
-  via `check` (non-zero exit) and a startup toast. Themes: nord, gruvbox,
-  catppuccin-mocha, tokyo-night, catppuccin-latte (light: `theme.LIGHT`, `dark=False`);
+  via `check` (non-zero exit) and a startup toast. Themes: tokyo-night (default,
+  todooit's palette), nord, gruvbox, catppuccin-mocha, catppuccin-latte (light: `theme.LIGHT`, `dark=False`);
   timegrid `_readable` now sorts its text colors by luminance so light palettes work.
 
 ### Schedule view notes (feat-agenda)

@@ -10,7 +10,7 @@ def test_defaults() -> None:
     assert config.view.week_start == 0
     assert config.view.default_view == "week"
     assert config.keys["cursor_down"] == ["j", "down"]
-    assert config.theme.name == "nord"
+    assert config.theme.name == "tokyo-night"
 
 
 def test_user_file_merges_over_defaults(write_config) -> None:

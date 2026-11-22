@@ -20,7 +20,7 @@ past_months = 3                        # sync window before today
 future_months = 12                     # sync window after today
 
 [theme]
-name = "nord"                          # nord | gruvbox | catppuccin-mocha | tokyo-night | catppuccin-latte (light)
+name = "tokyo-night"                   # tokyo-night | nord | gruvbox | catppuccin-mocha | catppuccin-latte (light)
 
 # Read-only calendar subscriptions (iCalendar feeds), shown under "Other calendars".
 # Repeat the block for each feed; color is optional.
