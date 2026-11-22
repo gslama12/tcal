@@ -1,0 +1,18 @@
+# Georg's keymap: vim motions on the German home row, shifted one key right
+# (j k l ö instead of h j k l). Only [keys] — the defaults stay as they are.
+#
+# Use it: append this file to your config (keeps your [account] section):
+#     cat configs/georg.toml >> "$(tcal config path)"
+#     tcal config check            # should print no conflicting bindings
+# Each entry replaces that action's whole default key list.
+# Textual names the umlauts by their character: "ö", "Ö".
+
+[keys]
+cursor_left = ["j", "left"]
+cursor_up = ["k", "up"]
+cursor_down = ["l", "down"]
+cursor_right = ["ö", "right"]
+prev_period = ["J"]
+next_period = ["Ö"]
+move_up = ["K", "ctrl+k"]
+move_down = ["L", "ctrl+j"]

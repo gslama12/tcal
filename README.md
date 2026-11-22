@@ -158,6 +158,10 @@ next_event = ["ctrl+n"]
 key list. A key bound to two actions only triggers one of them: tcal warns at startup and
 `tcal config check` lists the conflicts.
 
+**Ready-made keymaps** live in [`configs/`](configs/): `[keys]` sections to append to your
+config, e.g. `configs/georg.toml` (vim motions on a German keyboard's j k l ö):
+`cat configs/georg.toml >> "$(tcal config path)"`, then `tcal config check`.
+
 ### Default keys
 
 `?` in the app shows the same list with your own bindings. This table is the output of
@@ -186,6 +190,7 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `+` `ctrl+up` | Zoom in (time grid) |
 | `-` `ctrl+down` | Zoom out (time grid) |
 | `c` | Focus the calendar list |
+| `M` | Focus the mini month (enter jumps to the day) |
 | `space` | Show/hide calendar (in the list) |
 | `tab` | Next pane |
 | `b` | Show/hide the sidebar |
@@ -215,7 +220,9 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 <!-- keys:end -->
 
 `p` and `P` both paste the same way (there is no "paste before"). `j`/`k` scroll the event
-detail; in the sidebar the cursor keys move its own cursor. `J`/`K` move timed events in the day/week grid only. ctrl+h/j/k/l are extra move keys for
+detail; in the sidebar (`c` calendar list, `M` mini month) the cursor keys move its own
+cursor, esc or a view key returns to the main view. `J`/`K` move timed events in the day/week
+grid only. ctrl+h/j/k/l are extra move keys for
 terminals that pass them through (many send ctrl+h as backspace; tmux often takes them).
 The sidebar hides itself below 120 columns (`b` pins your choice).
 

@@ -1,7 +1,7 @@
 """Event detail modal (enter/click on an event) and the delete confirmation.
 
 ``EventDetail(occ)``: e = edit (``app.edit_occurrence``), x = delete, y = yank,
-D = duplicate, j/k scroll, esc/q = close; it follows a sync's changes to the event
+D = duplicate, the cursor up/down keys scroll, esc/q = close; it follows a sync's changes to the event
 (closes if it's gone). A read-only calendar's event hints only "y copy  esc close";
 e/x give a notice and keep the detail open.
 ``confirm_delete(app, occ)`` is the one delete flow, also used by the ``x`` key
@@ -18,6 +18,7 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.keys import format_key
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
 from textual.widgets.button import ButtonVariant
@@ -217,7 +218,8 @@ class MoveScope(EditScope):
 
 
 class EventDetail(ModalScreen[None]):
-    """Read-only view of one occurrence: title and hints stay put, the rest scrolls (j/k)."""
+    """Read-only view of one occurrence: title and hints stay put, the rest scrolls
+    (the configured cursor up/down keys)."""
 
     BINDINGS = [
         binding("edit_event", "Edit", action="edit"),
@@ -289,7 +291,9 @@ class EventDetail(ModalScreen[None]):
 
     def _show_scroll_hint(self) -> None:
         if self.query_one("#dialog", VerticalScroll).max_scroll_y:
-            hints = f"{self.hints}  j/k scroll"
+            keys = self.tcal.config.keys
+            down, up = (format_key(keys[a][0]) for a in ("cursor_down", "cursor_up"))
+            hints = f"{self.hints}  {down}/{up} scroll"
             self.query_one("#hints", Static).update(
                 Text(hints, style=self.tcal.palette.foreground1)
             )

@@ -20,9 +20,9 @@ class MiniCal(SidebarWidget):
 
     Shows the month of its own ``cursor`` (follows ``state.day``): today accented,
     the cursor highlighted, days with events bright (others dimmed), the shown
-    week as a band. When focused, h/j/k/l move the cursor, H/L by a month and
-    enter jumps the main view to it (and focuses it, like clicking a day);
-    clicking ‹ › browses months; esc returns to the main view.
+    week as a band. Focused (``focus_minical``, M), the cursor keys (h/j/k/l) move
+    the cursor, the period keys (H/L) by a month and enter jumps the main view to
+    it (and focuses it, like clicking a day); clicking ‹ › browses months; esc returns to the main view.
     """
 
     BINDINGS = [

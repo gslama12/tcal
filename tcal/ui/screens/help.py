@@ -35,6 +35,7 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("zoom_in", "Zoom in (time grid)"),
         ("zoom_out", "Zoom out (time grid)"),
         ("focus_calendars", "Focus the calendar list"),
+        ("focus_minical", "Focus the mini month (enter jumps to the day)"),
         ("toggle_calendar", "Show/hide calendar (in the list)"),
         ("focus_next", "Next pane"),
         ("toggle_sidebar", "Show/hide the sidebar"),

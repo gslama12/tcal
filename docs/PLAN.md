@@ -103,7 +103,7 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
   H/L prev/next period, t today, d/w/m/Y/s day/week/month/year/schedule view, +/- (or
   ctrl+up/down) zoom, enter open, n/N next/prev event, a/o new event, A quick add, e edit,
   x delete, u undo, y yank, p/P paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too), g goto
-  date, / search, r sync, c focus calendar list, space toggle calendar, tab cycle focus,
+  date, / search, r sync, c focus calendar list, M focus mini month, space toggle calendar, tab cycle focus,
   b sidebar, ? help, q quit, ctrl+s save, esc cancel. (Originally `y` = year view and `dd`
   delete: see S2, Y1.)
 - **D7 Mouse:** click date in minical, click calendar checkbox, click view tabs,
@@ -546,3 +546,10 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - A side-by-side block's time line moves down past rows where a block to its right shows a
   title/location ("10:00  1:1…" read as 1:1's time), or is dropped if the block has no row left.
 - The now line is not drawn into the 1-col gap beside an event.
+
+### Keys round (ui-keys)
+
+- `focus_minical` (`M`) focuses the mini month (shows the sidebar like `c`); esc / view keys
+  return to the main view. The help, sync log and event detail scroll with the configured
+  `cursor_up`/`cursor_down` keys (detail hint shows them). Personal keymaps live in `configs/`
+  (`configs/georg.toml`: j k l ö on a German keyboard; Textual names ö/Ö by the character).
