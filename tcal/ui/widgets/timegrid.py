@@ -23,6 +23,7 @@ from textual import events
 from textual.strip import Strip
 
 from tcal.model import Occurrence
+from tcal.ui.flash import Flash, Target, overlay, targets
 from tcal.ui.keys import EVENT_BINDINGS, binding
 from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.state import AppState, ViewMode
@@ -60,7 +61,7 @@ class TimeGrid(CalendarView):
     an event, double-click on an empty slot requests a new one, the wheel scrolls.
     """
 
-    BINDINGS = [*EVENT_BINDINGS, binding("new_event", "New event")]
+    BINDINGS = [*EVENT_BINDINGS, binding("new_event", "New event"), binding("flash", "Flash")]
     header_formats: tuple[str, ...] = HEADER_FORMATS
 
     def __init__(self, *, id: str | None = None) -> None:
@@ -72,6 +73,7 @@ class TimeGrid(CalendarView):
         self._data: tuple[list[date], list[Occurrence], list[Bar]] | None = None
         self._blocks: tuple[TimeScale, int, list[Block]] | None = None
         self._lines: list[Strip] | None = None
+        self._flash: Flash | None = None  # labels up (f) until a jump or cancel
 
     def days(self) -> list[date]:
         """The dates of the columns, for the current state."""
@@ -93,6 +95,7 @@ class TimeGrid(CalendarView):
         self.set_interval(60, self._redraw)
 
     def on_state(self, state: AppState) -> None:
+        self._flash = None  # the labels would point at what has moved
         self._data = None
         self._blocks = None
         if self._picked is not None:  # the reloaded copy (or None if it is gone)
@@ -104,7 +107,11 @@ class TimeGrid(CalendarView):
         self._show_cursor()
 
     def on_resize(self) -> None:
+        self._flash = None
         self._show_cursor()
+
+    def on_blur(self) -> None:
+        self._end_flash()
 
     def _show_cursor(self) -> None:
         """Scroll the cursor slot (now, or the selected event) into view: the grid has
@@ -405,6 +412,46 @@ class TimeGrid(CalendarView):
                 self.post_message(NewEventRequested(self.cursor_time))
             self._redraw()
 
+    # ----- flash jump ---------------------------------------------------
+
+    @property
+    def flashing(self) -> bool:
+        return self._flash is not None
+
+    def action_flash(self) -> None:
+        """Label the events and slots on screen; typing a label jumps there."""
+        found = targets(self._frame(), self.size.height)
+        if found:
+            self._flash = Flash.of(found)
+            self._redraw()
+
+    def on_key(self, event: events.Key) -> None:
+        if self._flash is None:
+            return
+        event.stop()
+        event.prevent_default()
+        target = self._flash.press(event.key)
+        if self._flash.done:
+            self._end_flash()
+        else:
+            self._redraw()
+        if target is not None:
+            self._jump(target)
+
+    def _end_flash(self) -> None:
+        if self._flash is not None:
+            self._flash = None
+            self._redraw()
+
+    def _jump(self, target: Target) -> None:
+        if target.occ is not None:
+            self.select(target.occ)
+            return
+        self._move_cursor(target.minute)
+        day = self._load()[0][target.day]
+        if day != self.tcal.state.day:
+            self.tcal.select_date(day)
+
     def _open(self, occ: Occurrence) -> None:
         self.select(occ)
         self.post_message(EventSelected(occ))
@@ -414,6 +461,8 @@ class TimeGrid(CalendarView):
     def render_line(self, y: int) -> Strip:
         if self._lines is None or len(self._lines) != self.size.height:
             self._lines = paint(self._frame(), *self.size)
+            if self._flash is not None:
+                self._lines = overlay(self._lines, self._flash, self.tcal.palette)
         return self._lines[y] if y < len(self._lines) else Strip.blank(self.size.width)
 
     def _frame(self) -> GridFrame:

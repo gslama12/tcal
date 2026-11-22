@@ -23,6 +23,7 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("next_period", "Next day/week/month/year (schedule: 2 weeks)"),
         ("today", "Jump to today"),
         ("goto_date", "Go to date"),
+        ("flash", "Flash jump: type a label to jump to an event or slot (time grid)"),
         ("next_event", "Next event in view"),
         ("prev_event", "Previous event in view"),
     ],

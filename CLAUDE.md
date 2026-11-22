@@ -39,7 +39,8 @@ uv run ruff check && uv run ruff format --check && uv run mypy
   (`$background1..3`, `$foreground1..3`, `$red`… plus `$primary`/`$secondary`).
 - `tcal/ui/timelayout.py` — time-grid geometry (`TimeScale`, blocks, bars, `sub_columns`);
   `tcal/ui/timepaint.py` — pure `paint(GridFrame, w, h)` for Day/Week, on `canvas.Canvas`.
-  `widgets/timegrid.py` keeps cursor/scroll/zoom/selection/mouse only.
+  `tcal/ui/flash.py` — flash jump (`f`): targets, labels, overlay over painted lines.
+  `widgets/timegrid.py` keeps cursor/scroll/zoom/selection/mouse/flash keys only.
 - `tcal/ui/widgets/` — one widget per module; subclass `TcalWidget`/`CalendarView`
   from `base.py` and redraw in `on_state`.
 
