@@ -149,8 +149,9 @@ new_event = ["n"]
 next_event = ["ctrl+n"]
 ```
 
-**Themes:** `nord` (default), `gruvbox`, `catppuccin-mocha`, `tokyo-night` (dark) and
-`catppuccin-latte` (light). An unknown name falls back to `nord` with a warning.
+**Themes:** `tokyo-night` (default, same palette as todooit), `nord`, `gruvbox`,
+`catppuccin-mocha` (dark) and `catppuccin-latte` (light). An unknown name falls back to
+`tokyo-night` with a warning.
 
 **Keys** use Textual key names: `"plus"`, `"minus"`, `"slash"`, `"question_mark"`,
 `"less_than_sign"`, `"ctrl+up"`, `"H"` for shift+h, … Overriding an action replaces its whole
