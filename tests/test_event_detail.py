@@ -293,3 +293,19 @@ async def test_yank_and_duplicate_from_detail(make_app) -> None:
         await pilot.pause()
         assert not isinstance(app.screen, EventDetail)
         assert len(find(app, "Public holiday", days=30)) == 2  # copied to a writable calendar
+
+
+async def test_detail_scroll_hint_follows_the_keymap(make_app, write_config) -> None:
+    [event] = ics.from_ics(MEETING, "work")
+    notes = "\n".join(f"{i}. Item" for i in range(1, 20))
+    occ = Occurrence(replace(event, description=notes), event.start, event.end)
+    app = make_app(
+        write_config('[keys]\ncursor_down = ["l"]\ncursor_up = ["k"]\ncursor_right = ["ö"]\n')
+    )
+    async with app.run_test(size=(100, 35)) as pilot:
+        app.post_message(EventSelected(occ))
+        await pilot.pause()
+        await pilot.pause()
+        assert text(app, "hints").endswith("l/k scroll")
+        await pilot.press("l")
+        assert app.screen.query_one("#dialog", VerticalScroll).scroll_y == 1

@@ -196,3 +196,18 @@ async def test_zoom_outside_the_time_grid_says_where_it_works(app: RecordingApp)
             assert [str(n.message) for n in app._notifications] == [
                 "Zoom works in the day/week view"
             ] * 2
+
+
+async def test_focus_minical_key(app: RecordingApp) -> None:
+    async with app.run_test(size=(100, 35)) as pilot:  # narrow: the sidebar is hidden
+        sidebar = app.query_one("#sidebar")
+        await pilot.press("M")
+        assert sidebar.display and isinstance(app.focused, MiniCal)
+        await pilot.press("l", "enter")
+        await pilot.pause()
+        assert app.state.day == TODAY + timedelta(days=1)
+        assert app.focused is app.query_one(f"#{app.state.view.value}")
+        assert not sidebar.display
+        await pilot.press("M", "m")  # a view key returns to the (new) view
+        await pilot.pause()
+        assert app.state.view is ViewMode.MONTH and app.focused is app.query_one(MonthView)

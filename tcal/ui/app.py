@@ -104,6 +104,7 @@ class TcalApp(App[None]):
         binding("sync", "Sync"),
         binding("sync_log", "Sync log"),
         binding("focus_calendars", "Calendars"),
+        binding("focus_minical", "Mini calendar"),
         binding("focus_next", "Next pane"),
         binding("toggle_sidebar", "Sidebar"),
         binding("help", "Help"),
@@ -421,7 +422,7 @@ class TcalApp(App[None]):
                 self._show_sidebar(wide)
 
     def on_descendant_blur(self, event: events.DescendantBlur) -> None:
-        """Narrow terminal: a sidebar shown just to reach it (``focus_calendars``)
+        """Narrow terminal: a sidebar shown just to reach it (``focus_calendars``/``focus_minical``)
         hides again once focus leaves it."""
         sidebar = self.query_one("#sidebar")
         if self._wide or self._sidebar_pinned or not sidebar.display:
@@ -464,6 +465,10 @@ class TcalApp(App[None]):
     def action_focus_calendars(self) -> None:
         self._show_sidebar(True)
         self.query_one(CalendarList).focus()
+
+    def action_focus_minical(self) -> None:
+        self._show_sidebar(True)
+        self.query_one(MiniCal).focus()
 
     def action_new_event(self) -> None:
         """A timed event at the next round hour on the selected day (day/week views

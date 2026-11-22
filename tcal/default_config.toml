@@ -69,6 +69,7 @@ search = ["slash"]
 sync = ["r"]
 sync_log = ["R"]                       # recent sync warnings and errors
 focus_calendars = ["c"]
+focus_minical = ["M"]                  # the mini month: move with the cursor keys, enter jumps
 toggle_calendar = ["space"]           # in the calendar list (enter works too)
 focus_next = ["tab"]
 toggle_sidebar = ["b"]
