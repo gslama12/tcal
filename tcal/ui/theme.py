@@ -7,6 +7,7 @@ reads ``app.palette``.
 """
 
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 
 from textual.theme import Theme
 
@@ -87,6 +88,19 @@ def luma(hex_color: str) -> float:
     """Perceived brightness of ``#RRGGBB``, 0 (black) .. 1 (white)."""
     r, g, b = (int(hex_color.lstrip("#")[i : i + 2], 16) for i in (0, 2, 4))
     return (0.299 * r + 0.587 * g + 0.114 * b) / 255
+
+
+@lru_cache(maxsize=1024)
+def blend(color: str, below: str, alpha: float) -> str:
+    """``#RRGGBB`` of ``color`` at opacity ``alpha`` over ``below``."""
+    top, bottom = _rgb(color), _rgb(below)
+    r, g, b = (round(alpha * c + (1 - alpha) * d) for c, d in zip(top, bottom, strict=True))
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
+def _rgb(hex_color: str) -> tuple[int, int, int]:
+    r, g, b = (int(hex_color.lstrip("#")[i : i + 2], 16) for i in (0, 2, 4))
+    return r, g, b
 
 
 def legible(color: str, palette: Palette) -> str:

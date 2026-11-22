@@ -8,11 +8,12 @@ from tcal.model import Event, Occurrence
 from tcal.ui.timelayout import (
     ZOOMS,
     TimeScale,
+    cascade,
     fit_scale,
     layout_bars,
     layout_blocks,
-    pack_columns,
     pack_lanes,
+    sub_columns,
 )
 
 TZ = datetime.now().astimezone().tzinfo
@@ -85,45 +86,62 @@ def test_back_to_back_events_never_share_a_row() -> None:
         scale,
     )
     haircut, standup, review, dentist = blocks
-    assert haircut.bottom <= standup.top and (haircut.cols, standup.cols) == (1, 1)
+    assert haircut.bottom <= standup.top and (haircut.depth, standup.depth) == (0, 0)
     assert standup.bottom == review.top
     for block, hour in ((standup, 9), (review, 10), (dentist, 11)):
         assert block.top == scale.row_of(hour * 60)  # starts in its hour label's row
 
 
-def test_pack_columns() -> None:
-    assert pack_columns([]) == []
-    assert pack_columns([(0, 2), (2, 4)]) == [(0, 1, 1), (0, 1, 1)]  # touching: no overlap
-    # A long event with two short ones beside it: two columns, short ones share one.
-    assert pack_columns([(0, 4), (1, 2), (2, 3)]) == [(0, 1, 2), (1, 1, 2), (1, 1, 2)]
-    # Transitive cluster: 0 and 2 don't overlap, so they stack in column 0.
-    assert pack_columns([(0, 2), (1, 3), (2, 4)]) == [(0, 1, 2), (1, 1, 2), (0, 1, 2)]
-    # Three at once, then an independent event later.
-    assert pack_columns([(5, 6), (0, 3), (0, 3), (1, 2)]) == [
-        (0, 1, 1),
-        (0, 1, 3),
-        (1, 1, 3),
-        (2, 1, 3),
+def test_cascade() -> None:
+    assert cascade([]) == []
+    assert cascade([(0, 2), (2, 4)]) == [(0, 0, 1), (0, 0, 1)]  # touching: no overlap
+    # A long event with two short ones on it: both one level deeper.
+    assert cascade([(0, 4), (1, 2), (2, 3)]) == [(0, 0, 1), (1, 0, 1), (1, 0, 1)]
+    # Each later start goes one level above the deepest one it overlaps.
+    assert cascade([(0, 3), (1, 4), (2, 5), (4, 6)]) == [(0, 0, 1), (1, 0, 1), (2, 0, 1), (3, 0, 1)]
+    # Same start: the shorter one on top.
+    assert cascade([(0, 2), (0, 4)]) == [(1, 0, 1), (0, 0, 1)]
+
+
+def test_cascade_puts_identical_times_side_by_side() -> None:
+    assert cascade([(5, 6), (0, 3), (0, 3), (1, 2)]) == [
+        (0, 0, 1),
+        (0, 0, 2),
+        (0, 1, 2),
+        (1, 0, 1),  # on top of both
     ]
 
 
-def test_pack_columns_expands_into_free_columns() -> None:
-    # a spans 0-6; b, c side by side early; d late overlaps only a -> widens over cols 1-2.
-    spans = [(0, 6), (0, 2), (0, 2), (3, 5)]
-    assert pack_columns(spans) == [(0, 1, 3), (1, 1, 3), (2, 1, 3), (1, 2, 3)]
-    # Design review 10:00-11:30, 1:1 10:30-11:00, Dentist 11:00-12:00 (2 rows/h).
-    assert pack_columns([(20, 23), (21, 22), (22, 24)]) == [(0, 1, 2), (1, 1, 2), (1, 1, 2)]
-
-
 def test_wide_clusters_collapse() -> None:
-    three = [occ("10:00", "11:30"), occ("10:30", "11:00"), occ("11:00", "12:00")]  # 2 columns
+    four = [occ("10:00", "13:00"), occ("10:30", "12:30"), occ("11:00", "12:00")]
+    four.append(occ("11:30", "12:00"))  # depth 3: 6 cells of indent
     alone = occ("14:00", "15:00")
-    blocks = layout_blocks([*three, alone], [DAY], TimeScale(2), max_cols=1)
+    blocks = layout_blocks([*four, alone], [DAY], TimeScale(2), width=9)
     group, single = blocks
-    assert (group.top, group.bottom, group.col, group.span, group.cols) == (20, 24, 0, 1, 1)
-    assert group.occ == three[0] and group.occs == tuple(three)
+    assert (group.top, group.bottom, group.depth, group.col, group.cols) == (20, 26, 0, 0, 1)
+    assert group.occ == four[0] and group.occs == tuple(four)
     assert single.occs == (alone,) and not single.group
-    assert len(layout_blocks(three, [DAY], TimeScale(2), max_cols=2)) == 3
+    assert len(layout_blocks(four, [DAY], TimeScale(2), width=10)) == 4
+    pair = [occ("10:00", "11:00"), occ("10:00", "11:00")]  # side by side: 2 x 4 + gap
+    assert len(layout_blocks(pair, [DAY], TimeScale(2), width=9)) == 2
+    assert len(layout_blocks(pair, [DAY], TimeScale(2), width=8)) == 1
+
+
+def test_blocks_come_in_drawing_order() -> None:
+    long, short = occ("10:00", "12:00"), occ("10:00", "10:30")
+    late = occ("11:00", "11:30")
+    blocks = layout_blocks([late, short, long], [DAY], TimeScale(2))
+    assert [(b.occ, b.depth) for b in blocks] == [(long, 0), (short, 1), (late, 1)]
+    xs = [6, 26]
+    assert sub_columns(blocks[0], xs) == (7, 26)
+    assert sub_columns(blocks[1], xs) == (9, 26)  # indented two cells per level
+
+
+def test_identical_blocks_split_the_column() -> None:
+    a, b = occ("10:00", "11:00"), occ("10:00", "11:00")
+    left, right = layout_blocks([a, b], [DAY], TimeScale(2))
+    xs = [6, 26]
+    assert sub_columns(left, xs) == (7, 16) and sub_columns(right, xs) == (17, 26)  # 1-col gap
 
 
 def test_pack_lanes() -> None:
@@ -135,13 +153,13 @@ def test_layout_blocks() -> None:
     overnight = occ("22:00", "02:00", days=1)
     a, b = occ("10:00", "11:30"), occ("10:30", "11:00")
     blocks = layout_blocks([short, overnight, a, b], WEEK, TimeScale(2))
-    got = {(blk.occ.event.uid, blk.day): (blk.top, blk.bottom, blk.col, blk.cols) for blk in blocks}
+    got = {(blk.occ.event.uid, blk.day): (blk.top, blk.bottom, blk.depth) for blk in blocks}
     assert got == {
-        (short.event.uid, 2): (18, 19, 0, 1),  # shorter than a row: still one row
-        (a.event.uid, 2): (20, 23, 0, 2),
-        (b.event.uid, 2): (21, 22, 1, 2),
-        (overnight.event.uid, 2): (44, 48, 0, 1),
-        (overnight.event.uid, 3): (0, 4, 0, 1),  # continues the next day
+        (short.event.uid, 2): (18, 19, 0),  # shorter than a row: still one row
+        (a.event.uid, 2): (20, 23, 0),
+        (b.event.uid, 2): (21, 22, 1),
+        (overnight.event.uid, 2): (44, 48, 0),
+        (overnight.event.uid, 3): (0, 4, 0),  # continues the next day
     }
 
 
@@ -159,13 +177,13 @@ def test_layout_bars() -> None:
     }
 
 
-def test_overlap_shorter_than_a_row_goes_side_by_side() -> None:
+def test_overlap_shorter_than_a_row_stacks() -> None:
     # 1 row/hour: 18:30-19:30 and 19:00-21:00 round to touching rows but overlap 30 min.
     qa, dinner = occ("18:30", "19:30"), occ("19:00", "21:00")
     a, b = layout_blocks([qa, dinner], [DAY], TimeScale(1))
     assert a.bottom == b.top  # the rows only touch ...
-    assert {(a.col, a.cols), (b.col, b.cols)} == {(0, 2), (1, 2)}  # ... yet side by side
+    assert (a.depth, b.depth) == (0, 1)  # ... yet stacked
     c, d = layout_blocks([qa, occ("19:30", "20:00")], [DAY], TimeScale(1))
-    assert (c.cols, d.cols) == (1, 1)  # back to back stays one column
+    assert (c.depth, d.depth) == (0, 0)  # back to back: no overlap
     short = layout_blocks([occ("18:00", "18:10"), occ("18:10", "18:40")], [DAY], TimeScale(1))
-    assert [b.cols for b in short] == [2, 2]  # same row, no time overlap: still side by side
+    assert [b.depth for b in short] == [0, 1]  # same row, no time overlap: still stacked

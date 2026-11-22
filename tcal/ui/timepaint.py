@@ -15,11 +15,15 @@ from textual.strip import Strip
 
 from tcal.model import Occurrence
 from tcal.ui.canvas import Canvas, style
-from tcal.ui.theme import Palette, text_on
+from tcal.ui.theme import Palette, blend, text_on
 from tcal.ui.timelayout import Bar, Block, TimeScale, sub_columns
 from tcal.ui.widgets.base import fit
 
 AXIS = 6  # width of the time axis: "HH:MM "
+ALPHA = 0.35  # event fill: the calendar colour over what is below it
+SELECTED_ALPHA = 0.6
+HOUR_ALPHA = 0.3  # hour lines through an event: its text colour over its fill
+NOW_ALPHA = 0.7  # the now line through an event
 
 
 @dataclass(frozen=True)
@@ -166,16 +170,17 @@ def _grid(canvas: Canvas, f: GridFrame, bottom: int) -> None:
         if row in f.cursor_rows:
             canvas.fill(y, xs[sel_col] + 1, xs[sel_col + 1], cursor)
         if now_col is not None and row == f.now_row():
-            # ● replaces the column's divider (never covered); events drawn later cover
-            # the line, so it never hides their text. The hour label stays.
+            # ● replaces the column's divider (never covered); events drawn later show
+            # the line through, dimmed, and their text covers it. The hour label stays.
             red = Style(color=p.red, bold=True)
             for x in range(xs[now_col], xs[now_col + 1]):
                 canvas.chars[y][x] = "●" if x == xs[now_col] else "─"
                 canvas.styles[y][x] = canvas.styles[y][x] + red
 
-    lines = [(block, *_lines(f, block)) for block in f.blocks]
-    for block, texts, at in lines:
-        _block(canvas, f, block, bottom, _place_time(f, block, texts, at, lines))
+    under = [[p.background1] * canvas.width for _ in canvas.chars]  # fill below each cell
+    for index, block in enumerate(f.blocks):
+        rows = _text_rows(f, index, bottom)
+        _block(canvas, f, block, bottom, under, rows, _lines(f, block, len(rows)))
     _hidden(canvas, f, bottom)
 
 
@@ -227,61 +232,38 @@ def _markers(f: GridFrame, bottom: int) -> list[Marker]:
     return result
 
 
-def _lines(f: GridFrame, block: Block) -> tuple[list[str], int | None]:
-    """The text lines of ``block`` from its first visible row (with ``pad``), and the
-    index of its time line."""
-    occ = _shown(f, block)
+def _text_rows(f: GridFrame, index: int, bottom: int) -> list[int]:
+    """The visible rows of ``f.blocks[index]`` that no block drawn above it covers
+    (its text goes there, so a covered event's title moves below its cover)."""
+    block = f.blocks[index]
     x0, x1 = sub_columns(block, f.xs)
-    pad = _pad(f, block)
-    width = x1 - x0 - len(pad)
+    above = [
+        b
+        for b in f.blocks[index + 1 :]
+        if b.day == block.day and sub_columns(b, f.xs)[0] < x1 and x0 < sub_columns(b, f.xs)[1]
+    ]
+    return [
+        row
+        for row in range(max(block.top, f.top), min(block.bottom, bottom))
+        if not any(b.top <= row < b.bottom for b in above)
+    ]
+
+
+def _lines(f: GridFrame, block: Block, height: int) -> list[str]:
+    """The text lines of ``block`` for its ``height`` free rows (with ``pad``)."""
+    occ = _shown(f, block)
+    pad, width = _text_box(f, block)
     title, span = _clean(occ.summary), _span(occ, width)
     if block.group:
         more = f" +{len(block.group) - 1}"
         label = fit(title, width - len(more)) + more if width - len(more) >= 2 else ""
         texts = [label or fit(f"{len(block.group)}×", width), span]
-    elif block.bottom - block.top == 1:
+    elif height <= 1:
         texts = [fit(f"{occ.start:%H:%M} {title}" if width >= 11 else title, width)]
-        span = ""
     else:  # the title wraps over the lines the time doesn't need, then the location
-        height = block.bottom - block.top
         lines = wrap(title, width, max(1, height - 1 if span else height))
         texts = lines + [fit(t, width) for t in (span, _clean(occ.event.location)) if t]
-    at = texts.index(span) if span and span in texts else None
-    return [pad + t for t in texts], at
-
-
-def _place_time(
-    f: GridFrame,
-    block: Block,
-    texts: list[str],
-    at: int | None,
-    lines: list[tuple[Block, list[str], int | None]],
-) -> list[str]:
-    """``texts`` with the time line moved down past the rows where a block to the
-    right shows a title or location ("10:00  1:1…" would read as the neighbour's
-    time), or dropped if no row of the block is left."""
-    if at is None:
-        return texts
-    first = max(block.top, f.top)
-    x1 = sub_columns(block, f.xs)[1]
-
-    def beside_text(row: int) -> bool:
-        return any(
-            other.day == block.day
-            and sub_columns(other, f.xs)[0] >= x1
-            and other.top <= row < other.bottom
-            and row - max(other.top, f.top) < len(other_texts)
-            and row - max(other.top, f.top) != other_at
-            for other, other_texts, other_at in lines
-        )
-
-    texts = list(texts)
-    while beside_text(first + at):
-        if first + at + 1 >= block.bottom:
-            return texts[:at] + texts[at + 1 :]
-        texts.insert(at, "")
-        at += 1
-    return texts
+    return [pad + t for t in texts]
 
 
 def _shown(f: GridFrame, block: Block) -> Occurrence:
@@ -289,33 +271,84 @@ def _shown(f: GridFrame, block: Block) -> Occurrence:
     return f.selected if f.selected is not None and f.selected in block.occs else block.occ
 
 
-def _pad(f: GridFrame, block: Block) -> str:
+def _text_box(f: GridFrame, block: Block) -> tuple[str, int]:
+    """The left pad (a rounded corner's cell) and the text width of ``block``."""
     x0, x1 = sub_columns(block, f.xs)
-    return " " if x1 - x0 >= 6 or f.selected in block.occs else ""
+    pad = " " if x1 - x0 >= 6 or f.selected in block.occs else ""
+    return pad, x1 - x0 - len(pad)
 
 
-def _block(canvas: Canvas, f: GridFrame, block: Block, bottom: int, texts: list[str]) -> None:
+def _block(
+    canvas: Canvas,
+    f: GridFrame,
+    block: Block,
+    bottom: int,
+    under: list[list[str]],
+    rows: list[int],
+    texts: list[str],
+) -> None:
+    """Draw ``block`` translucent over what is below (``under``: the fill colour of
+    each cell, updated): hour and now lines show through, corners are rounded
+    with quarter blocks, ``texts`` go on ``rows`` (the first, the title, in bold)."""
     first, last = max(block.top, f.top), min(block.bottom, bottom)
     if first >= last:
         return
     p = f.palette
     selected = f.selected in block.occs
     color = f.color(_shown(f, block).calendar_id)
-    fg = text_on(color, p)
+    alpha = SELECTED_ALPHA if selected else ALPHA
+    fg = text_on(blend(color, p.background1, alpha), p)
     x0, x1 = sub_columns(block, f.xs)
     gaps = [x for x in (x0 - 1, x1) if f.xs[block.day] < x < f.xs[block.day + 1]]
+    lines = dict(zip(rows, texts, strict=False))
+    title_row = rows[0] if rows else None
     for row in range(first, last):
         y = f.header + row - f.top
-        canvas.fill(y, x0, x1, style(fg, color, bold=selected))
-        for x in gaps:  # the gap beside an event stays blank (no hour or now line)
-            if canvas.chars[y][x] in ("╌", "─"):
+        below = under[y][x0:x1]
+        for x, bg in enumerate((blend(color, c, alpha) for c in below), x0):
+            under[y][x] = bg
+            char = canvas.chars[y][x]
+            if char in ("╌", "─"):  # hour and now lines show through, in the block's tone
+                line, strength = (fg, HOUR_ALPHA) if char == "╌" else (p.red, NOW_ALPHA)
+                canvas.styles[y][x] = style(blend(line, bg, strength), bg)
+            else:
                 canvas.chars[y][x] = " "
-        index = row - first
-        if index < len(texts):
-            bold = style(fg, color, bold=True) if index == 0 else None
-            canvas.text(y, x0, x1, texts[index], bold)
-        if selected:  # Google-like: keep the colour, add a bright accent bar + bold text
-            canvas.text(y, x0, x0 + 1, "▌", style(p.foreground3, color, bold=True))
+                canvas.styles[y][x] = style(fg, bg, bold=selected)
+        for x in gaps:  # the gap beside an event stays blank (no hour or now line)
+            if canvas.chars[y][x] in ("╌", "─") and under[y][x] == p.background1:
+                canvas.chars[y][x] = " "
+        text = lines.get(row, "")
+        canvas.text(y, x0, x1, text)
+        for x in range(x0, min(x1, x0 + cell_len(text))):
+            canvas.styles[y][x] = style(fg, under[y][x], bold=selected or row == title_row)
+        if x1 - x0 >= 3:
+            _corners(canvas, block, row, y, (x0, x1), (under[y], below), skip_left=selected)
+        if selected:  # Google-like: a bright accent bar + bold text
+            canvas.text(y, x0, x0 + 1, "▌", style(p.foreground3, under[y][x0], bold=True))
+
+
+def _corners(
+    canvas: Canvas,
+    block: Block,
+    row: int,
+    y: int,
+    xs: tuple[int, int],
+    fills: tuple[list[str], list[str]],
+    skip_left: bool,
+) -> None:
+    """Round the block's corners on ``row`` (blank corner cells only): the quarter
+    block in the block's fill, the rest in the colour below it (``fills``: the
+    line's fill colours with and without the block, from ``x0``)."""
+    (x0, x1), (fill, below) = xs, fills
+    top, end = row == block.top, row == block.bottom - 1
+    if not (top or end):
+        return
+    for x, glyphs in ((x0, "▐▗▝"), (x1 - 1, "▌▖▘")):
+        if (x == x0 and skip_left) or canvas.chars[y][x] not in (" ", "╌", "─"):
+            continue
+        glyph = glyphs[0] if top and end else glyphs[1] if top else glyphs[2]
+        canvas.chars[y][x] = glyph
+        canvas.styles[y][x] = style(fill[x], below[x - x0])
 
 
 def _day(fmt: str, day: date) -> str:

@@ -43,7 +43,6 @@ from tcal.ui.widgets.base import CalendarView
 MAX_LANES = 3  # all-day strip rows shown at most
 SCROLL_ROWS = 2  # rows per mouse-wheel step
 SLOT_MINUTES = 15  # shortest cursor step (rows of 7.5 min are stepped two at a time)
-MIN_EVENT_WIDTH = 4  # narrowest side-by-side event (+ 1-col gap); else the cluster collapses
 HEADER_FORMATS = ("%A, {day} %B", "%A {day}", "%a {day}", "{day}")  # widest first
 
 
@@ -133,10 +132,10 @@ class TimeGrid(CalendarView):
         return self._load()[2]
 
     def _block_list(self) -> list[Block]:
-        scale, max_cols = self.scale, self._max_cols()
-        if self._blocks is None or self._blocks[:2] != (scale, max_cols):
+        scale, width = self.scale, self._column_width()
+        if self._blocks is None or self._blocks[:2] != (scale, width):
             days, occs, _ = self._load()
-            self._blocks = scale, max_cols, layout_blocks(occs, days, scale, max_cols)
+            self._blocks = scale, width, layout_blocks(occs, days, scale, width)
         return self._blocks[2]
 
     # ----- geometry -------------------------------------------------------
@@ -191,11 +190,10 @@ class TimeGrid(CalendarView):
         n, avail = len(self._load()[0]), max(0, self.size.width - AXIS)
         return [AXIS + avail * i // n for i in range(n + 1)]
 
-    def _max_cols(self) -> int:
-        """Side-by-side events that fit the narrowest day column (1-col gaps)."""
+    def _column_width(self) -> int:
+        """Width of the narrowest day column (inside its dividers)."""
         xs = self._columns()
-        inner = min(b - a - 1 for a, b in zip(xs, xs[1:], strict=False))
-        return max(1, (inner + 1) // (MIN_EVENT_WIDTH + 1))
+        return min(b - a - 1 for a, b in zip(xs, xs[1:], strict=False))
 
     # ----- cursor & selection --------------------------------------------
 
@@ -207,7 +205,8 @@ class TimeGrid(CalendarView):
 
     @property
     def selected(self) -> Occurrence | None:
-        """The picked event if still under the cursor, else the event at the cursor slot."""
+        """The picked event if still under the cursor, else the topmost event at the
+        cursor slot (the deepest in the cascade; of side-by-side ones the left)."""
         days = self._load()[0]
         day, rows = days.index(self.tcal.state.day), self._cursor_rows()
         at_cursor = sorted(
@@ -216,7 +215,7 @@ class TimeGrid(CalendarView):
                 for b in self._block_list()
                 if b.day == day and b.top < rows.stop and rows.start < b.bottom
             ),
-            key=lambda b: (b.col, b.top),
+            key=lambda b: (-b.depth, b.col, b.top),
         )
         picked = self._picked
         if picked is not None and (
@@ -386,10 +385,10 @@ class TimeGrid(CalendarView):
             row = self._top_row() + y - header
             if row >= self.scale.total_rows:
                 return
-            block = next(
+            block = next(  # the topmost: blocks are listed bottom first
                 (
                     b
-                    for b in self._block_list()
+                    for b in reversed(self._block_list())
                     if b.day == column
                     and b.top <= row < b.bottom
                     and sub_columns(b, xs)[0] <= x < sub_columns(b, xs)[1]
