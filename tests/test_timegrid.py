@@ -45,7 +45,7 @@ async def test_week_renders_header_strip_events_and_now_line(app: RecordingApp) 
         assert "Early run" not in body  # 05:45: above the default range
         xs = grid._columns()
         now_line = next(line for line in lines if line[xs[2]] == "●")  # on Wed's edge
-        assert "─" in now_line[xs[2] : xs[3]]  # today = Wed, clipped to its column
+        assert "─" in now_line[xs[2] : xs[3]] or "Design" in now_line  # today = Wed
         assert now_line[xs[3]] == "│" and "─" not in now_line[xs[3] :]
         assert "10:15" not in body and "10:00" in body  # hour labels stay
         assert grid.rows_per_hour == 2
@@ -124,7 +124,7 @@ async def test_headers_share_one_format(store: Store) -> None:
 async def test_cursor_slot_has_accent_background(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         grid = app.query_one(WeekView)
-        await pilot.press("j")  # 10:30, an empty slot on Wed
+        await pilot.press(*"jjjjj")  # 12:30, an empty slot on Wed
         row = grid._cursor_row() - grid._top_row() + grid._header_height()
         backgrounds = {
             seg.style.bgcolor.name
@@ -263,27 +263,34 @@ async def test_hidden_events_have_markers(app: RecordingApp) -> None:
         assert any("later" in line for line in lines[-1:])
 
 
-async def test_overlaps_pack_google_style(app: RecordingApp) -> None:
+async def test_overlaps_stack_google_style(
+    app: RecordingApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(timegrid, "now", lambda: at("08:00"))  # nothing selected, no now line
     async with app.run_test(size=(200, 55)) as pilot:
         await pilot.press("d")
         await pilot.pause()
         grid = app.query_one(DayView)
         blocks = {b.occ.summary: b for b in grid._block_list() if b.day == 0}
         review, one, dentist = blocks["Design review"], blocks["1:1 with Alex"], blocks["Dentist"]
-        assert (review.col, review.cols) == (0, 2)
-        assert (one.col, one.cols) == (dentist.col, dentist.cols) == (1, 2)
+        assert (review.depth, one.depth, dentist.depth) == (0, 1, 1)
         xs = grid._columns()
-        left, right = sub_columns(review, xs), sub_columns(one, xs)
-        assert right[0] - left[1] == 1  # one-column gap
+        under, above = sub_columns(review, xs), sub_columns(one, xs)
+        assert above == (under[0] + 2, under[1])  # indented on top of it
+        lines = text(grid)
+        y = grid._header_height() + one.top - grid._top_row()
+        assert lines[y][under[0] : above[0]] == "  "  # the covered event shows beside it
+        assert grid.render_line(y).crop(under[0], above[0]).text == "  "
+        assert "1:1 with Alex" in lines[y] and "Design review" not in lines[y]
 
 
 async def test_narrow_columns_collapse_cluster(app: RecordingApp) -> None:
-    async with app.run_test(size=(100, 35)) as pilot:
+    async with app.run_test(size=(70, 35)) as pilot:
         await pilot.pause()
         grid = app.query_one(WeekView)
         group = next(b for b in grid._block_list() if b.group)
         assert [o.summary for o in group.occs] == ["Design review", "1:1 with Alex", "Dentist"]
-        assert any("Design… +2" in line for line in text(grid))  # first title + count
+        assert any("Des… +2" in line for line in text(grid))  # first title + count
         await pilot.press("n")  # cycling reaches the events of the collapsed block
         while grid.selected not in group.occs:
             await pilot.press("n")
@@ -303,7 +310,7 @@ async def test_now_line_keeps_event_text(app: RecordingApp) -> None:
         row = next(line for line in text(grid) if line[AXIS] == "●")
         assert row.startswith("10:00")  # the slot keeps its label; no "10:15" replaces it
         event = row[AXIS + 1 : row.index("Design review") + len("Design review")]
-        assert event[0] in " ▌" and event[1:] == "Design review"  # text not covered
+        assert event == "▌10:00 Design review"  # text not covered (one free row: time + title)
         assert "─" in row[row.index("Design review") :]  # the line goes on beside the event
 
 
@@ -337,7 +344,7 @@ async def test_text_is_cut_with_ellipsis_never_mid_number(app: RecordingApp) -> 
         await pilot.pause()
         body = "\n".join(text(app.query_one(WeekView)))
         assert "Anna's bir…" in body and "Rele…" in body
-        assert "13:00–15:00" in body and "14:00  14:30" in body  # no "14:00–1"
+        assert "13:00–15:00" in body and "14:00 Rele…" in body  # no "14:00–1"
         assert "–1 " not in body and "–1│" not in body
 
 
@@ -464,34 +471,15 @@ async def test_opening_the_week_scrolls_to_the_cursor(
 
 
 @pytest.mark.parametrize("size", [(100, 35), (200, 55)])
-async def test_a_time_never_sits_beside_a_neighbours_title(
+async def test_a_covered_time_moves_below_its_cover(
     app: RecordingApp, size: tuple[int, int]
 ) -> None:
     async with app.run_test(size=size) as pilot:
         await pilot.pause()
         grid = app.query_one(WeekView)
         xs, lines = grid._columns(), text(grid)
-        thu = slice(xs[3] + 1, xs[4])  # Release 14:00 beside Interview 14:30
+        thu = slice(xs[3] + 1, xs[4])  # Release 14:00 under Interview 14:30
         cells = [line[thu] for line in lines]
         title = next(i for i, c in enumerate(cells) if "Inte" in c)
         assert "14:00" not in cells[title]
         assert any("14:00" in c for c in cells[:title] + cells[title + 1 :])  # still shown
-
-
-async def test_now_line_skips_the_gap_between_events(
-    app: RecordingApp, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    thu = TODAY + timedelta(days=1)
-    monkeypatch.setattr(timegrid, "now", lambda: at("15:00", thu))
-    async with app.run_test(size=(100, 35)) as pilot:
-        await pilot.pause()
-        grid = app.query_one(WeekView)
-        xs = grid._columns()
-        release, interview = (
-            next(b for b in grid._block_list() if b.occ.summary == name)
-            for name in ("Release", "Interview")
-        )
-        gap = sub_columns(release, xs)[1]
-        assert gap + 1 == sub_columns(interview, xs)[0]
-        line = next(line for line in text(grid) if line[xs[3]] == "●")
-        assert line[gap] == " "

@@ -1,7 +1,7 @@
 """Pure geometry of the Day/Week time grid (no widgets), shared with the month view.
 
 ``TimeScale`` maps minutes to grid rows (``fit_scale`` fits a day range to a
-height); ``layout_blocks`` packs timed occurrences into side-by-side columns,
+height); ``layout_blocks`` stacks overlapping timed occurrences (``cascade``),
 ``layout_bars`` all-day / multi-day ones into strip lanes (``is_bar`` decides which).
 """
 
@@ -19,6 +19,8 @@ from tcal.model import Occurrence
 Edge = TypeVar("Edge", int, tuple[int, int])
 
 ZOOMS = (1, 2, 3, 4, 6, 8)  # rows per hour
+INDENT = 2  # cells per cascade level of overlapping events
+MIN_WIDTH = 4  # narrowest event block; a cluster needing narrower ones collapses
 MINUTES = 24 * 60
 
 
@@ -119,34 +121,31 @@ def pack_lanes(spans: Sequence[tuple[Edge, Edge]]) -> list[int]:
     return [lanes[i] for i in range(len(spans))]
 
 
-def pack_columns(spans: Sequence[tuple[Edge, Edge]]) -> list[tuple[int, int, int]]:
-    """``(column, span, columns)`` per [start, end) span for side-by-side layout.
+def cascade(spans: Sequence[tuple[Edge, Edge]]) -> list[tuple[int, int, int]]:
+    """``(depth, column, columns)`` per [start, end) span for the stacked layout.
 
-    Google-style: spans are grouped into clusters of transitively overlapping spans
-    (touching is no overlap); each cluster is packed greedily into ``columns``
-    columns, and a span widens over the columns to its right (``span``) until one
-    holds a span it overlaps.
+    Google-style cascade: spans are taken by start (the longer first, so of two
+    with the same start the shorter goes on top); each is one level deeper than
+    the deepest earlier span it overlaps (touching is no overlap). Spans with the
+    same start *and* end would cover each other, so they share one level side by
+    side (``column`` of ``columns``).
     """
-    result: list[tuple[int, int, int]] = [(0, 1, 1)] * len(spans)
-    for cluster in _clusters(spans):
-        lanes = _greedy(spans, cluster)
-        width = max(lanes.values()) + 1
-        for i, lane in lanes.items():
-            start, end = spans[i]
-            right = min(
-                (
-                    lanes[j]
-                    for j in cluster
-                    if lanes[j] > lane and spans[j][0] < end and start < spans[j][1]
-                ),
-                default=width,
-            )
-            result[i] = (lane, right - lane, width)
+    result: list[tuple[int, int, int]] = [(0, 0, 1)] * len(spans)
+    same: dict[tuple[Edge, Edge], list[int]] = {}
+    for i in _order(spans):
+        same.setdefault(spans[i], []).append(i)
+    placed: list[tuple[tuple[Edge, Edge], int]] = []  # (span, depth), earlier first
+    for span, members in same.items():
+        start, end = span
+        depth = 1 + max((d for (s, e), d in placed if s < end and start < e), default=-1)
+        placed.append((span, depth))
+        for col, i in enumerate(members):
+            result[i] = (depth, col, len(members))
     return result
 
 
 def _clusters(spans: Sequence[tuple[Edge, Edge]]) -> list[list[int]]:
-    """Indices of transitively overlapping spans, in start order."""
+    """Indices of transitively overlapping spans, in ``_order`` (the cascade's)."""
     clusters: list[list[int]] = []
     ends: list[Edge] = []  # the end of the current cluster
     for i in _order(spans):
@@ -181,9 +180,9 @@ class Block:
     day: int
     top: int
     bottom: int
-    col: int
-    cols: int
-    span: int = 1  # columns it covers from ``col``
+    depth: int = 0  # cascade level: indented ``INDENT`` cells per level
+    col: int = 0  # side by side with events of the same times: column ``col`` of ``cols``
+    cols: int = 1
     group: tuple[Occurrence, ...] = ()  # a collapsed cluster: its events (``occ`` first)
 
     @property
@@ -206,14 +205,16 @@ def layout_blocks(
     occs: Sequence[Occurrence],
     days: Sequence[date],
     scale: TimeScale,
-    max_cols: int | None = None,
+    width: int | None = None,
 ) -> list[Block]:
-    """Grid blocks of the timed occurrences, clipped per day and packed into columns.
+    """Grid blocks of the timed occurrences, clipped per day and stacked (``cascade``),
+    in drawing order (bottom first).
 
     An event shorter than a row still gets one row; events crossing midnight
     get one block per day. Events overlap if their rows or their times do (so a
-    30-min overlap shows even when the rows only touch). A cluster needing more
-    than ``max_cols`` columns becomes one block over the whole column (``group``).
+    30-min overlap shows even when the rows only touch). A cluster with a block
+    narrower than ``MIN_WIDTH`` in a day column ``width`` cells wide becomes one
+    block over the whole column (``group``).
     """
     blocks: list[Block] = []
     for i, day in enumerate(days):
@@ -231,17 +232,23 @@ def layout_blocks(
         edges = [
             ((top, s), (bottom, e)) for (top, bottom), (s, e) in zip(rows, minutes, strict=True)
         ]
-        packed = pack_columns(edges)
+        stacked = cascade(edges)
         for cluster in _clusters(edges):
-            if max_cols is not None and packed[cluster[0]][2] > max_cols:
+            if width is not None and any(_width(width, stacked[j]) < MIN_WIDTH for j in cluster):
                 top, bottom = rows[cluster[0]][0], max(rows[j][1] for j in cluster)
                 group = tuple(sorted((spans[j][0] for j in cluster), key=_by_start))
-                blocks.append(Block(group[0], i, top, bottom, 0, 1, group=group))
+                blocks.append(Block(group[0], i, top, bottom, group=group))
                 continue
-            for j in cluster:
-                (occ, top, bottom), (col, span, cols) = spans[j], packed[j]
-                blocks.append(Block(occ, i, top, bottom, col, cols, span))
+            for j in cluster:  # in cascade order: the lower block first
+                (occ, top, bottom), (depth, col, cols) = spans[j], stacked[j]
+                blocks.append(Block(occ, i, top, bottom, depth, col, cols))
     return blocks
+
+
+def _width(width: int, stacked: tuple[int, int, int]) -> int:
+    """Narrowest block width of a ``(depth, col, cols)`` block (1-col gaps)."""
+    depth, _, cols = stacked
+    return (width - INDENT * depth + 1) // cols - 1
 
 
 def _by_start(occ: Occurrence) -> tuple[datetime, datetime]:
@@ -265,10 +272,11 @@ def layout_bars(occs: Sequence[Occurrence], days: Sequence[date]) -> list[Bar]:
 
 
 def sub_columns(block: Block, xs: Sequence[int]) -> tuple[int, int]:
-    """[x0, x1) of ``block`` in its day column (``xs``: the column dividers), leaving
-    a 1-col gap to its right neighbour (the last one's gap is the divider)."""
-    x0, x1 = xs[block.day] + 1, xs[block.day + 1]
-    inner, end = x1 - x0 + 1, block.col + block.span
+    """[x0, x1) of ``block`` in its day column (``xs``: the column dividers): indented
+    by its depth; side-by-side blocks leave a 1-col gap to their right neighbour
+    (the last one's gap is the divider)."""
+    x0, x1 = xs[block.day] + 1 + INDENT * block.depth, xs[block.day + 1]
+    inner = x1 - x0 + 1
     left = x0 + inner * block.col // block.cols
-    right = x0 + inner * end // block.cols - 1
+    right = x0 + inner * (block.col + 1) // block.cols - 1
     return left, min(right, x1)
