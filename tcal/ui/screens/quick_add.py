@@ -1,7 +1,7 @@
 """Quick add (``A``): one line parsed by ``tcal.quickadd.parse``, previewed as you type.
 
 Dismisses with ``("save", parsed)`` (enter) or ``("form", parsed)`` (tab: open the full
-form prefilled, ``[keys] focus_next``); ``[keys] cancel`` cancels. The caller turns the
+form prefilled; fixed, like enter); ``[keys] cancel`` cancels. The caller turns the
 result into an ``Event``.
 """
 
@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from typing import Literal
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Input, Static
@@ -45,7 +46,7 @@ class QuickAddScreen(ModalScreen[tuple[Mode, QuickAdd]]):
 
     BINDINGS = [
         binding("cancel", "Cancel", action="dismiss"),
-        binding("focus_next", "Full form", action="open_form", priority=True),
+        Binding("tab", "open_form", "Full form", priority=True),
     ]
 
     def __init__(
@@ -70,9 +71,7 @@ class QuickAddScreen(ModalScreen[tuple[Mode, QuickAdd]]):
         keys = {
             b.binding.id: self.app.get_key_display(b.binding) for b in self.active_bindings.values()
         }
-        hint = (
-            f"enter save · {keys.get('focus_next', '')} full form · {keys.get('cancel', '')} cancel"
-        )
+        hint = f"enter save · tab full form · {keys.get('cancel', '')} cancel"
         self.query_one(Input).border_subtitle = hint
         self._preview()
 

@@ -46,8 +46,11 @@ VIEW_BINDINGS: list[BindingType] = [
     binding("zoom_out", "Zoom out"),
 ]
 
-# For the views with an event cursor: n/p call ``action_cycle(step)``.
+# For the views with an event cursor: n/p call ``action_cycle(step)``; tab marks the
+# selected event, escape clears the marks (here, so they win over the screen's tab).
 EVENT_BINDINGS: list[BindingType] = [
     binding("next_event", "Next event", action="cycle(1)"),
     binding("prev_event", "Previous event", action="cycle(-1)"),
+    binding("toggle_mark", "Mark", action="app.toggle_mark"),
+    binding("cancel", "Clear marks", action="app.clear_marks"),
 ]

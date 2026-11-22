@@ -290,13 +290,13 @@ async def test_saving_into_a_hidden_calendar_shows_it(make_app) -> None:
 async def test_quick_add_uses_configured_keys_and_form_asks_before_discarding(
     make_app, write_config
 ) -> None:
-    app = make_app(write_config('[keys]\ncancel = ["ctrl+g"]\nfocus_next = ["ctrl+o"]\n'))
+    app = make_app(write_config('[keys]\ncancel = ["ctrl+g"]\n'))
     async with app.run_test() as pilot:
         await pilot.press("A")
-        assert "^o full form" in str(app.screen.query_one(Input).border_subtitle)
+        assert "tab full form · ^g cancel" in str(app.screen.query_one(Input).border_subtitle)
         await pilot.press("ctrl+g")
         assert not isinstance(app.screen, QuickAddScreen)
-        await pilot.press("A", *"Gym 18h", "ctrl+o")
+        await pilot.press("A", *"Gym 18h", "tab")
         assert isinstance(app.screen, EventForm)
         await pilot.press("ctrl+g")  # the quick-add text counts as a change
         assert isinstance(app.screen, ConfirmDiscard)

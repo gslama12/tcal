@@ -341,7 +341,10 @@ class ScheduleView(CalendarView):
             style=Style(color=p.foreground1 if past else p.foreground2),
         )
         color = legible(self.tcal.calendar_color(occ.calendar_id), p)
-        text.append("● ", style=Style(color=color, dim=past))
+        if occ.key in self.tcal.state.marked:  # tab
+            text.append("✓ ", style=Style(color=p.primary, bold=True))
+        else:
+            text.append("● ", style=Style(color=color, dim=past))
         title = Style(color=p.foreground1 if past else p.foreground3, bold=selected)
         text.append(occ.summary or "(no title)", style=title)
         if position := day_of(occ, row.day):

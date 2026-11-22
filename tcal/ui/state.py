@@ -6,7 +6,7 @@ data refresh (sync) with an unchanged state, so it is the one redraw signal.
 """
 
 from dataclasses import dataclass, replace
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 
 from tcal.dates import add_months
@@ -29,6 +29,7 @@ class AppState:
     view: ViewMode
     week_start: int = 0  # 0 = Monday .. 6 = Sunday
     hidden_calendars: frozenset[str] = frozenset()
+    marked: frozenset[tuple[str, datetime]] = frozenset()  # tab-marked ``Occurrence.key``s
 
     def period(self) -> tuple[date, date]:
         """The [start, end) day range of the current view's period."""

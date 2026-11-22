@@ -15,7 +15,9 @@ Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``set_view()``, ``toggle_calendar()``, ``refresh_data()``, ``current_occurrence()``, ``save_event()``,
 ``delete_event()``, ``undo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``, ``sync_log``,
 ``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event form),
-``check_writable()``, ``focus_view()``, ``selected_occurrence()``, ``select_in_view()``.
+``check_writable()``, ``focus_view()``, ``selected_occurrence()``, ``select_in_view()``,
+``save_events()`` (several as one undo step), ``toggle_mark()``, ``clear_marks()``,
+``marked_occurrences()`` (the tab-marked events for a batch yank).
 
 Editing flows (form, quick add, clipboard, moving) live in ``tcal.ui.editing.Editor``
 (``app.editor``), the undo stack in ``tcal.ui.undo`` (``app.history``).
@@ -105,7 +107,7 @@ class TcalApp(App[None]):
         binding("sync_log", "Sync log"),
         binding("focus_calendars", "Calendars"),
         binding("focus_minical", "Mini calendar"),
-        binding("focus_next", "Next pane"),
+        binding("focus_next", "Cycle panes"),
         binding("toggle_sidebar", "Sidebar"),
         binding("help", "Help"),
         binding("quit", "Quit"),
@@ -222,7 +224,16 @@ class TcalApp(App[None]):
             )
         if undo_at is None and len(before) == 1 and not before[0].rrule:
             undo_at = before[0].start
-        self.history.push(UndoStep(event.uid, before, undo_message, undo_at))
+        self.history.push(UndoStep([(event.uid, before)], undo_message, undo_at))
+        self.refresh_data()
+        self.request_sync()
+        return saved
+
+    def save_events(self, events: list[Event], undo_message: str) -> list[Event]:
+        """``save_event`` for several events (distinct uids) as one undo step."""
+        changes = [(e.uid, self.source.rows(e.uid)) for e in events]
+        saved = [self.source.save_event(e) for e in events]
+        self.history.push(UndoStep(changes, undo_message))
         self.refresh_data()
         self.request_sync()
         return saved
@@ -242,7 +253,7 @@ class TcalApp(App[None]):
             else:
                 what = f"all “{first.summary}” events"
             at = occurrence if first.rrule else first.start
-            self.history.push(UndoStep(uid, rows, f"Restored {what}", at))
+            self.history.push(UndoStep([(uid, rows)], f"Restored {what}", at))
             self.notify(f"Deleted {what} · {self.undo_hint}")
 
     @property
@@ -270,10 +281,11 @@ class TcalApp(App[None]):
         if step is None:
             self.notify("Nothing to undo")
             return
-        if step.rows:
-            self.source.restore(step.rows)
-        else:
-            self.source.delete_event(step.uid)
+        for uid, rows in reversed(step.changes):
+            if rows:
+                self.source.restore(rows)
+            else:
+                self.source.delete_event(uid)
         self.notify(step.message)
         self.refresh_data()
         if step.at is not None:
@@ -372,6 +384,23 @@ class TcalApp(App[None]):
         self.state = replace(
             self.state, hidden_calendars=self.state.hidden_calendars ^ {calendar_id}
         )
+
+    def toggle_mark(self, occ: Occurrence) -> None:
+        self.state = replace(self.state, marked=self.state.marked ^ {occ.key})
+
+    def clear_marks(self) -> None:
+        if self.state.marked:
+            self.state = replace(self.state, marked=frozenset())
+
+    def marked_occurrences(self) -> list[Occurrence]:
+        """The marked events still shown (by start), wherever they are."""
+        found = []
+        for key in self.state.marked:
+            day = key[1].date()
+            occ = next((o for o in self.occurrences(day, day + timedelta(1)) if o.key == key), None)
+            if occ is not None:
+                found.append(occ)
+        return sorted(found, key=lambda o: o.start)
 
     def focus_view(self) -> None:
         """Focus the main view of the current mode."""
@@ -509,8 +538,19 @@ class TcalApp(App[None]):
     def action_quick_add(self) -> None:
         self.editor.quick_add()
 
-    def action_yank(self) -> None:
+    def action_toggle_mark(self) -> None:
         if occ := self._selected():
+            self.toggle_mark(occ)
+
+    def action_clear_marks(self) -> None:
+        self.clear_marks()
+
+    def action_yank(self) -> None:
+        """Copy the marked events (and clear the marks), else the selected one."""
+        if self.state.marked:
+            self.editor.yank_all(self.marked_occurrences())
+            self.clear_marks()
+        elif occ := self._selected():
             self.editor.yank(occ)
 
     def action_paste(self) -> None:

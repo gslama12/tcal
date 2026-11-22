@@ -46,6 +46,8 @@ and edits made offline are queued and pushed later.
 - **Quick add** (`A`): one line like `Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal`.
 - **Yank / paste / duplicate / move** events with the keyboard (`y` `p` `D`, `J` `K` `<` `>`)
   and an **undo** stack (`u`, the last 20 changes).
+- **Batch copy:** mark events with `tab` (✓; marks stay while you browse), `y` copies them all,
+  then `p` on another day pastes them with the same day offsets and times; `u` undoes the paste.
 - **Go to date** (`g`: `fri`, `next fri`, `+2w`, `in 3 days`, `24.12.`, `dec 24`, `dec`, `2027`, `2026-12-24`)
   and **search** (`/`).
 - **iCloud sync** in the background, offline edits queued, server wins on conflicts;
@@ -188,7 +190,7 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `c` | Focus the calendar list |
 | `M` | Focus the mini month (enter jumps to the day) |
 | `space` | Show/hide calendar (in the list) |
-| `tab` | Next pane |
+| `shift+tab` | Cycle panes |
 | `b` | Show/hide the sidebar |
 | **Events** | |
 | `⏎` | Open event / new event in empty slot |
@@ -197,8 +199,9 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `e` | Edit event |
 | `x` | Delete event |
 | `u` | Undo the last change |
-| `y` | Copy (yank) event |
-| `p` `P` | Paste copy at the cursor slot (time grid) or on the selected day |
+| `tab` | Mark / unmark event (several: y copies all, esc clears) |
+| `y` | Copy (yank) event, or all marked events |
+| `p` `P` | Paste at the cursor slot or selected day (several: from that day on) |
 | `D` | Duplicate event to the next day |
 | `K` `ctrl+k` | Move event 15 min earlier (time grid) |
 | `J` `ctrl+j` | Move event 15 min later (time grid) |
@@ -207,7 +210,7 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `/` | Search events |
 | **Event form** | |
 | `ctrl+s` | Save |
-| `esc` | Cancel / close dialog |
+| `esc` | Cancel / close dialog / clear marks |
 | **App** | |
 | `r` | Sync now |
 | `R` | Sync log (recent warnings and errors) |
@@ -292,6 +295,8 @@ account (ideally `TCAL_HOME=.tcal` first, so a fresh cache is used):
       the iPhone. Then `u` repeatedly undoes each step on the server too.
 - [ ] Delete an event, sync (`r`), then `u` → it comes back on the iPhone.
 - [ ] Yank/paste (`y`, `p`) and duplicate (`D`) → plain copies on the iPhone.
+- [ ] Batch copy: mark a week's events with `tab`, `y`, go to the next week, `p` → all copies on the
+  iPhone; `u` removes them all again.
 - [ ] Move an event to another calendar (edit → calendar), then undo it.
 - [ ] Conflict: change an event on the iPhone, then change it in tcal before syncing → the
       iPhone version wins and tcal doesn't get stuck. With the event form open while the

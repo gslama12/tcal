@@ -433,6 +433,7 @@ class TimeGrid(CalendarView):
             header_formats=self.header_formats,
             palette=self.tcal.palette,
             color=self.tcal.calendar_color,
+            marked=self.tcal.state.marked,
         )
 
 
