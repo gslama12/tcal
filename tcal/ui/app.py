@@ -55,7 +55,7 @@ from tcal.ui.screens.search import SearchScreen
 from tcal.ui.screens.sync_log import SyncLogScreen
 from tcal.ui.state import AppState, ViewMode, add_months
 from tcal.ui.sync_status import SyncState, SyncStatus
-from tcal.ui.theme import PALETTES, make_theme
+from tcal.ui.theme import PALETTES, harmonize, make_theme
 from tcal.ui.undo import UndoHistory, UndoStep
 from tcal.ui.widgets.calendar_list import CalendarList
 from tcal.ui.widgets.minical import MiniCal
@@ -170,8 +170,9 @@ class TcalApp(App[None]):
         return next((c for c in self._calendars if c.id == calendar_id), None)
 
     def calendar_color(self, calendar_id: str) -> str:
+        """The calendar's colour, harmonised with the theme (see ``theme.harmonize``)."""
         calendar = self.calendar(calendar_id)
-        return calendar.color if calendar else self.palette.foreground1
+        return harmonize(calendar.color, self.palette) if calendar else self.palette.foreground1
 
     def occurrences(self, start: date, end: date) -> list[Occurrence]:
         """Occurrences of visible calendars in the days [start, end), sorted by start."""

@@ -13,16 +13,16 @@ from tcal.providers.base import ConflictError
 from tcal.tz import local_zone
 
 CALENDARS = [
-    Calendar("work", "Work", "#5E81AC"),
-    Calendar("personal", "Personal", "#A3BE8C"),
-    Calendar("family", "Family", "#D08770"),
-    Calendar("sport", "Sport", "#B48EAD"),
-    Calendar("holidays", "Holidays", "#BF616A", readonly=True),
+    Calendar("work", "Work", "#7AA2F7"),
+    Calendar("personal", "Personal", "#9ECE6A"),
+    Calendar("family", "Family", "#FF9E64"),
+    Calendar("sport", "Sport", "#BB9AF7"),
+    Calendar("holidays", "Holidays", "#F7768E", readonly=True),
 ]
 
 
 NEW_YORK = ZoneInfo("America/New_York")
-FEED = Calendar(SUBSCRIPTION_PREFIX + "demo", "Team events", "#88C0D0", readonly=True)
+FEED = Calendar(SUBSCRIPTION_PREFIX + "demo", "Team events", "#7DCFFF", readonly=True)
 
 
 class FakeProvider:

@@ -561,12 +561,26 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   narrowest day column's width and collapses a cluster with a block under `MIN_WIDTH`.
 - **Text:** a block's lines go only on rows that no block drawn above it covers, so a covered
   title moves below its cover (one free row: compact "HH:MM title"). Replaces `_place_time`.
-- **Look:** fills are the calendar colour at `ALPHA` 0.35 over whatever is below (grid
-  background or the lower block; the cursor stays hidden under events), `SELECTED_ALPHA` 0.6 plus
-  the `▌` accent for the selected one; text uses `text_on(fill)`, the title bold. Hour lines
-  (`╌`) and the now line show through in a blended tone (text covers them). Corners are rounded
-  with quarter blocks `▗▖▝▘` (`▐…▌` on one-row events) in the fill over the colour below, only on
-  blank corner cells, so no row or text cell is lost (a title filling the width keeps a square
-  corner). The left text pad doubles as the corner cell.
+- **Look:** fills are the calendar colour at `ALPHA` over whatever is below (grid
+  background or the lower block; the cursor stays hidden under events), `SELECTED_ALPHA` for the
+  selected one; text uses `text_on(fill)`, the title bold. Hour lines (`╌`) show through faintly
+  (`HOUR_ALPHA`), the now line clearly (text covers them). *Superseded (ui-colors):* the
+  quarter-block rounded corners looked stair-stepped; every event now has a thin accent bar `▎`
+  in its calendar colour on its left edge (`▌` in the text colour when selected); the left text
+  pad is that bar's cell. Corners are plain square: `╭╮╰╯` are thin lines and cannot round a
+  filled cell, so a clean rounded look (like the pane borders) is not achievable.
 - **Picking:** the cursor selects the deepest block at its slot (side by side: the left one);
   clicks hit the topmost block under the pointer; n/p order is unchanged (by start).
+
+## Colour polish (ui-colors)
+
+- **Calendar colours:** `theme.harmonize(color, palette)` (applied in `app.calendar_color`, the one
+  place views get a calendar's colour) keeps the hue but clamps HLS lightness to a band per
+  background (dark 0.62–0.78, light 0.38–0.52) and caps saturation (0.9 / 0.7), so arbitrary
+  iCloud colours sit calmly with the theme. Demo calendars use Tokyo Night accents.
+- **One event look:** `theme.ALPHA`/`SELECTED_ALPHA`/`EDGE`/`SELECTED_EDGE` are shared by timed
+  blocks, all-day bars (Day/Week strip) and month-view bars: translucent fill + accent bar,
+  never an opaque fill.
+- **Quieter chrome:** hour lines are the divider colour at `LINE_ALPHA` over the background; the
+  cursor slot is `primary` at `CURSOR_ALPHA` (not solid); the status bar's help chip is neutral
+  (`foreground2` on `background3`), leaving `primary` for the mode chip and active view.

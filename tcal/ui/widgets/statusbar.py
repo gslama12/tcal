@@ -56,7 +56,7 @@ class StatusBar(TcalWidget):
         if pending:
             right.append(f"  ↑{pending}" if short else f"  ↑{pending} pending", style=p.yellow)
         right.append("  ")
-        right.append(f" {help_key} help ", style=f"{p.background1} on {p.secondary}")
+        right.append(f" {help_key} help ", style=f"{p.foreground2} on {p.background3}")
         return right
 
     def _sync_text(self) -> Text:

@@ -61,7 +61,10 @@ class CalendarList(SidebarWidget):
             i, cal = next(calendars)
             shown = cal.id not in hidden
             row = Text()
-            row.append("■ " if shown else "□ ", style=Style(color=cal.color, bold=True))
+            row.append(
+                "■ " if shown else "□ ",
+                style=Style(color=self.tcal.calendar_color(cal.id), bold=True),
+            )
             row.append(cal.name, style=Style(color=p.foreground3 if shown else p.foreground1))
             if cal.subscribed and cal.name in self.tcal.sync_status.failed_feeds:
                 row.append(" ⚠", style=Style(color=p.yellow))

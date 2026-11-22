@@ -9,7 +9,9 @@ from textual import events
 from tcal.store import Store
 from tcal.ui import messages, timepaint
 from tcal.ui.state import ViewMode
+from tcal.ui.theme import EDGE, blend
 from tcal.ui.timelayout import sub_columns
+from tcal.ui.timepaint import CURSOR_ALPHA
 from tcal.ui.widgets import timegrid
 from tcal.ui.widgets.timegrid import AXIS, DayView, TimeGrid, WeekView
 
@@ -131,7 +133,8 @@ async def test_cursor_slot_has_accent_background(app: RecordingApp) -> None:
             for seg in grid.render_line(row)
             if seg.style and seg.style.bgcolor and not seg.text.strip()
         }
-        assert app.palette.primary.lower() in backgrounds
+        p = app.palette
+        assert blend(p.primary, p.background1, CURSOR_ALPHA).lower() in backgrounds
 
 
 async def test_cycle_events_and_open(app: RecordingApp) -> None:
@@ -279,8 +282,9 @@ async def test_overlaps_stack_google_style(
         assert above == (under[0] + 2, under[1])  # indented on top of it
         lines = text(grid)
         y = grid._header_height() + one.top - grid._top_row()
-        assert lines[y][under[0] : above[0]] == "  "  # the covered event shows beside it
-        assert grid.render_line(y).crop(under[0], above[0]).text == "  "
+        # the covered event shows beside it: its accent bar and fill
+        assert lines[y][under[0] : above[0]] == f"{EDGE} "
+        assert grid.render_line(y).crop(under[0], above[0]).text == f"{EDGE} "
         assert "1:1 with Alex" in lines[y] and "Design review" not in lines[y]
 
 
