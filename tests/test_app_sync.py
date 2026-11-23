@@ -16,8 +16,8 @@ from tcal.tz import local_zone
 from tcal.ui.app import TcalApp
 from tcal.ui.screens.event_detail import EventDetail
 from tcal.ui.screens.event_prompt import EventPrompt
+from tcal.ui.screens.prompt import Prompt
 from tcal.ui.screens.search import ResultList
-from tcal.ui.screens.server_changed import ServerChanged
 from tcal.ui.widgets.calendar_list import CalendarList
 from tcal.ui.widgets.schedule_view import ScheduleView
 from tcal.ui.widgets.statusbar import StatusBar
@@ -126,14 +126,14 @@ async def test_saving_over_a_server_change_asks_first(provider: FakeProvider, st
             await _wait_for_sync(app, pilot)
             await pilot.press("enter")
             await pilot.pause()
-            assert isinstance(app.screen, ServerChanged)
+            assert isinstance(app.screen, Prompt)
             await pilot.press(choice)
             await _wait_for_sync(app, pilot)
             if choice == "escape":
                 assert isinstance(app.screen, EventPrompt)  # back to the prompt, input kept
                 assert app.screen.query_one(Input).value.startswith("Mine")
             else:
-                assert not isinstance(app.screen, (EventPrompt, ServerChanged))
+                assert not isinstance(app.screen, (EventPrompt, Prompt))
             if choice == "d":
                 assert provider.events[uid].summary == "Dinner"  # the server's version kept
         assert provider.events[uid].summary == "Mine"  # overwritten, not dropped as a conflict
@@ -198,5 +198,5 @@ async def test_server_changed_names_the_event_and_its_new_title(
         app.screen.query_one(Input).value = "X"
         await pilot.press("enter")
         await pilot.pause()
-        question = str(app.screen.query_one(".question", Static).render())
+        question = str(app.screen.query_one("#question", Static).render())
         assert question == "“Dinner” was changed on the server (now “Dinner server”)."

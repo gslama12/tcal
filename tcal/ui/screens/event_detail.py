@@ -6,8 +6,8 @@ D = duplicate, the cursor up/down keys scroll, esc/q = close; it follows a sync'
 e/x give a notice and keep the detail open.
 ``confirm_delete(app, occ)`` is the one delete flow, also used by the ``x`` key
 in the views: read-only calendars only get a notice; a recurring event asks
-"this event" vs "all events". ``EditScope`` asks the same before editing
-one instance of a series ("this event" vs "all events").
+"this event" vs "all events". ``scope_prompt(verb, occ)`` asks the same before editing,
+moving or resizing one instance of a series.
 """
 
 from datetime import datetime, timedelta
@@ -17,16 +17,16 @@ from zoneinfo import ZoneInfo
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import VerticalScroll
 from textual.keys import format_key
 from textual.screen import ModalScreen
-from textual.widgets import Button, Static
-from textual.widgets.button import ButtonVariant
+from textual.widgets import Static
 
 from tcal import ics, tz
 from tcal.model import Occurrence
 from tcal.repeat import describe_rrule
 from tcal.ui.keys import binding
+from tcal.ui.screens.prompt import Prompt
 
 if TYPE_CHECKING:
     from tcal.ui.app import TcalApp
@@ -112,82 +112,22 @@ def confirm_delete(app: "TcalApp", occ: Occurrence) -> None:
         elif scope == "occurrence":
             app.delete_event(occ.event.uid, occ.event.recurrence_id or occ.start)
 
-    app.push_screen(ConfirmDelete(occ), done)
+    app.push_screen(delete_prompt(occ), done)
 
 
-class ScopeDialog(ModalScreen[Scope | None]):
-    """Asks a question about ``occ``; dismisses with the chosen ``Scope``, None on n/esc."""
-
-    BINDINGS = [
-        Binding(key, f"choose('{key}')", show=False) for key in ("y", "o", "s", "n", "escape")
-    ]
-
-    def __init__(self, occ: Occurrence) -> None:
-        super().__init__()
-        self.occ = occ
-        self.recurring = is_recurring(occ)
-
-    verb = ""
-    variant: ButtonVariant = "primary"  # of the choice buttons
-
-    @property
-    def scopes(self) -> list[tuple[str, Scope, str]]:
-        """(key, result, button label) per choice."""
-        raise NotImplementedError
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="dialog"):
-            on = f" on {self.occ.start.astimezone(tz.local_zone()):%a %-d %b}"
-            question = f"{self.verb} “{self.occ.summary}”{on if self.recurring else ''}?"
-            yield Static(Text(question, style="bold"))
-            with Horizontal(id="buttons"):
-                for key, _, label in self.scopes:
-                    yield Button(label, id=key, variant=self.variant)
-                yield Button("Cancel (n)", id="n")
-
-    def action_choose(self, key: str) -> None:
-        """Dismiss with the choice for ``key``; n/esc/unknown keys cancel."""
-        choices = {k: scope for k, scope, _ in self.scopes}
-        if key in choices or key in ("n", "escape"):
-            self.dismiss(choices.get(key))
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.action_choose(event.button.id or "n")
+def scope_prompt(verb: str, occ: Occurrence) -> Prompt[Scope]:
+    """Asks whether to ``verb`` "this event" (the instance ``occ``) or "all events"."""
+    day = f"{occ.start.astimezone(tz.local_zone()):%a %-d %b}"
+    return Prompt[Scope](
+        f"{verb} “{occ.summary}” on {day}?",
+        {"o": ("this event", "occurrence"), "s": ("all events", "series")},
+    )
 
 
-class ConfirmDelete(ScopeDialog):
-    """y = delete (o = this event, s = all events for repeating events), n/esc = cancel."""
-
-    verb = "Delete"
-    variant = "error"
-
-    @property
-    def scopes(self) -> list[tuple[str, Scope, str]]:
-        if self.recurring:
-            return [("o", "occurrence", "This event (o)"), ("s", "series", "All events (s)")]
-        return [("y", "series", "Delete (y)")]
-
-
-class EditScope(ScopeDialog):
-    """Before editing an instance of a series: o = this event, s = all events, n/esc = cancel."""
-
-    verb = "Edit"
-
-    @property
-    def scopes(self) -> list[tuple[str, Scope, str]]:
-        return [("o", "occurrence", "This event (o)"), ("s", "series", "All events (s)")]
-
-
-class MoveScope(EditScope):
-    """Before moving an instance of a series: o = this event, s = all events."""
-
-    verb = "Move"
-
-
-class ResizeScope(EditScope):
-    """Before moving the start/end of an instance of a series."""
-
-    verb = "Resize"
+def delete_prompt(occ: Occurrence) -> Prompt[Scope]:
+    if is_recurring(occ):
+        return scope_prompt("Delete", occ)
+    return Prompt[Scope](f"Delete “{occ.summary}”?", {"y": ("yes", "series")}, ("n", "no"))
 
 
 class EventDetail(ModalScreen[None]):

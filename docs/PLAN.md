@@ -57,7 +57,7 @@ tcal/
     state.py         immutable AppState (day, view, hidden calendars)
     keys.py          binding(action): Binding.id == [keys] action
     editing.py       Editor: event prompt, yank/paste/duplicate, moves, resizes
-    undo.py          UndoHistory; clipboard.py: pure event transforms
+    undo.py          UndoHistory (undo + redo); clipboard.py: pure event transforms
     timelayout.py    time-grid geometry; timepaint.py: pure painting; canvas.py; calgrid.py
     sync_status.py   SyncStatus for the status bar
     theme.py         palette (todooit look: dark bg1/bg2/bg3, fg1-3, accent colors), Textual Theme
@@ -73,12 +73,13 @@ tcal/
       minimonth.py, day_cursor.py, base.py  shared view helpers
       statusbar.py   mode / sync status / hints (todooit-like bar)
     screens/
+      main.py        the base screen (no tab focus cycling)
       event_prompt.py  create/edit by typing one line, live preview card (NL1)
-      server_changed.py  "changed on the server: overwrite / discard?"
       event_detail.py  modal: view event, e=edit, x=delete
       help.py        keybinding list
       goto.py        jump to date prompt (parser: `tcal/dates.py`)
       search.py      search events in cache
+      prompt.py      the one y/n / scope question box
 tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
 ```
 
@@ -101,12 +102,12 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
   day gets shorter than the grid.
 - **D6 Keybinds:** vim-like, all configurable in `[keys]` of config.toml (action -> list of keys).
   Current defaults (`tcal/default_config.toml`, README table): h/j/k/l move cursor,
-  H/L prev/next period, t today, d/w/m/Y/s day/week/month/year/schedule view, +/- (or
-  ctrl+up/down) zoom, enter open, n/N next/prev event, v grid mode (E1), a/o new event, A quick add, e edit,
-  x delete, u undo, y yank, p/P paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too),
+  H/L prev/next period, t today, d/w/m/Y/s day/week/month/year/schedule view, +/- zoom,
+  enter open, n/N next/prev event, v grid mode (E1), a/i new event, A quick add, e edit,
+  x delete, u undo, ctrl+r redo, y yank, p paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too),
   , . end and ; : start earlier/later (R1), f flash
   jump (day/week), g goto date, / search, r sync, c focus calendar list, M focus mini month, space
-  toggle calendar, tab mark event (batch copy, B1), shift+tab cycle focus,
+  toggle calendar, tab mark event (batch copy, B1),
   b sidebar, ? help, q quit, ctrl+s save, esc cancel. (Originally `y` = year view and `dd`
   delete: see S2, Y1.)
 - **D7 Mouse:** click date in minical, click calendar checkbox, click view tabs,
@@ -126,9 +127,9 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
 - Flash jump (`f`, day/week): `tcal/ui/flash.py` (pure: targets from the `GridFrame`, labels,
   overlay over the painted lines; `timepaint` untouched). todooit's alphabet and red labels, but
   labels mix single keys and pairs (prefix-free) so the targets nearest the cursor get one key;
-  targets are events (incl. all-day bars) plus each column's hours, and half hours at ≥2
-  rows/hour. While labels are up the grid's `on_key` swallows every key; a non-label key
-  cancels and is used up (as in todooit).
+  targets are events (incl. all-day bars) plus each column's grid-mode slots (G3). While labels
+  are up the grid's `on_key` swallows every key; a non-label key cancels and is used up (as in
+  todooit).
 
 ## Work packages (≈ issues)
 
@@ -403,7 +404,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **Y3 QA3 fixes (feat-g1):** views keep their pick by `Occurrence.key` (uid + start) and
   re-resolve it after a reload, so a sync's new etag no longer drops or swaps the selection.
   Default move keys are now **`J`/`K` (±15 min) and `<`/`>` (±1 day)**, `ctrl+j/k/h/l` stay as
-  extras (`ctrl+h` arrives as backspace without the kitty protocol; tmux often takes ctrl+hjkl).
+  extras (`ctrl+h` arrives as backspace without the kitty protocol, see K5; tmux often takes ctrl+hjkl).
   An override moves without `MoveScope`; the scope answered for a series holds while the same
   occurrence keeps moving (`_move_run`, cleared by any other change). Paste/duplicate toast
   "Pasted “X” to Sun 22 · <calendar if different> · u undo".
@@ -573,7 +574,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   title moves below its cover (one free row: compact "HH:MM title"). Replaces `_place_time`.
 - **Look:** fills are the calendar colour at `ALPHA` over the plain grid background (the
   cursor stays hidden under events); a block fully replaces
-  a lower one, so overlapping colours never mix (nomix; it used to blend over the lower block); text colours: see "Colour polish". Hour lines (`╌`) show through faintly
+  a lower one, so overlapping colours never mix (nomix; it used to blend over the lower block); text colours: see "Colour polish". Hour lines (`▔`, see "Cell alignment") show through faintly
   (`HOUR_ALPHA`), the now line clearly (text covers them). *Superseded (ui-colors):* the
   quarter-block rounded corners looked stair-stepped; every event now has a thin accent bar `▎`
   in its calendar colour on its left edge; the left text
@@ -615,6 +616,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **B2 Tab:** `focus_next` is now `shift+tab` (described "Cycle panes"; Textual's screen binds
   shift+tab to focus-previous first, which cycles just as well). Quick add's "full form" key
   is a fixed `tab` (it was `[keys] focus_next`; like its fixed enter).
+  *`focus_next` is gone, see K2.*
 - **B3 Yank/paste:** `y` with marks copies the marked events still shown (by start) and clears
   the marks; `Editor.yanked` is a list. `p` with several: the earliest lands on the selected
   day, the others keep their day offsets, times of day and durations (all-day included); each
@@ -636,7 +638,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   `app.set_grid_mode`), shared by day and week; the status bar badge reads "WEEK · GRID".
 - **E2 Event mode details:** no slot cursor is drawn (`GridFrame.cursor_rows` empty, placed
   at the selected event so flash labels still count from there); the view scrolls the selected
-  event's block into view. `a`/`o` (and enter with nothing selected): a new event at the
+  event's block into view. `a`/`i` (and enter with nothing selected): a new event at the
   selected timed event's end, else at the next full hour; `p`: at the selected timed event's
   start (`TimeGrid.paste_at`), else on the day. Flash: event label selects (mode unchanged),
   slot label switches to grid mode at that slot. Clicks are unchanged in both modes.
@@ -659,12 +661,54 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **G1 Slots:** grid mode's cursor is a slot of `[view] grid_step` minutes (15, 30, 60; default
   60; supersedes H2/E1's 15 min): `j`/`k` move by it, the highlight covers it, new events and
   pastes start on it. Only the display snaps (`TimeGrid._slot_of`): `_cursor_min` keeps the exact
-  time until the cursor moves, so entering grid mode floors it to the slot (10:50 → 10:00), and
-  a flash to a half-hour label lands on its hour. Rows longer than the step (15 min at 2
-  rows/hour) are the slots themselves, as before. `GridFrame.cursor_minute` is the axis label.
+  time until the cursor moves, so entering grid mode floors it to the slot (10:50 → 10:00).
+  Rows longer than the step (15 min at 2 rows/hour) are the slots themselves, as before.
+  `GridFrame.cursor_minute` is the axis label.
 - **G2** A picked event that starts in the slot stays selected even where its block rounds to
   the next row (10:50 at 2 rows/hour). Event mode keeps 15-min precision (double-click at 07:30
   still makes a 07:30 event) and zooming there no longer rounds the remembered time; moving/resizing events stays at 15 min.
+- **G3 Flash (flash-step):** slot labels are exactly grid mode's slots (`TimeGrid._grid_slots`):
+  one per `grid_step` and day, or one per row where rows are longer than the step. Jumping lands
+  on the labelled slot's start. Event labels and their precedence on a shared cell are unchanged.
+
+### Keys & redo (zoom-keys)
+
+- **K1 Fewer / other default keys (user request):** zoom is only `+`/`-` (no ctrl+up/down), paste
+  only `p` (no `P`), new event `a`/`i` (not `o`).
+- **K2 No pane cycling (user request):** the `focus_next` action is removed (a config that still
+  sets it gets the usual unknown-setting error) and `screens/main.MainScreen` drops Textual's
+  built-in tab / shift+tab; panes have their own keys (`c`, `M`, esc). Dialogs keep tab.
+- **K3 Redo:** `[keys] redo = ["ctrl+r"]`, `app.redo()`. `UndoStep` holds both toasts and both
+  selections; undoing or redoing a step captures the current rows first (`UndoStep.inverse`) and
+  pushes that on the other stack. A new change clears the redo stack.
+- **K4 `Store.restore` across calendars:** if the current row is in another calendar than the
+  restored one, its resource is deleted and a new one created (before, the push went to the
+  old calendar's resource): redoing a calendar move, or undoing one already pushed.
+- **K5 ctrl+h:** terminals without the kitty protocol send it as ^H, which Textual reports as
+  backspace, so `move_left` did nothing there. `TcalApp.on_event` turns ^H (not DEL, the real
+  Backspace key) into `ctrl+h` on the main screen. ctrl+non-ASCII keys (`ctrl+ö`) need the
+  kitty protocol.
+
+### Prompts (dialogs)
+
+- **PR1 One prompt:** `screens/prompt.Prompt(question, choices, cancel)` replaces every dialog with
+  buttons (`ScopeDialog`/`ConfirmDelete`/`EditScope`/`MoveScope`/`ResizeScope`, `ConfirmDiscard`,
+  `ServerChanged`): `scope_prompt(verb, occ)` and `delete_prompt` in `event_detail.py`,
+  `discard_prompt` and `server_changed_prompt` in `event_form.py`. A compact box with the question
+  and clickable key hints (todooit asks in its bar; a box was requested). Keys are the old ones
+  (y, o/s, o/d); enter still takes the first choice (bold), esc and n cancel in all of them.
+  Deleting is no longer red. Questions longer than 80 % of the screen's width wrap.
+
+### Cell alignment (align)
+
+- **AL1 Hour lines:** drawn as `▔` on the *top edge* of the hour's first row (was `╌`, mid-row, so a
+  block filling its rows stuck out half a row above the line and ended half a row before the
+  next). An hour's cell is now exactly the rows between two lines, which a 1-hour block and the
+  slot cursor fill; a block's first row shows no line (it is the block's own border).
+- **AL2 Ends of the day:** `row_of(24:00)` is always `total_rows` (with a `day_end` before 24:00 at
+  an uneven fit, late events left a gap row) and no minute before it is past the last row (a
+  23:45 event at 1 row/hour was drawn below the grid). `TimeScale.aligned` rounds ties so that
+  `row_of(0)` is 0 (was -1 for e.g. 08:00–24:00 with a tie).
 
 ### Event prompt (nl-form)
 
@@ -691,4 +735,4 @@ Supersedes the event form (E3 ff.) and the quick-add screen (QA1, QA3): both are
   date, time or `#calendar` keeps the event's; deleting the repeat, `@place` or `// notes`
   removes it. One instance of a series refuses `#calendar` and repeats.
 - **NL4:** `describe_rrule`/`until_date` moved from `event_detail.py` to `tcal/repeat.py`;
-  `ServerChanged` to its own module.
+  `server_changed_prompt` (PR1) now lives in `event_prompt.py`; `discard_prompt` is gone.

@@ -129,7 +129,7 @@ async def test_all_day_slot_and_cancel(make_app, write_config) -> None:
         assert not any(o.summary == "Party" for o in app.occurrences(TODAY, TODAY + DAY))
 
 
-@pytest.mark.parametrize("keys", [("m", "a"), ("Y", "a"), ("c", "a"), ("A",)])
+@pytest.mark.parametrize("keys", [("m", "a"), ("Y", "i"), ("c", "a"), ("A",)])
 async def test_new_event_key_is_timed_at_the_next_hour(make_app, keys) -> None:
     app = make_app()
     async with app.run_test(size=(120, 40)) as pilot:

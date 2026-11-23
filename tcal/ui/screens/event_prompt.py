@@ -10,7 +10,7 @@ An edited event is prefilled as text; what the text has in common with the prefi
 keeps the event's own values (``quickadd.apply``). An event with ``recurrence_id`` is one
 instance of a series: repeat and calendar are fixed; a master with an RRULE edits all events
 (the dates are the first one's). If a sync changed or deleted the event while the prompt was
-open, saving asks ``ServerChanged`` first (overwrite / discard / back to the prompt).
+open, saving asks first (overwrite / discard / back to the prompt).
 """
 
 import re
@@ -32,7 +32,7 @@ from tcal.quickadd import QuickAdd, apply, parse, title_end, to_text
 from tcal.repeat import describe_rrule
 from tcal.tz import local_zone
 from tcal.ui.keys import binding
-from tcal.ui.screens.server_changed import ServerChanged
+from tcal.ui.screens.prompt import Prompt
 
 if TYPE_CHECKING:
     from tcal.ui.app import TcalApp
@@ -86,6 +86,20 @@ def _content(rows: list[Event]) -> list[Event]:
     return [replace(r, etag=None, href=None) for r in rows]
 
 
+def server_changed_prompt(summary: str, now: str | None) -> Prompt[bool]:
+    """At save, the event changed on the server since the prompt opened: overwrite it with
+    the typed version (True), discard that (False) or go back. ``summary``: the event's
+    title when the prompt opened; ``now``: its title on the server (None: deleted)."""
+    if now is None:
+        question = f"“{summary}” was deleted on the server."
+    elif now != summary:
+        question = f"“{summary}” was changed on the server (now “{now}”)."
+    else:
+        question = f"“{summary}” was changed on the server."
+    overwrite = "save again" if now is None else "overwrite"
+    return Prompt(question, {"o": (overwrite, True), "d": ("discard mine", False)}, ("esc", "back"))
+
+
 class EventPrompt(ModalScreen[Event | None]):
     BINDINGS = [
         binding("save", "Save", priority=True),
@@ -112,7 +126,7 @@ class EventPrompt(ModalScreen[Event | None]):
         return cast("TcalApp", self.app)
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="prompt"):
+        with Vertical(id="event-prompt"):
             line = Input(
                 self.text,
                 placeholder="Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal",
@@ -237,7 +251,7 @@ class EventPrompt(ModalScreen[Event | None]):
                 self.dismiss(None)
 
         title = next((r for r in now if r.recurrence_id is None), now[0]).summary if now else None
-        self.app.push_screen(ServerChanged(self.event.summary, title), done)
+        self.app.push_screen(server_changed_prompt(self.event.summary, title), done)
 
     _completion: Completion | None = None
 

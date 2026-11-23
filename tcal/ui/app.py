@@ -13,7 +13,7 @@ Layout::
 Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
 ``set_view()``, ``set_grid_mode()``, ``toggle_calendar()``, ``refresh_data()``, ``current_occurrence()``, ``save_event()``,
-``delete_event()``, ``undo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``, ``sync_log``,
+``delete_event()``, ``undo()``, ``redo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``, ``sync_log``,
 ``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event prompt),
 ``check_writable()``, ``focus_view()``, ``selected_occurrence()``, ``select_in_view()``,
 ``save_events()`` (several as one undo step), ``toggle_mark()``, ``clear_marks()``,
@@ -53,6 +53,7 @@ from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.screens.event_detail import EventDetail, confirm_delete, short_when
 from tcal.ui.screens.goto import GotoScreen
 from tcal.ui.screens.help import HelpScreen
+from tcal.ui.screens.main import MainScreen
 from tcal.ui.screens.search import SearchScreen
 from tcal.ui.screens.sync_log import SyncLogScreen
 from tcal.ui.state import AppState, ViewMode, add_months
@@ -94,6 +95,7 @@ class TcalApp(App[None]):
         binding("edit_event", "Edit event"),
         binding("delete_event", "Delete event"),
         binding("undo", "Undo"),
+        binding("redo", "Redo"),
         binding("yank", "Yank"),
         binding("paste", "Paste"),
         binding("duplicate", "Duplicate"),
@@ -111,7 +113,6 @@ class TcalApp(App[None]):
         binding("sync_log", "Sync log"),
         binding("focus_calendars", "Calendars"),
         binding("focus_minical", "Mini calendar"),
-        binding("focus_next", "Cycle panes"),
         binding("toggle_sidebar", "Sidebar"),
         binding("help", "Help"),
         binding("quit", "Quit"),
@@ -215,30 +216,44 @@ class TcalApp(App[None]):
         self.state = self.state
 
     def save_event(
-        self, event: Event, undo_message: str = "", undo_at: datetime | None = None
+        self,
+        event: Event,
+        undo_message: str = "",
+        redo_message: str = "",
+        undo_at: datetime | None = None,
+        redo_at: datetime | None = None,
     ) -> Event:
         """Create/update an event in the cache, redraw, and push it in the background.
         The undo key takes it back (and toasts ``undo_message``, default: "Undid edit of
         “X”" / "Removed “X”"), then selects the occurrence at ``undo_at`` (default: a
-        single event's old start)."""
+        single event's old start). ``redo_message`` and ``redo_at`` (default: a single
+        event's new start) are the redo key's."""
         before = self.source.rows(event.uid)
         saved = self.source.save_event(event)
         if not undo_message:
             undo_message = (
                 f"Undid edit of “{before[0].summary}”" if before else f"Removed “{event.summary}”"
             )
+        if not redo_message:
+            redo_message = (
+                f"Redid edit of “{event.summary}”" if before else f"Added “{event.summary}” again"
+            )
         if undo_at is None and len(before) == 1 and not before[0].rrule:
             undo_at = before[0].start
-        self.history.push(UndoStep([(event.uid, before)], undo_message, undo_at))
+        if redo_at is None and not saved.rrule:
+            redo_at = saved.start
+        self.history.push(
+            UndoStep([(event.uid, before)], undo_message, redo_message, undo_at, redo_at)
+        )
         self.refresh_data()
         self.request_sync()
         return saved
 
-    def save_events(self, events: list[Event], undo_message: str) -> list[Event]:
+    def save_events(self, events: list[Event], undo_message: str, redo_message: str) -> list[Event]:
         """``save_event`` for several events (distinct uids) as one undo step."""
         changes = [(e.uid, self.source.rows(e.uid)) for e in events]
         saved = [self.source.save_event(e) for e in events]
-        self.history.push(UndoStep(changes, undo_message))
+        self.history.push(UndoStep(changes, undo_message, redo_message, redo_at=saved[0].start))
         self.refresh_data()
         self.request_sync()
         return saved
@@ -258,7 +273,9 @@ class TcalApp(App[None]):
             else:
                 what = f"all “{first.summary}” events"
             at = occurrence if first.rrule else first.start
-            self.history.push(UndoStep([(uid, rows)], f"Restored {what}", at))
+            self.history.push(
+                UndoStep([(uid, rows)], f"Restored {what}", f"Deleted {what} again", at)
+            )
             self.notify(f"Deleted {what} · {self.undo_hint}")
 
     @property
@@ -282,10 +299,21 @@ class TcalApp(App[None]):
 
     def undo(self) -> None:
         """Take back the last create, edit, move or delete (up to ``UNDO_DEPTH`` in turn)."""
-        step = self.history.pop()
-        if step is None:
+        if step := self.history.pop():
+            self.history.push_undone(self._apply(step))
+        else:
             self.notify("Nothing to undo")
-            return
+
+    def redo(self) -> None:
+        """Make the last undone change again (in turn, until there is a new change)."""
+        if step := self.history.pop_undone():
+            self.history.push_redone(self._apply(step))
+        else:
+            self.notify("Nothing to redo")
+
+    def _apply(self, step: UndoStep) -> UndoStep:
+        """Put back the rows of ``step``; returns the step that takes this back."""
+        inverse = step.inverse([(uid, self.source.rows(uid)) for uid, _ in step.changes])
         for uid, rows in reversed(step.changes):
             if rows:
                 self.source.restore(rows)
@@ -296,6 +324,7 @@ class TcalApp(App[None]):
         if step.at is not None:
             self.editor.select_event(step.uid, step.at)
         self.request_sync()
+        return inverse
 
     # ----- event prompt (``Editor``) -------------------------------------
 
@@ -421,6 +450,20 @@ class TcalApp(App[None]):
 
     # ----- layout ---------------------------------------------------------
 
+    async def on_event(self, event: events.Event) -> None:
+        # Terminals without the kitty protocol send ctrl+h as ^H, which Textual calls
+        # backspace (that key sends DEL). In dialogs it stays backspace, for the inputs.
+        if (
+            isinstance(event, events.Key)
+            and (event.key, event.character) == ("backspace", "\x08")
+            and isinstance(self.screen, MainScreen)
+        ):
+            event = events.Key("ctrl+h", event.character)
+        await super().on_event(event)
+
+    def get_default_screen(self) -> MainScreen:
+        return MainScreen(id="_default")
+
     def compose(self) -> ComposeResult:
         with Horizontal(id="body"):
             with Vertical(id="sidebar"):
@@ -544,6 +587,9 @@ class TcalApp(App[None]):
 
     def action_undo(self) -> None:
         self.undo()
+
+    def action_redo(self) -> None:
+        self.redo()
 
     def action_toggle_mark(self) -> None:
         if occ := self._selected():

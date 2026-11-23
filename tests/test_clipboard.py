@@ -3,11 +3,13 @@ from datetime import date, datetime, time, timedelta
 
 import pytest
 from conftest import TODAY
+from textual import events
+from textual.widgets import Input
 
 from tcal.model import Event, Occurrence
 from tcal.tz import local_midnight, local_zone
 from tcal.ui.clipboard import copy_at, shifted
-from tcal.ui.screens.event_detail import MoveScope
+from tcal.ui.screens.prompt import Prompt
 from tcal.ui.widgets.month_view import MonthView
 from tcal.ui.widgets.timegrid import TimeGrid
 
@@ -110,7 +112,7 @@ async def test_paste_in_month_view_uses_the_selected_day(make_app) -> None:
         await pilot.press("p")
         assert app.editor.yanked == []  # nothing to paste yet
         app.query_one("#week", TimeGrid).select(find(app, "Dinner"))
-        await pilot.press("y", "m", "l", "l", "P")
+        await pilot.press("y", "m", "l", "l", "p")
         await pilot.pause()
         day = TODAY + timedelta(2)
         [copy] = named(app, "Dinner", day, 1)
@@ -183,7 +185,7 @@ async def test_move_one_instance_or_the_series(make_app) -> None:
         grid.select(find(app, "Standup"))
         await pilot.press("ctrl+j")
         await pilot.pause()
-        assert isinstance(app.screen, MoveScope)
+        assert isinstance(app.screen, Prompt)
         await pilot.press("o")  # this event
         await pilot.pause()
         starts = {o.start for o in named(app, "Standup", TODAY - timedelta(2), 5)}
@@ -273,13 +275,13 @@ async def test_override_moves_without_asking_and_a_series_run_asks_once(make_app
         await pilot.press("J", "o")  # this event -> an override
         await pilot.press("J")  # no dialog for the override
         await pilot.pause()
-        assert not isinstance(app.screen, MoveScope)
+        assert not isinstance(app.screen, Prompt)
         assert grid.selected is not None and grid.selected.start == at(9, 30)
 
         grid.select(find(app, "Standup", TODAY + timedelta(1)))
         await pilot.press("K", "s", "K")  # all events, then again without asking
         await pilot.pause()
-        assert not isinstance(app.screen, MoveScope)
+        assert not isinstance(app.screen, Prompt)
         starts = {o.start for o in named(app, "Standup", TODAY - timedelta(2), 5)}
         assert at(8, 30, TODAY - timedelta(1)) in starts
 
@@ -325,7 +327,7 @@ async def test_undo_selects_the_restored_event(make_app) -> None:
         assert grid.selected is not None and grid.selected.start == at(18, day=tue)
         await pilot.press("ctrl+l")  # the selection is usable right away
         await pilot.pause()
-        assert isinstance(app.screen, MoveScope)
+        assert isinstance(app.screen, Prompt)
 
         await pilot.press("escape", "m")
         app.select_date(tue)
@@ -337,3 +339,89 @@ async def test_undo_selects_the_restored_event(make_app) -> None:
         await pilot.press("u")
         await pilot.pause()
         assert month.selected is not None and month.selected.start == at(18, day=tue)
+
+
+async def test_redo_makes_undone_changes_again_in_turn(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(140, 50)) as pilot:
+        thu = TODAY + timedelta(1)
+        grid = app.query_one("#week", TimeGrid)
+        grid.select(find(app, "Dinner"))
+        await pilot.press("greater_than_sign")  # to Thu
+        event = find(app, "Dentist").event
+        app.save_event(replace(event, summary="Dentist!"))
+        app.delete_event(find(app, "Dentist!").event.uid)
+        await pilot.press("u", "u", "u")
+        assert find(app, "Dentist") and find(app, "Dinner").start == at(19)
+        await pilot.press("ctrl+r")
+        await pilot.pause()
+        assert find(app, "Dinner", thu).start == at(19, day=thu)
+        assert app.state.day == thu and grid.selected and grid.selected.summary == "Dinner"
+        await pilot.press("ctrl+r")
+        assert find(app, "Dentist!")
+        await pilot.press("ctrl+r", "ctrl+r")  # the delete; then nothing is left
+        assert named(app, "Dentist!", TODAY, 1) == []
+        messages = [str(n.message) for n in app._notifications]
+        for text in (
+            "Redid move of “Dinner”",
+            "Redid edit of “Dentist!”",
+            "Deleted “Dentist!” again",
+            "Nothing to redo",
+        ):
+            assert text in messages
+        await pilot.press("u")  # a redone change can be undone again
+        assert find(app, "Dentist!")
+
+
+async def test_redo_of_a_created_event_and_a_series_move(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(140, 50)) as pilot:
+        grid = app.query_one("#week", TimeGrid)
+        grid.select(find(app, "Dinner"))
+        await pilot.press("D", "u", "ctrl+r")
+        assert len(named(app, "Dinner", TODAY, 7)) == 2
+        grid.select(find(app, "Standup"))
+        await pilot.press("J", "o")  # this event only
+        await pilot.pause()
+        await pilot.press("u", "ctrl+r")
+        assert find(app, "Standup").start == at(9, 15)
+        assert find(app, "Standup", TODAY - timedelta(1)).start == at(9, day=TODAY - timedelta(1))
+
+
+async def test_a_new_change_ends_redo(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(140, 50)) as pilot:
+        grid = app.query_one("#week", TimeGrid)
+        grid.select(find(app, "Dinner"))
+        await pilot.press("D", "u")
+        grid.select(find(app, "Dinner"))
+        await pilot.press("K", "ctrl+r")
+        assert len(named(app, "Dinner", TODAY, 7)) == 1
+        assert "Nothing to redo" in [str(n.message) for n in app._notifications]
+
+
+async def test_ctrl_h_sent_as_backspace_moves_a_day_earlier(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(140, 50)) as pilot:
+        app.query_one("#week", TimeGrid).select(find(app, "Dinner"))
+        app.post_message(events.Key("backspace", "\x7f"))  # the Backspace key
+        await pilot.pause()
+        assert find(app, "Dinner").start == at(19)
+        app.post_message(events.Key("backspace", "\x08"))  # ctrl+h
+        await pilot.pause()
+        tue = TODAY - timedelta(1)
+        assert find(app, "Dinner", tue).start == at(19, day=tue)
+        await pilot.press("slash", *"ab")  # a dialog: still deletes a character
+        app.post_message(events.Key("backspace", "\x08"))
+        await pilot.pause()
+        assert app.screen.query_one(Input).value == "a"
+
+
+async def test_move_keys_can_be_ctrl_and_a_non_ascii_letter(make_app, write_config) -> None:
+    app = make_app(write_config('[keys]\nmove_right = ["ctrl+ö"]\n'))
+    async with app.run_test(size=(140, 50)) as pilot:
+        app.query_one("#week", TimeGrid).select(find(app, "Dinner"))
+        app.post_message(events.Key("ctrl+ö", None))
+        await pilot.pause()
+        thu = TODAY + timedelta(1)
+        assert find(app, "Dinner", thu).start == at(19, day=thu)

@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 from conftest import TODAY
 from textual.containers import VerticalScroll
-from textual.widgets import Button, Static
+from textual.widgets import Static
 
 from tcal import ics, repeat
 from tcal.model import Calendar, Occurrence
@@ -16,11 +16,10 @@ from tcal.tz import local_zone
 from tcal.ui.app import TcalApp
 from tcal.ui.messages import EventSelected
 from tcal.ui.screens.event_detail import (
-    ConfirmDelete,
-    EditScope,
     EventDetail,
     people_text,
 )
+from tcal.ui.screens.prompt import Prompt
 from tcal.ui.widgets.timegrid import TimeGrid
 
 SIZE = (140, 45)
@@ -61,14 +60,14 @@ async def test_delete_single_event_from_detail(make_app) -> None:
         app.post_message(EventSelected(find(app, "Dentist")[0]))
         await pilot.pause()
         await pilot.press("x")
-        assert isinstance(app.screen, ConfirmDelete)
+        assert isinstance(app.screen, Prompt)
         await pilot.press("n")  # cancel keeps it
         assert find(app, "Dentist")
         app.post_message(EventSelected(find(app, "Dentist")[0]))
         await pilot.pause()
         await pilot.press("x", "y")
         assert not find(app, "Dentist")
-        assert not isinstance(app.screen, (ConfirmDelete, EventDetail))
+        assert not isinstance(app.screen, (Prompt, EventDetail))
         assert any(str(n.message) == "Deleted “Dentist” · u undo" for n in app._notifications)
         await pilot.press("u")
         assert find(app, "Dentist")
@@ -86,7 +85,7 @@ async def test_delete_one_occurrence_with_x_in_view(make_app) -> None:
         monday = TODAY - timedelta(days=TODAY.weekday())
         week = find(app, "Standup", days=7, start=monday)
         await pilot.press("x")
-        assert isinstance(app.screen, ConfirmDelete)
+        assert isinstance(app.screen, Prompt)
         await pilot.press("o")
         left = find(app, "Standup", days=7, start=monday)
         assert len(left) == len(week) - 1 and picked.start not in [o.start for o in left]
@@ -119,7 +118,7 @@ async def test_readonly_calendar_cannot_delete(make_app) -> None:
         assert "(read-only)" in text(app, "calendar")
         assert text(app, "hints") == "y copy  esc close"
         await pilot.press("x")
-        assert not isinstance(app.screen, ConfirmDelete)
+        assert not isinstance(app.screen, Prompt)
         assert find(app, "Public holiday", days=30)
         assert any("read-only" in str(n.message) for n in app._notifications)
 
@@ -233,19 +232,20 @@ def test_demo_has_an_invitation_an_alarm_and_another_zone(provider) -> None:
     assert str(events["Call with New York"].start.tzinfo) == "America/New_York"
 
 
-async def test_scope_dialogs_name_the_instance_and_only_delete_is_red(make_app) -> None:
+async def test_scope_prompts_name_the_instance(make_app) -> None:
     app = make_app()
     async with app.run_test(size=SIZE) as pilot:
         app.query_one("#week", TimeGrid).select(find(app, "Standup")[0])
-        for key, dialog, question, variant in (
-            ("e", EditScope, "Edit “Standup” on Wed 18 Nov?", "primary"),
-            ("x", ConfirmDelete, "Delete “Standup” on Wed 18 Nov?", "error"),
+        for key, question in (
+            ("e", "Edit “Standup” on Wed 18 Nov?"),
+            ("x", "Delete “Standup” on Wed 18 Nov?"),
         ):
             await pilot.press(key)
             await pilot.pause()
-            assert isinstance(app.screen, dialog)
-            assert str(app.screen.query_one(Static).render()) == question
-            assert {b.variant for b in app.screen.query("#o, #s").results(Button)} == {variant}
+            assert isinstance(app.screen, Prompt)
+            assert text(app, "question") == question
+            hints = "".join(str(w.render()) for w in app.screen.query("#choices > Static"))
+            assert hints == "o this event · s all events · esc cancel"
             await pilot.press("escape")
 
 

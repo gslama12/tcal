@@ -214,9 +214,11 @@ class Store:
             if unpushed:  # the old resource is still on the server
                 self.db.execute("DELETE FROM ops WHERE uid = ? AND kind = 'create'", (master.uid,))
                 href, etag = master.href, master.etag
-            elif current is not None:
+            elif current is not None and current.calendar_id == master.calendar_id:
                 href, etag = current.href, current.etag
             else:
+                if current is not None:  # back to its other calendar: a delete + a create
+                    self._queue_delete(current)
                 href = etag = None
             self.db.execute("DELETE FROM events WHERE uid = ?", (master.uid,))
             for override in overrides:
