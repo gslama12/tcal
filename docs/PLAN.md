@@ -79,6 +79,7 @@ tcal/
       goto.py        jump to date prompt (parser: `tcal/dates.py`)
       search.py      search events in cache
       quick_add.py   one-line quick add with preview
+      prompt.py      the one y/n / scope question box
 tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
 ```
 
@@ -684,3 +685,13 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   backspace, so `move_left` did nothing there. `TcalApp.on_event` turns ^H (not DEL, the real
   Backspace key) into `ctrl+h` on the main screen. ctrl+non-ASCII keys (`ctrl+ö`) need the
   kitty protocol.
+
+### Prompts (dialogs)
+
+- **PR1 One prompt:** `screens/prompt.Prompt(question, choices, cancel)` replaces every dialog with
+  buttons (`ScopeDialog`/`ConfirmDelete`/`EditScope`/`MoveScope`/`ResizeScope`, `ConfirmDiscard`,
+  `ServerChanged`): `scope_prompt(verb, occ)` and `delete_prompt` in `event_detail.py`,
+  `discard_prompt` and `server_changed_prompt` in `event_form.py`. A compact box with the question
+  and clickable key hints (todooit asks in its bar; a box was requested). Keys are the old ones
+  (y, o/s, o/d); enter still takes the first choice (bold), esc and n cancel in all of them.
+  Deleting is no longer red. Questions longer than 80 % of the screen's width wrap.

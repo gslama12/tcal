@@ -17,12 +17,9 @@ from tcal.quickadd import QuickAdd
 from tcal.tz import local_midnight
 from tcal.ui.clipboard import STEP, copy_at, instance_of, quarter_step, shifted
 from tcal.ui.screens.event_detail import (
-    EditScope,
-    MoveScope,
-    ResizeScope,
     Scope,
-    ScopeDialog,
     is_recurring,
+    scope_prompt,
     short_when,
     time_range,
 )
@@ -106,7 +103,7 @@ class Editor:
             elif scope == "series":
                 self.edit_event(self._series(occurrence))
 
-        self.app.push_screen(EditScope(occurrence), done)
+        self.app.push_screen(scope_prompt("Edit", occurrence), done)
 
     def form_done(self, event: Event | None, verb: str = "Saved") -> None:
         """Save a new/edited event and toast "<verb> “X” · u undo"; a hidden calendar
@@ -190,7 +187,7 @@ class Editor:
         if not self.app.check_writable(occ.calendar_id):
             return
         back = short_when(occ.start, occ.all_day)
-        self._shift(occ, delta, delta, MoveScope(occ), "move", back)
+        self._shift(occ, delta, delta, "Move", "move", back)
 
     def resize(self, occ: Occurrence, edge: Edge, step: int) -> None:
         """Move the start or end of timed ``occ`` to the next (``step`` 1) / previous (-1)
@@ -206,18 +203,18 @@ class Editor:
         if duration + end_by - start_by < min(STEP, duration):
             self.app.notify("Events are at least 15 min long")
             return
-        self._shift(occ, start_by, end_by, ResizeScope(occ), "resize", time_range(occ))
+        self._shift(occ, start_by, end_by, "Resize", "resize", time_range(occ))
 
     def _shift(
         self,
         occ: Occurrence,
         start_by: timedelta,
         end_by: timedelta,
-        ask: ScopeDialog,
+        verb: str,
         change: str,
         back: str,
     ) -> None:
-        """Shift ``occ``'s start and end. For a series ``ask`` "this event" / "all events",
+        """Shift ``occ``'s start and end. For a series ask (``verb``) "this event" / "all events",
         as for editing; the answer holds while the same occurrence is moved or resized on
         (no other change in between). An override just changes. ``change``
         ("move"/"resize") and ``back`` (the old time) are for the undo and redo toasts."""
@@ -249,7 +246,7 @@ class Editor:
         elif history.move_run is not None and history.move_run[0] == occ.key:
             done(history.move_run[1])
         else:
-            self.app.push_screen(ask, done)
+            self.app.push_screen(scope_prompt(verb, occ), done)
 
     # ----- helpers --------------------------------------------------------
 

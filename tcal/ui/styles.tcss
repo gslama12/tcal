@@ -208,12 +208,12 @@ SearchScreen OptionList {
 
 /* ----- modals (tcal/ui/screens/) ----- */
 
-EventDetail, ScopeDialog, EventForm, ConfirmDiscard, ServerChanged {
+EventDetail, EventForm, Prompt {
     align: center middle;
     background: $background1 60%;
 }
 
-EventDetail #dialog, ScopeDialog #dialog, ConfirmDiscard #dialog, ServerChanged #dialog {
+EventDetail #dialog {
     width: 60;
     height: auto;
     max-height: 80%;
@@ -244,14 +244,34 @@ EventDetail #dialog {
     scrollbar-size-vertical: 1;
 }
 
-ScopeDialog #buttons, ConfirmDiscard #buttons, ServerChanged #buttons {
-    height: auto;
-    margin-top: 1;
+/* y/n and scope questions (tcal/ui/screens/prompt.py) */
 
-    Button {
-        margin-right: 1;
-        &:focus { text-style: bold underline; }  /* not reverse: readable on any variant */
+#prompt {
+    width: auto;
+    max-width: 80%;
+    height: auto;
+    background: $background2;
+    border: $border_type $primary;
+    padding: 0 1;
+
+    #question {
+        width: auto;
+        max-width: 100%;
+        text-style: bold;
     }
+
+    #choices {
+        width: auto;
+        height: 1;
+    }
+
+    #choices > Static {
+        width: auto;
+        color: $foreground2;
+    }
+
+    #choices > Hint.-default, #choices > Hint:hover { color: $foreground3; text-style: bold; }
+    #choices > .separator { color: $foreground1; }
 }
 
 /* event form (tcal/ui/screens/event_form.py) */

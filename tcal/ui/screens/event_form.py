@@ -14,7 +14,7 @@ A series can end on a date (UNTIL) or after a number of times (COUNT).
 Dates accept goto's forms (``fri``, ``tomorrow``, ``24.12.``, ISO). An error on
 save is shown below its field, which is marked; it clears when a field changes.
 If a sync changed or deleted the event while the form was open, saving asks
-``ServerChanged`` first (overwrite / discard / back to the form).
+first (overwrite / discard / back to the form).
 
 """
 
@@ -25,17 +25,17 @@ from typing import TYPE_CHECKING, cast
 
 from textual import on
 from textual.app import ComposeResult
-from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import Button, Checkbox, Input, Label, Select, Static, TextArea
+from textual.widgets import Checkbox, Input, Label, Select, Static, TextArea
 
 from tcal import dates
 from tcal.model import Calendar, Event
 from tcal.tz import local_midnight, local_zone
 from tcal.ui.keys import binding
 from tcal.ui.screens.event_detail import describe_rrule, until_date
+from tcal.ui.screens.prompt import Prompt
 
 if TYPE_CHECKING:
     from tcal.ui.app import TcalApp
@@ -239,59 +239,22 @@ class AllDay(Checkbox):
     BUTTON_INNER = "✓"
 
 
-class ConfirmDiscard(ModalScreen[bool]):
-    """Asks "Discard changes?": y = True, n/esc = False."""
-
-    BINDINGS = [
-        Binding("y", "dismiss(True)", show=False),
-        Binding("n,escape", "dismiss(False)", show=False),
-    ]
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="dialog"):
-            yield Static("Discard changes?", classes="question")
-            with Horizontal(id="buttons"):
-                yield Button("Discard (y)", id="y", variant="error")
-                yield Button("Keep editing (n)", id="n")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.dismiss(event.button.id == "y")
+def discard_prompt() -> Prompt[bool]:
+    return Prompt("Discard changes?", {"y": ("yes", True)}, ("n", "no"))
 
 
-class ServerChanged(ModalScreen[bool | None]):
-    """At save, the event changed (or was deleted) on the server since the form opened:
-    o = overwrite with the form's version (True), d = discard it (False), esc = back."""
-
-    BINDINGS = [
-        Binding("o", "dismiss(True)", show=False),
-        Binding("d", "dismiss(False)", show=False),
-        Binding("escape", "dismiss(None)", show=False),
-    ]
-
-    def __init__(self, summary: str, now: str | None) -> None:
-        """``summary``: the event's title when the form opened; ``now``: its title on
-        the server (None: deleted)."""
-        super().__init__()
-        self.summary = summary
-        self.now = now
-        self.deleted = now is None
-
-    def compose(self) -> ComposeResult:
-        if self.now is None:
-            question = f"“{self.summary}” was deleted on the server."
-        elif self.now != self.summary:
-            question = f"“{self.summary}” was changed on the server (now “{self.now}”)."
-        else:
-            question = f"“{self.summary}” was changed on the server."
-        with Vertical(id="dialog"):
-            yield Static(question, classes="question")
-            with Horizontal(id="buttons"):
-                yield Button("Save again (o)" if self.deleted else "Overwrite (o)", id="o")
-                yield Button("Discard mine (d)", id="d", variant="error")
-                yield Button("Back (esc)", id="back")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.dismiss({"o": True, "d": False}.get(event.button.id or ""))
+def server_changed_prompt(summary: str, now: str | None) -> Prompt[bool]:
+    """At save, the event changed on the server since the form opened: overwrite it with
+    the form's version (True), discard that (False) or go back. ``summary``: the event's
+    title when the form opened; ``now``: its title on the server (None: deleted)."""
+    if now is None:
+        question = f"“{summary}” was deleted on the server."
+    elif now != summary:
+        question = f"“{summary}” was changed on the server (now “{now}”)."
+    else:
+        question = f"“{summary}” was changed on the server."
+    overwrite = "save again" if now is None else "overwrite"
+    return Prompt(question, {"o": (overwrite, True), "d": ("discard mine", False)}, ("esc", "back"))
 
 
 class EventForm(ModalScreen[Event | None]):
@@ -417,7 +380,7 @@ class EventForm(ModalScreen[Event | None]):
                 self.dismiss(None)
 
         title = next((r for r in now if r.recurrence_id is None), now[0]).summary if now else None
-        self.app.push_screen(ServerChanged(self.event.summary, title), done)
+        self.app.push_screen(server_changed_prompt(self.event.summary, title), done)
 
     def action_cancel(self) -> None:
         if not self.edited and self.values() == self.shown:
@@ -428,7 +391,7 @@ class EventForm(ModalScreen[Event | None]):
             if discard:
                 self.dismiss(None)
 
-        self.app.push_screen(ConfirmDiscard(), done)
+        self.app.push_screen(discard_prompt(), done)
 
     def _show_error(self, error: FormError) -> None:
         """Show ``error`` below its field's row and mark and focus the field."""

@@ -9,7 +9,6 @@ from tcal.model import Event
 from tcal.tz import local_midnight, local_zone
 from tcal.ui.messages import NewEventRequested
 from tcal.ui.screens.event_form import (
-    ConfirmDiscard,
     EventForm,
     FormError,
     build_event,
@@ -18,6 +17,7 @@ from tcal.ui.screens.event_form import (
     show_date,
     values_of,
 )
+from tcal.ui.screens.prompt import Prompt
 from tcal.ui.widgets.timegrid import WeekView
 
 
@@ -255,13 +255,13 @@ async def test_esc_asks_before_discarding_changes(make_app) -> None:
         form = app.screen
         await pilot.press(*"Vet", "tab", "escape")
         await pilot.pause()
-        assert isinstance(app.screen, ConfirmDiscard)
+        assert isinstance(app.screen, Prompt)
         await pilot.press("n")
         await pilot.pause()
         assert app.screen is form and form.query_one("#title", Input).value == "Vet"
         await pilot.press("escape", "y")
         await pilot.pause()
-        assert not isinstance(app.screen, (EventForm, ConfirmDiscard))
+        assert not isinstance(app.screen, (EventForm, Prompt))
         assert not any(o.summary == "Vet" for o in app.occurrences(TODAY, TODAY + timedelta(1)))
 
 

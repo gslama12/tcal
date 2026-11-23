@@ -6,7 +6,8 @@ from textual.widgets import Input, Static
 
 from tcal.quickadd import parse
 from tcal.tz import local_midnight, local_zone
-from tcal.ui.screens.event_form import ConfirmDiscard, EventForm
+from tcal.ui.screens.event_form import EventForm
+from tcal.ui.screens.prompt import Prompt
 from tcal.ui.screens.quick_add import QuickAddScreen
 
 # TODAY is Wednesday 2026-11-18
@@ -299,4 +300,4 @@ async def test_quick_add_uses_configured_keys_and_form_asks_before_discarding(
         await pilot.press("A", *"Gym 18h", "tab")
         assert isinstance(app.screen, EventForm)
         await pilot.press("ctrl+g")  # the quick-add text counts as a change
-        assert isinstance(app.screen, ConfirmDiscard)
+        assert isinstance(app.screen, Prompt)
