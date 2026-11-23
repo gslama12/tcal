@@ -55,7 +55,7 @@ url = "https://example.com/team.ics"
         SubscriptionConfig(
             "Holidays", "https://calendars.icloud.com/holidays/us_en.ics", "#BF616A"
         ),
-        SubscriptionConfig("Team", "https://example.com/team.ics", "#8FBCBB"),
+        SubscriptionConfig("Team", "https://example.com/team.ics", "#FF9500"),
     )
 
 

@@ -23,11 +23,13 @@ future_months = 12                     # sync window after today
 name = "tokyo-night"                   # tokyo-night | nord | gruvbox | catppuccin-mocha | catppuccin-latte (light)
 
 # Read-only calendar subscriptions (iCalendar feeds), shown under "Other calendars".
-# Repeat the block for each feed; color is optional.
+# Repeat the block for each feed; color is optional (default: the next of Apple's calendar
+# colors: #FF2968 red, #FF9500 orange, #FFCC00 yellow, #63DA38 green, #1BADF8 blue,
+# #CC73E1 purple, #A2845E brown).
 # [[subscription]]
 # name = "Holidays"
 # url = "webcal://calendars.icloud.com/holidays/us_en.ics"
-# color = "#BF616A"
+# color = "#FF2968"
 
 # action -> list of keys (Textual key names: "plus", "minus", "slash",
 # "question_mark", "ctrl+up", "H" for shift+h, ...). Overriding an action

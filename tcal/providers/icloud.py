@@ -24,6 +24,7 @@ from caldav.lib.error import AuthorizationError, DAVError
 from lxml import etree
 
 from tcal import ics
+from tcal.colors import BLUE
 from tcal.model import Calendar, Event
 from tcal.providers.base import AuthError, ConflictError, ProviderError
 from tcal.tz import utc_stamp
@@ -31,7 +32,6 @@ from tcal.tz import utc_stamp
 log = logging.getLogger(__name__)
 
 ICLOUD_URL = "https://caldav.icloud.com"
-DEFAULT_COLOR = "#5E81AC"
 TIMEOUT = 60  # seconds; caldav's default of 10 is short for a big calendar's REPORT
 CHUNK = timedelta(days=92)  # one REPORT per ~quarter keeps answers of large calendars small
 NS = {"d": "DAV:", "c": "urn:ietf:params:xml:ns:caldav", "a": "http://apple.com/ns/ical/"}
@@ -231,7 +231,7 @@ def _color(text: str | None) -> str:
     """Apple's "#RRGGBBAA" (or "#RRGGBB", "#RGB") as "#RRGGBB"."""
     m = _COLOR.fullmatch((text or "").strip())
     if not m:
-        return DEFAULT_COLOR
+        return BLUE
     rgb = m.group(1) or "".join(c * 2 for c in m.group(3))
     return "#" + rgb.upper()
 

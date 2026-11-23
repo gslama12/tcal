@@ -13,11 +13,11 @@ from pathlib import Path
 from typing import Any
 
 from tcal import paths
+from tcal.colors import APPLE_COLORS
 from tcal.dates import WEEKDAYS
 
 VIEWS = ("day", "week", "month", "year", "schedule")
 SUBSCRIPTION = "subscription"  # [[subscription]]: a list of tables, not a section
-SUBSCRIPTION_COLOR = "#8FBCBB"
 
 
 class ConfigError(ValueError):
@@ -154,7 +154,7 @@ def _subscriptions(values: Any) -> tuple[SubscriptionConfig, ...]:
         url = re.sub(r"^webcals?://", "https://", sub["url"], flags=re.IGNORECASE)
         if not url.lower().startswith(("https://", "http://")):
             raise ConfigError(f"{where}: url must be webcal://, https:// or http://")
-        color = sub.get("color", SUBSCRIPTION_COLOR)
+        color = sub.get("color", APPLE_COLORS[(i - 1) % len(APPLE_COLORS)])
         if not (isinstance(color, str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", color)):
             raise ConfigError(f"{where}: color must be #RRGGBB")
         subs.append(SubscriptionConfig(sub["name"], url, color.upper()))

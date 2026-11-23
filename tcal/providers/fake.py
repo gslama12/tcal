@@ -7,22 +7,22 @@ from zoneinfo import ZoneInfo
 
 import icalendar
 
-from tcal import ics
+from tcal import colors, ics
 from tcal.model import SUBSCRIPTION_PREFIX, Calendar, Event
 from tcal.providers.base import ConflictError
 from tcal.tz import local_zone
 
 CALENDARS = [
-    Calendar("work", "Work", "#7AA2F7"),
-    Calendar("personal", "Personal", "#9ECE6A"),
-    Calendar("family", "Family", "#FF9E64"),
-    Calendar("sport", "Sport", "#BB9AF7"),
-    Calendar("holidays", "Holidays", "#F7768E", readonly=True),
+    Calendar("work", "Work", colors.BLUE),
+    Calendar("personal", "Personal", colors.GREEN),
+    Calendar("family", "Family", colors.ORANGE),
+    Calendar("sport", "Sport", colors.PURPLE),
+    Calendar("holidays", "Holidays", colors.RED, readonly=True),
 ]
 
 
 NEW_YORK = ZoneInfo("America/New_York")
-FEED = Calendar(SUBSCRIPTION_PREFIX + "demo", "Team events", "#7DCFFF", readonly=True)
+FEED = Calendar(SUBSCRIPTION_PREFIX + "demo", "Team events", colors.BROWN, readonly=True)
 
 
 class FakeProvider:
