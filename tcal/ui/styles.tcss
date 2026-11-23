@@ -72,9 +72,10 @@ HelpScreen {
     align: center middle;
     background: $background1 70%;
 
+    /* HelpScreen sets the width: the longest line's. */
     & > #help {
-        width: 90%;
-        max-width: 170;
+        margin: 0 1;
+        max-width: 100%;
         height: auto;
         max-height: 90%;
         background: $background2;
