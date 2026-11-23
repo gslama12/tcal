@@ -14,12 +14,12 @@ Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
 ``set_view()``, ``set_grid_mode()``, ``toggle_calendar()``, ``refresh_data()``, ``current_occurrence()``, ``save_event()``,
 ``delete_event()``, ``undo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``, ``sync_log``,
-``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event form),
+``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event prompt),
 ``check_writable()``, ``focus_view()``, ``selected_occurrence()``, ``select_in_view()``,
 ``save_events()`` (several as one undo step), ``toggle_mark()``, ``clear_marks()``,
 ``marked_occurrences()`` (the tab-marked events for a batch yank).
 
-Editing flows (form, quick add, clipboard, moving, resizing) live in ``tcal.ui.editing.Editor``
+Editing flows (event prompt, clipboard, moving, resizing) live in ``tcal.ui.editing.Editor``
 (``app.editor``), the undo stack in ``tcal.ui.undo`` (``app.history``).
 
 The sidebar hides itself below ``SIDEBAR_MIN_WIDTH`` columns (and again when focus
@@ -90,7 +90,7 @@ class TcalApp(App[None]):
         binding("view_year", "Year", action="set_view('year')"),
         binding("view_schedule", "Schedule", action="set_view('schedule')"),
         binding("new_event", "New event"),
-        binding("quick_add", "Quick add"),
+        binding("quick_add", "New event", action="new_event"),
         binding("edit_event", "Edit event"),
         binding("delete_event", "Delete event"),
         binding("undo", "Undo"),
@@ -297,14 +297,14 @@ class TcalApp(App[None]):
             self.editor.select_event(step.uid, step.at)
         self.request_sync()
 
-    # ----- event form (``Editor``) ---------------------------------------
+    # ----- event prompt (``Editor``) -------------------------------------
 
     def new_event(self, start: date | datetime) -> None:
-        """Open the form for a new event at a time slot (1 h) or on a day (all-day)."""
+        """Open the prompt for a new event at a time slot (1 h) or on a day (all-day)."""
         self.editor.new_event(start)
 
     def edit_event(self, event: Event) -> None:
-        """Open the form for an existing event (a master edits the whole series)."""
+        """Open the prompt for an existing event (a master edits the whole series)."""
         self.editor.edit_event(event)
 
     def edit_occurrence(self, occurrence: Occurrence) -> None:
@@ -544,9 +544,6 @@ class TcalApp(App[None]):
 
     def action_undo(self) -> None:
         self.undo()
-
-    def action_quick_add(self) -> None:
-        self.editor.quick_add()
 
     def action_toggle_mark(self) -> None:
         if occ := self._selected():

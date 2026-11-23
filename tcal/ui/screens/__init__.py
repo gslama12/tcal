@@ -1,1 +1,1 @@
-"""Modal screens (event form, detail, goto, search, help)."""
+"""Modal screens (event prompt, detail, goto, search, help)."""

@@ -76,6 +76,7 @@ class TimeGrid(CalendarView):
         binding("cancel", "Leave grid mode / clear marks"),
         binding("grid_mode", "Grid mode"),
         binding("new_event", "New event"),
+        binding("quick_add", "New event", action="new_event"),
         binding("flash", "Flash"),
     ]
     header_formats: tuple[str, ...] = HEADER_FORMATS

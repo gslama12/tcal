@@ -15,8 +15,9 @@ from tcal.sync import sync_job
 from tcal.tz import local_zone
 from tcal.ui.app import TcalApp
 from tcal.ui.screens.event_detail import EventDetail
-from tcal.ui.screens.event_form import EventForm, ServerChanged
+from tcal.ui.screens.event_prompt import EventPrompt
 from tcal.ui.screens.search import ResultList
+from tcal.ui.screens.server_changed import ServerChanged
 from tcal.ui.widgets.calendar_list import CalendarList
 from tcal.ui.widgets.schedule_view import ScheduleView
 from tcal.ui.widgets.statusbar import StatusBar
@@ -114,24 +115,25 @@ async def test_saving_over_a_server_change_asks_first(provider: FakeProvider, st
         await _wait_for_sync(app, pilot)
         occ = _dinner(app)
         for choice, title in (("d", "Mine"), ("escape", "Mine"), ("o", "Mine")):
-            if not isinstance(app.screen, EventForm):
+            if not isinstance(app.screen, EventPrompt):
                 app.edit_event(_dinner(app).event)
                 await pilot.pause()
-            app.screen.query_one("#title", Input).value = title
+            line = app.screen.query_one(Input)
+            line.value = line.value.replace("Dinner", title)
             uid = occ.event.uid
             provider.update_event(replace(provider.events[uid], location=f"Server {choice}"))
             app.request_sync()
             await _wait_for_sync(app, pilot)
-            await pilot.press("ctrl+s")
+            await pilot.press("enter")
             await pilot.pause()
             assert isinstance(app.screen, ServerChanged)
             await pilot.press(choice)
             await _wait_for_sync(app, pilot)
             if choice == "escape":
-                assert isinstance(app.screen, EventForm)  # back to the form, input kept
-                assert app.screen.query_one("#title", Input).value == "Mine"
+                assert isinstance(app.screen, EventPrompt)  # back to the prompt, input kept
+                assert app.screen.query_one(Input).value.startswith("Mine")
             else:
-                assert not isinstance(app.screen, (EventForm, ServerChanged))
+                assert not isinstance(app.screen, (EventPrompt, ServerChanged))
             if choice == "d":
                 assert provider.events[uid].summary == "Dinner"  # the server's version kept
         assert provider.events[uid].summary == "Mine"  # overwritten, not dropped as a conflict
@@ -193,8 +195,8 @@ async def test_server_changed_names_the_event_and_its_new_title(
         provider.update_event(replace(provider.events[uid], summary="Dinner server"))
         app.request_sync()
         await _wait_for_sync(app, pilot)
-        app.screen.query_one("#title", Input).value = "X"
-        await pilot.press("ctrl+s")
+        app.screen.query_one(Input).value = "X"
+        await pilot.press("enter")
         await pilot.pause()
         question = str(app.screen.query_one(".question", Static).render())
         assert question == "“Dinner” was changed on the server (now “Dinner server”)."

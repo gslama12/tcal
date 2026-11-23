@@ -1,5 +1,5 @@
-"""Event editing flows behind TcalApp's keys: the event form (new, quick add,
-edit "this/all events"), the yank/paste/duplicate clipboard (one event, or the
+"""Event editing flows behind TcalApp's keys: the event prompt (new, edit
+"this/all events"), the yank/paste/duplicate clipboard (one event, or the
 tab-marked ones as a batch), moving and resizing events.
 
 ``Editor(app)`` only opens screens and calls the app's data seam
@@ -13,7 +13,6 @@ from uuid import uuid4
 from textual.keys import format_key
 
 from tcal.model import Calendar, Event, Occurrence
-from tcal.quickadd import QuickAdd
 from tcal.tz import local_midnight
 from tcal.ui.clipboard import STEP, copy_at, instance_of, quarter_step, shifted
 from tcal.ui.screens.event_detail import (
@@ -26,8 +25,7 @@ from tcal.ui.screens.event_detail import (
     short_when,
     time_range,
 )
-from tcal.ui.screens.event_form import EventForm
-from tcal.ui.screens.quick_add import Mode, QuickAddScreen
+from tcal.ui.screens.event_prompt import EventPrompt
 from tcal.ui.widgets.timegrid import TimeGrid
 
 if TYPE_CHECKING:
@@ -41,10 +39,10 @@ class Editor:
         self.app = app
         self.yanked: list[Occurrence] = []  # the yank key's copy, by start
 
-    # ----- event form -----------------------------------------------------
+    # ----- event prompt ---------------------------------------------------
 
     def new_event(self, start: date | datetime) -> None:
-        """Open the form for a new event at a time slot (1 h) or on a day (all-day)."""
+        """Open the prompt for a new event at a time slot (1 h) or on a day (all-day)."""
         if isinstance(start, datetime):
             begin, end, all_day = start, start + timedelta(hours=1), False
         else:
@@ -52,44 +50,16 @@ class Editor:
         if not (writable := self._writable()):
             return
         draft = Event(f"{uuid4()}@tcal", self._default(writable).id, "", begin, end, all_day)
-        self.app.push_screen(EventForm(draft, writable, new=True), self.form_done)
-
-    def quick_add(self) -> None:
-        """One-line quick add: enter saves the parsed event, tab opens it in the form."""
-        if not (writable := self._writable()):
-            return
-        default = self._default(writable)
-
-        def done(result: tuple[Mode, QuickAdd] | None) -> None:
-            if result is None:
-                return
-            mode, q = result
-            calendar = next((c for c in writable if c.name == q.calendar), default)
-            event = Event(
-                f"{uuid4()}@tcal",
-                calendar.id,
-                q.summary,
-                q.start,
-                q.end,
-                q.all_day,
-                q.location,
-                rrule=q.rrule,
-            )
-            if mode == "save":
-                self.form_done(event, "Added")
-            else:
-                form = EventForm(event, writable, new=True, edited=True)
-                self.app.push_screen(form, self.form_done)
-
-        readonly = [c.name for c in self.app.calendars() if c.readonly]
-        names = [c.name for c in writable]
-        self.app.push_screen(QuickAddScreen(date.today(), names, default.name, readonly), done)
+        self._open(draft, new=True)
 
     def edit_event(self, event: Event) -> None:
-        """Open the form for an existing event (a master edits the whole series)."""
+        """Open the prompt for an existing event (a master edits the whole series)."""
         if self.app.check_writable(event.calendar_id):
-            form = EventForm(event, self._writable(warn=False), new=False)
-            self.app.push_screen(form, self.form_done)
+            self._open(event, new=False)
+
+    def _open(self, event: Event, new: bool) -> None:
+        prompt = EventPrompt(event, self.app.calendars(), date.today(), new)
+        self.app.push_screen(prompt, self.prompt_done)
 
     def edit_occurrence(self, occurrence: Occurrence) -> None:
         """Edit ``occurrence``; for a series ask "this event" (an override with a
@@ -108,8 +78,8 @@ class Editor:
 
         self.app.push_screen(EditScope(occurrence), done)
 
-    def form_done(self, event: Event | None, verb: str = "Saved") -> None:
-        """Save a new/edited event and toast "<verb> “X” · u undo"; a hidden calendar
+    def prompt_done(self, event: Event | None) -> None:
+        """Save a new/edited event and toast "Saved “X” · u undo"; a hidden calendar
         it lands in is shown again. The event is selected (unless all events of a
         series were edited)."""
         if event is None:
@@ -120,7 +90,7 @@ class Editor:
         saved = self.app.save_event(event)
         if not series_edit:  # (that would jump to the series' first event)
             self.select_event(saved.uid, saved.start)
-        self.app.notify(f"{verb} “{event.summary}” · {self.app.undo_hint}")
+        self.app.notify(f"Saved “{event.summary}” · {self.app.undo_hint}")
 
     # ----- clipboard, moving & resizing ----------------------------------
 
@@ -231,7 +201,7 @@ class Editor:
             else:
                 event = instance_of(occ) if is_recurring(occ) else occ.event
             if (moved := shifted(event, start_by, end_by)) is None:
-                self.app.notify("Change the days of this series in the form", severity="warning")
+                self.app.notify("Change the days of this series by editing it", severity="warning")
                 return
             what = f"all “{occ.summary}” events" if scope == "series" else f"“{occ.summary}”"
             self.app.save_event(moved, f"Undid {undone.format(what)}", occ.start)
@@ -247,12 +217,12 @@ class Editor:
 
     # ----- helpers --------------------------------------------------------
 
-    def _writable(self, warn: bool = True) -> list[Calendar]:
+    def _writable(self) -> list[Calendar]:
         """The writable calendars; none: warn "No writable calendar" (or
         ``app.unsynced_hint()`` while nothing has been synced)."""
         app = self.app
         writable = [c for c in app.calendars() if not c.readonly]
-        if not writable and warn:
+        if not writable:
             if hint := app.unsynced_hint():
                 app.notify(hint, severity="warning")
             else:
