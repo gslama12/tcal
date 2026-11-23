@@ -49,15 +49,15 @@ and edits made offline are queued and pushed later.
   [Typing events](#typing-events).
 - **Yank / paste / duplicate / move / resize** events with the keyboard (`y` `p` `D`, `J` `K`
   `<` `>`) and an **undo** stack (`u`, the last 20 changes; `ctrl+r` redoes).
-- **Resize mode** (`o` on a timed event, week; the status bar shows `RESIZE · END`): `j`/`k`
+- **Resize mode** (`o` on a timed event in the week view; the status bar shows `RESIZE · END`): `j`/`k`
   move its end by 15 min (to the quarter hours), `o` again switches to its start and back, esc
   leaves. The edge being moved is marked; each step can be undone.
-- **Event navigation** (week): the cursor keys jump between events — `j`/`k` the
+- **Event navigation** (week view): the cursor keys jump between events — `j`/`k` the
   previous/next event of the day, `h`/`l` the nearest one on the previous/next day; `a` adds
   a new event right after the selected one, `p` pastes at its time. **Grid mode** (`v`, back
   with `v` or esc; the status bar shows `WEEK · GRID`) moves a 1-hour slot cursor instead
   (`[view] grid_step`: 15, 30 or 60 minutes).
-- **Flash jump** (`f`, week): red labels on every event and every `grid_step` slot
+- **Flash jump** (`f`, week view): red labels on every event and every `grid_step` slot
   (default: each hour) on screen; type one to jump there (an event label selects it, a
   slot label enters grid mode on that slot; nearest get single keys, any other key cancels).
 

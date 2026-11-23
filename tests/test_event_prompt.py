@@ -7,7 +7,7 @@ from textual.widgets import Input, Static
 from tcal.tz import local_midnight, local_zone
 from tcal.ui.messages import NewEventRequested
 from tcal.ui.screens.event_prompt import EventPrompt, when_texts
-from tcal.ui.widgets.timegrid import WeekView
+from tcal.ui.widgets.timegrid import TimeGrid
 
 DAY = timedelta(days=1)
 
@@ -109,7 +109,7 @@ async def test_create_and_select(make_app) -> None:
         await pilot.press(*"QA series weekly @Home #sp", "enter")
         await pilot.pause()
         assert not isinstance(app.screen, EventPrompt)
-        selected = app.query_one(WeekView).selected
+        selected = app.query_one(TimeGrid).selected
         assert selected is not None and selected.summary == "QA series"
         assert (selected.start, selected.calendar_id) == (at(19, day=TODAY + 3 * DAY), "sport")
         assert (selected.event.location, selected.event.rrule) == ("Home", "FREQ=WEEKLY")
@@ -213,7 +213,7 @@ async def test_edit_key_and_read_only(make_app) -> None:
     app = make_app()
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.press("j")
-        occ = app.query_one(WeekView).selected
+        occ = app.query_one(TimeGrid).selected
         assert occ is not None
         await pilot.press("e")
         if occ.event.rrule:
