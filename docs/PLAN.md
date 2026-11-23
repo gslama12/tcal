@@ -568,9 +568,9 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   narrowest day column's width and collapses a cluster with a block under `MIN_WIDTH`.
 - **Text:** a block's lines go only on rows that no block drawn above it covers, so a covered
   title moves below its cover (one free row: compact "HH:MM title"). Replaces `_place_time`.
-- **Look:** fills are the calendar colour at `ALPHA` over whatever is below (grid
-  background or the lower block; the cursor stays hidden under events), `SELECTED_ALPHA` for the
-  selected one; text uses `text_on(fill)`, the title bold. Hour lines (`╌`) show through faintly
+- **Look:** fills are the calendar colour at `ALPHA` over the plain grid background (the
+  cursor stays hidden under events), `SELECTED_ALPHA` for the selected one; a block fully replaces
+  a lower one, so overlapping colours never mix (nomix; it used to blend over the lower block); text uses `text_on(fill)`, the title bold. Hour lines (`╌`) show through faintly
   (`HOUR_ALPHA`), the now line clearly (text covers them). *Superseded (ui-colors):* the
   quarter-block rounded corners looked stair-stepped; every event now has a thin accent bar `▎`
   in its calendar colour on its left edge (`▌` in the text colour when selected); the left text

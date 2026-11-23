@@ -4,14 +4,16 @@ from datetime import datetime, timedelta
 
 import pytest
 from conftest import TODAY, RecordingApp
+from rich.segment import Segment
 from rich.style import Style
 
-from tcal.model import Event
+from tcal.model import Event, Occurrence
 from tcal.providers.fake import FakeProvider
 from tcal.tz import local_zone
 from tcal.ui import messages
 from tcal.ui.theme import ALPHA, CATPPUCCIN_LATTE, EDGE, TOKYO_NIGHT, blend, harmonize
-from tcal.ui.timelayout import Block, sub_columns
+from tcal.ui.timelayout import Block, TimeScale, sub_columns
+from tcal.ui.timepaint import GridFrame, paint
 from tcal.ui.widgets import timegrid
 from tcal.ui.widgets.timegrid import TimeGrid, WeekView
 
@@ -147,11 +149,41 @@ async def test_blocks_are_translucent_with_an_accent_bar(app: RecordingApp) -> N
         char, style = cell(workshop.top + 2, x0 + 1)  # 14:00: an hour row below Coffee
         assert style.bgcolor and style.bgcolor.name == fill.lower()
         assert cell(workshop.top + 2, x1 - 1)[0] == "╌"  # the hour line shows through
-        on_top = blend(personal, fill, ALPHA)  # Coffee over Workshop
+        on_top = blend(personal, p.background1, ALPHA)  # Coffee over Workshop: not mixed
         assert cell(coffee.top + 1, x1 - 2)[1].bgcolor.name == on_top.lower()  # type: ignore[union-attr]
         for row in (workshop.top + 2, workshop.bottom - 1):  # the accent bar, every row
             char, style = cell(row, x0)
             assert char == EDGE and style.color and style.color.name == work.lower()
+
+
+@pytest.mark.parametrize("selected", [False, True])
+@pytest.mark.parametrize("now", ["08:15", "13:30"])  # 13:30: the now line crosses both
+def test_overlapping_colours_do_not_mix(selected: bool, now: str) -> None:
+    """Red over green is painted like red alone, hour and now lines included."""
+    under, over = (
+        Occurrence(Event(cal, cal, cal, at(start), at(end)), at(start), at(end))
+        for cal, start, end in (("green", "12:00", "16:00"), ("red", "13:00", "15:00"))
+    )
+    scale, xs = TimeScale(2), [6, 40]
+    # Side by side below: accent bar and 1-col gap under ``top`` must not show either.
+    below = Block(under, 0, 24, 32, col=0, cols=2)
+    beside = Block(under, 0, 24, 32, col=1, cols=2)
+    top = Block(over, 0, 26, 30)
+
+    def cells(blocks: list[Block]) -> list[list[Segment]]:
+        frame = GridFrame(
+            days=[FRI], xs=xs, scale=scale, top=0, strip_rows=0, bars=[], blocks=blocks,
+            day=FRI, cursor_rows=range(0), selected=over if selected else None, now=at(now),
+            header_formats=("%a",), palette=TOKYO_NIGHT,
+            color={"red": "#F7768E", "green": "#9ECE6A"}.__getitem__,
+        )  # fmt: skip
+        x0, x1 = sub_columns(top, xs)
+        lines = paint(frame, 40, 60)[frame.header + top.top : frame.header + top.bottom]
+        return [list(line.crop(x0, x1).simplify()) for line in lines]
+
+    alone = cells([top])
+    assert cells([below, top]) == alone
+    assert cells([below, beside, top]) == alone
 
 
 def test_blend() -> None:

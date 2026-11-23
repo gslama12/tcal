@@ -203,10 +203,12 @@ def _grid(canvas: Canvas, f: GridFrame, bottom: int) -> None:
                 canvas.chars[y][x] = "●" if x == xs[now_col] else "─"
                 canvas.styles[y][x] = canvas.styles[y][x] + red
 
-    under = [[p.background1] * canvas.width for _ in canvas.chars]  # fill below each cell
+    empty = [list(chars) for chars in canvas.chars]  # the grid without events
+    for block in f.blocks:
+        _gaps(canvas, f, block, bottom)
     for index, block in enumerate(f.blocks):
         rows = _text_rows(f, index, bottom)
-        _block(canvas, f, block, bottom, under, rows, _lines(f, block, len(rows)))
+        _block(canvas, f, block, bottom, empty, rows, _lines(f, block, len(rows)))
     _hidden(canvas, f, bottom)
 
 
@@ -304,54 +306,61 @@ def _text_box(f: GridFrame, block: Block) -> tuple[str, int]:
     return pad, x1 - x0 - len(pad)
 
 
+def _gaps(canvas: Canvas, f: GridFrame, block: Block, bottom: int) -> None:
+    """Blank the cells beside ``block``: no hour or now line there (unless another
+    event, drawn later, shows it)."""
+    x0, x1 = sub_columns(block, f.xs)
+    for row in range(max(block.top, f.top), min(block.bottom, bottom)):
+        y = f.header + row - f.top
+        for x in (x0 - 1, x1):
+            inside = f.xs[block.day] < x < f.xs[block.day + 1]
+            if inside and canvas.chars[y][x] in ("╌", "─"):
+                canvas.chars[y][x] = " "
+
+
 def _block(
     canvas: Canvas,
     f: GridFrame,
     block: Block,
     bottom: int,
-    under: list[list[str]],
+    empty: list[list[str]],
     rows: list[int],
     texts: list[str],
 ) -> None:
-    """Draw ``block`` translucent over what is below (``under``: the fill colour of
-    each cell, updated): hour and now lines show through faintly, an accent bar
-    in the calendar colour marks its left edge, ``texts`` go on ``rows`` (the
-    first, the title, in bold)."""
+    """Draw ``block`` translucent over the empty grid (its chars: ``empty``), replacing
+    any event below so colours never mix: hour and now lines show through faintly,
+    an accent bar in the calendar colour marks its left edge, ``texts`` go on
+    ``rows`` (the first, the title, in bold)."""
     first, last = max(block.top, f.top), min(block.bottom, bottom)
     if first >= last:
         return
     p = f.palette
     selected = f.selected in block.occs
     color = f.color(_shown(f, block).calendar_id)
-    alpha = SELECTED_ALPHA if selected else ALPHA
-    fg = text_on(blend(color, p.background1, alpha), p)
+    bg = blend(color, p.background1, SELECTED_ALPHA if selected else ALPHA)
+    fg = text_on(bg, p)
     x0, x1 = sub_columns(block, f.xs)
-    gaps = [x for x in (x0 - 1, x1) if f.xs[block.day] < x < f.xs[block.day + 1]]
     lines = dict(zip(rows, texts, strict=False))
     title_row = rows[0] if rows else None
     for row in range(first, last):
         y = f.header + row - f.top
-        below = under[y][x0:x1]
-        for x, bg in enumerate((blend(color, c, alpha) for c in below), x0):
-            under[y][x] = bg
-            char = canvas.chars[y][x]
+        for x in range(x0, x1):
+            char = empty[y][x]
             if char in ("╌", "─"):  # hour and now lines show through, in the block's tone
                 line, strength = (fg, HOUR_ALPHA) if char == "╌" else (p.red, NOW_ALPHA)
+                canvas.chars[y][x] = char
                 canvas.styles[y][x] = style(blend(line, bg, strength), bg)
             else:
                 canvas.chars[y][x] = " "
                 canvas.styles[y][x] = style(fg, bg, bold=selected)
-        for x in gaps:  # the gap beside an event stays blank (no hour or now line)
-            if canvas.chars[y][x] in ("╌", "─") and under[y][x] == p.background1:
-                canvas.chars[y][x] = " "
         text = lines.get(row, "")
         canvas.text(y, x0, x1, text)
         for x in range(x0, min(x1, x0 + cell_len(text))):
-            canvas.styles[y][x] = style(fg, under[y][x], bold=selected or row == title_row)
+            canvas.styles[y][x] = style(fg, bg, bold=selected or row == title_row)
         if selected:  # Google-like: a bright accent bar + bold text
-            canvas.text(y, x0, x0 + 1, SELECTED_EDGE, style(p.foreground3, under[y][x0], bold=True))
+            canvas.text(y, x0, x0 + 1, SELECTED_EDGE, style(p.foreground3, bg, bold=True))
         elif x1 - x0 >= 3:
-            canvas.text(y, x0, x0 + 1, EDGE, style(color, under[y][x0], bold=True))
+            canvas.text(y, x0, x0 + 1, EDGE, style(color, bg, bold=True))
 
 
 def _day(fmt: str, day: date) -> str:
