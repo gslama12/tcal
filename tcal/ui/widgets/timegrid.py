@@ -498,9 +498,14 @@ class TimeGrid(CalendarView):
         return occ.start if occ is not None and not is_bar(occ) else self.tcal.state.day
 
     def action_grid_mode(self) -> None:
-        """Toggle grid mode; leaving it selects the event under / nearest the cursor."""
+        """Toggle grid mode: it starts at the selected timed event's end (else at the
+        cursor); leaving it selects the event under / nearest the cursor."""
         if not self.grid_mode:
+            occ = self.selected
             self.tcal.set_grid_mode(True)
+            if occ is not None and not is_bar(occ):
+                self._cursor_min = occ.end.hour * 60 + occ.end.minute
+                self.tcal.select_date(occ.end.date())
             self._show_cursor()
             return
         occ = self.selected or self._nearest(self._cursor_slot)
@@ -671,14 +676,15 @@ class TimeGrid(CalendarView):
         return self._lines[y] if y < len(self._lines) else Strip.blank(self.size.width)
 
     def _event_rows(self) -> range:
-        """Event mode has no slot cursor: an empty range at the selected event (or
-        the cursor minute), where flash labels start counting from."""
+        """Event and resize mode have no slot cursor: an empty range at the selected
+        event (or the cursor minute), where flash labels start counting from."""
         row = self._focus_rows().start
         return range(row, row)
 
     def _frame(self) -> GridFrame:
         days, _, bars = self._load()
         resize = self.tcal.state.resize
+        slot_cursor = self.grid_mode and resize is None  # resizing, the keys move the edge
         return GridFrame(
             days=days,
             xs=self._columns(),
@@ -688,7 +694,7 @@ class TimeGrid(CalendarView):
             bars=bars,
             blocks=self._block_list(),
             day=self.tcal.state.day,
-            cursor_rows=self._cursor_rows() if self.grid_mode else self._event_rows(),
+            cursor_rows=self._cursor_rows() if slot_cursor else self._event_rows(),
             cursor_minute=self._cursor_slot,
             selected=self.selected,
             now=now(),

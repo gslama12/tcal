@@ -24,6 +24,8 @@ AXIS = 6  # width of the time axis: "HH:MM "
 HOUR_ALPHA = 0.1  # hour lines through an event: its text colour over its fill, faint
 NOW_ALPHA = 0.7  # the now line through an event
 CURSOR_ALPHA = 0.45  # the cursor slot: the primary colour over the background
+CURSOR_LEFT, CURSOR_RIGHT = "▐", "▌"  # its sides, on the column's dividers
+CURSOR_EDGE = "▌"  # the accent bar of the selected event inside the cursor slot
 HOUR_LINE = "▔"  # on the top edge of the hour's first row: where its events start
 LINE_ALPHA = 0.6  # the grid's hour lines: the divider colour over the background
 
@@ -55,6 +57,12 @@ class GridFrame:
     def header(self) -> int:
         """Rows above the grid: day header + strip + separator."""
         return 2 + self.strip_rows
+
+    def cursor_colors(self) -> tuple[str, str]:
+        """(fill, text) of the cursor slot, over events too."""
+        p = self.palette
+        fill = blend(p.primary, p.background1, CURSOR_ALPHA)
+        return fill, event_colors(fill, p, True)[1]
 
     def now_row(self) -> int:
         return self.scale.row_of(self.now.hour * 60 + self.now.minute)
@@ -212,7 +220,8 @@ def _grid(canvas: Canvas, f: GridFrame, bottom: int) -> None:
     divider = style(p.background3, p.background1)
     hour_line = style(blend(p.background3, p.background1, LINE_ALPHA), p.background1)
     label = style(p.foreground1, p.background1)
-    cursor = style(p.foreground3, blend(p.primary, p.background1, CURSOR_ALPHA))
+    cursor_fill, cursor_text = f.cursor_colors()
+    cursor = style(cursor_text, cursor_fill)
     cursor_label = style(p.primary, p.background1, bold=True)
     hour_rows = {scale.row_of(hour * 60): hour for hour in range(24)}
     sel_col = f.days.index(f.day)
@@ -231,7 +240,10 @@ def _grid(canvas: Canvas, f: GridFrame, bottom: int) -> None:
             if hour_start and scale.rows_per_hour >= 2:
                 canvas.fill(y, x + 1, xs[i + 1], hour_line, HOUR_LINE)
         if row in f.cursor_rows:
-            canvas.fill(y, xs[sel_col] + 1, xs[sel_col + 1], cursor)
+            x0, x1 = xs[sel_col], xs[sel_col + 1]
+            canvas.fill(y, x0, x0 + 1, cursor_label, CURSOR_LEFT)
+            canvas.fill(y, x0 + 1, x1, cursor)
+            canvas.fill(y, x1, x1 + 1, cursor_label, CURSOR_RIGHT)
         if now_col is not None and row == f.now_row():
             # ● replaces the column's divider (never covered); events drawn later show
             # the line through, dimmed, and their text covers it. The hour label stays.
@@ -371,20 +383,24 @@ def _block(
     """Draw ``block`` translucent over the empty grid (its chars: ``empty``), replacing
     any event below so colours never mix: hour and now lines show through faintly,
     an accent bar in the calendar colour marks its left edge (the selected block is
-    all in that colour), ``texts`` go on ``rows`` (the first ``titles`` of them in bold)."""
+    all in that colour), ``texts`` go on ``rows`` (the first ``titles`` of them in bold).
+    The cursor slot covers it: there only its text and its accent bar are kept."""
     first, last = max(block.top, f.top), min(block.bottom, bottom)
     if first >= last:
         return
     p = f.palette
     selected = f.selected in block.occs
     color = f.color(_shown(f, block).calendar_id)
-    bg, fg = event_colors(color, p, selected)
-    now_line = fg if selected else p.red  # red may be the fill
+    colors = event_colors(color, p, selected)
+    cursor_rows = f.cursor_rows if f.days[block.day] == f.day else range(0)
     x0, x1 = sub_columns(block, f.xs)
     lines = dict(zip(rows, texts, strict=False))
     title_rows = rows[:titles]
     for row in range(first, last):
         y = f.header + row - f.top
+        at_cursor = row in cursor_rows
+        bg, fg = f.cursor_colors() if at_cursor else colors
+        now_line = fg if selected or at_cursor else p.red  # red may be the fill
         for x in range(x0, x1):
             char = empty[y][x]
             if char == "─" or (char == HOUR_LINE and row > block.top):
@@ -399,8 +415,9 @@ def _block(
         canvas.text(y, x0, x1, text)
         for x in range(x0, min(x1, x0 + cell_len(text))):
             canvas.styles[y][x] = style(fg, bg, bold=row in title_rows)
-        if x1 - x0 >= 3 and not selected:
-            canvas.text(y, x0, x0 + 1, EDGE, style(color, bg, bold=True))
+        if x1 - x0 >= 3 and (at_cursor or not selected):
+            edge = CURSOR_EDGE if selected else EDGE
+            canvas.text(y, x0, x0 + 1, edge, style(color, bg, bold=True))
 
 
 def _day(fmt: str, day: date) -> str:

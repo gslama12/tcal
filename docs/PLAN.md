@@ -773,3 +773,16 @@ Supersedes the event form (E3 ff.) and the quick-add screen (QA1, QA3): both are
   opened the Day view (enter / click on a month or year day, "+N more") goes to that day's week.
 - **ND2 (user request):** `delete_event = ["d"]` (x is unbound; supersedes S2). Older notes above
   that mention day/week or `x` describe the state at their time.
+
+### Grid mode cursor (grid-vis)
+
+- **GV1 Visible over events:** the slot cursor is one rectangle over the whole day column, events
+  included: `CURSOR_ALPHA` fill (opaque, so no mixing with calendar colours), black/white text by
+  contrast, `▐`/`▌` in `primary` on the column's dividers. `_block` paints it: inside the slot an
+  event keeps its text and its accent bar (`▌` the selected one, `▎` the others). Supersedes "the
+  cursor stays hidden under events".
+- **GV2 Start:** `v` with a timed event selected puts the cursor on the slot holding the event's
+  end (as `a` in event mode; past midnight: on the next day, even next week). All-day events and
+  no selection: at the cursor as before. Flash to a slot still goes to that slot.
+- **GV3:** in resize mode no slot cursor is drawn (the keys move the edge, whose highlight it
+  would cover).

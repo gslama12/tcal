@@ -11,7 +11,7 @@ from tcal.store import Store
 from tcal.ui import messages, timepaint
 from tcal.ui.theme import EDGE, blend
 from tcal.ui.timelayout import sub_columns
-from tcal.ui.timepaint import CURSOR_ALPHA, HOUR_LINE
+from tcal.ui.timepaint import CURSOR_ALPHA, CURSOR_EDGE, HOUR_LINE
 from tcal.ui.widgets import timegrid
 from tcal.ui.widgets.timegrid import TimeGrid
 
@@ -310,7 +310,9 @@ async def test_now_line_keeps_event_text(app: RecordingApp) -> None:
         row = next(line for line in text(grid) if line[x0] == "●")
         assert row.startswith("10:00")  # the slot keeps its label; no "10:15" replaces it
         event = row[x0 + 1 : row.index("Design review") + len("Design review")]
-        assert event == " 10:00 Design review"  # text not covered (one free row: time + title)
+        assert (
+            event == f"{CURSOR_EDGE}10:00 Design review"
+        )  # text not covered (one free row: time + title)
         assert "─" in row[row.index("Design review") : x1]  # the line goes on beside the event
 
 
