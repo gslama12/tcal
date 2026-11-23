@@ -28,9 +28,9 @@ uv run ruff check && uv run ruff format --check && uv run mypy
 - `tcal/source.py` — `EventSource`/`StoreSource`: the only way the UI gets data
   (`calendars()`, `occurrences(start_day, end_day)`, `save_event`, `delete_event`).
 - `tcal/ui/app.py` — `TcalApp`: layout, bindings, data seam (incl. `save_event`/
-  `delete_event`/`undo`), sync, state changes, thin `action_*` methods.
+  `delete_event`/`undo`/`redo`), sync, state changes, thin `action_*` methods.
 - `tcal/ui/editing.py` — `Editor` (`app.editor`): event form, quick add, yank/paste/
-  duplicate, moving; `tcal/ui/undo.py` — `UndoHistory` (`app.history`);
+  duplicate, moving; `tcal/ui/undo.py` — `UndoHistory` (undo + redo, `app.history`);
   `tcal/ui/clipboard.py` — pure event transforms (`copy_at`, `shifted`, `instance_of`).
 - `tcal/ui/state.py` — immutable `AppState` (selected `day`, `view`, `hidden_calendars`).
 - `tcal/ui/keys.py` — `binding(action)`: every configurable binding has `id == action`

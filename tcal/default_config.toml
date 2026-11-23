@@ -33,7 +33,7 @@ name = "tokyo-night"                   # tokyo-night | nord | gruvbox | catppucc
 # color = "#FF2968"
 
 # action -> list of keys (Textual key names: "plus", "minus", "slash",
-# "question_mark", "ctrl+up", "H" for shift+h, ...). Overriding an action
+# "question_mark", "ctrl+s", "H" for shift+h, ...). Overriding an action
 # replaces its whole key list.
 [keys]
 cursor_left = ["h", "left"]
@@ -48,23 +48,23 @@ view_week = ["w"]
 view_month = ["m"]
 view_year = ["Y"]
 view_schedule = ["s"]                  # upcoming events as a list
-zoom_in = ["plus", "ctrl+up"]
-zoom_out = ["minus", "ctrl+down"]
+zoom_in = ["plus"]
+zoom_out = ["minus"]
 open = ["enter"]
 next_event = ["n"]                     # day/week/month/schedule: cycle through events in view
 prev_event = ["N"]
-new_event = ["a", "o"]
+new_event = ["a", "i"]
 quick_add = ["A"]                      # one line: "Lunch fri 12-13 @Cafe #work"
 edit_event = ["e"]
 delete_event = ["x"]
 undo = ["u"]                           # take back the last create/edit/move/delete (repeatable)
+redo = ["ctrl+r"]                      # make the last undone change again (repeatable)
 yank = ["y"]                           # copy the selected event
-paste = ["p", "P"]                     # a copy at the cursor slot (day/week) or selected day;
+paste = ["p"]                          # a copy at the cursor slot (day/week) or selected day;
                                        # several copied: the first on the selected day, the rest alongside
 toggle_mark = ["tab"]                  # mark/unmark the selected event; y copies all marked
 duplicate = ["D"]                      # a copy of the selected event on the next day
-# Moves: ctrl+h arrives as backspace in most terminals, and tmux often takes ctrl+h/j/k/l,
-# so the first keys are plain ones; ctrl+h/j/k/l work where the terminal passes them.
+# Moves: tmux often takes ctrl+h/j/k/l, so the first keys are plain ones.
 grid_mode = ["v"]                      # day/week: the cursor keys move a slot cursor (grid_step)
                                        # instead of between events (again or escape: back)
 move_down = ["J", "ctrl+j"]            # selected event 15 min later (day/week)
@@ -85,7 +85,6 @@ sync_log = ["R"]                       # recent sync warnings and errors
 focus_calendars = ["c"]
 focus_minical = ["M"]                  # the mini month: move with the cursor keys, enter jumps
 toggle_calendar = ["space"]           # in the calendar list (enter works too)
-focus_next = ["shift+tab"]             # cycle sidebar panes / main view
 toggle_sidebar = ["b"]
 help = ["question_mark"]
 quit = ["q"]

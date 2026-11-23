@@ -56,7 +56,7 @@ tcal/
     state.py         immutable AppState (day, view, hidden calendars)
     keys.py          binding(action): Binding.id == [keys] action
     editing.py       Editor: form, quick add, yank/paste/duplicate, moves, resizes
-    undo.py          UndoHistory; clipboard.py: pure event transforms
+    undo.py          UndoHistory (undo + redo); clipboard.py: pure event transforms
     timelayout.py    time-grid geometry; timepaint.py: pure painting; canvas.py; calgrid.py
     sync_status.py   SyncStatus for the status bar
     theme.py         palette (todooit look: dark bg1/bg2/bg3, fg1-3, accent colors), Textual Theme
@@ -72,6 +72,7 @@ tcal/
       minimonth.py, day_cursor.py, base.py  shared view helpers
       statusbar.py   mode / sync status / hints (todooit-like bar)
     screens/
+      main.py        the base screen (no tab focus cycling)
       event_form.py  modal: create/edit (title, calendar, date, start, end, all-day, location, notes)
       event_detail.py  modal: view event, e=edit, x=delete
       help.py        keybinding list
@@ -100,12 +101,12 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
   day gets shorter than the grid.
 - **D6 Keybinds:** vim-like, all configurable in `[keys]` of config.toml (action -> list of keys).
   Current defaults (`tcal/default_config.toml`, README table): h/j/k/l move cursor,
-  H/L prev/next period, t today, d/w/m/Y/s day/week/month/year/schedule view, +/- (or
-  ctrl+up/down) zoom, enter open, n/N next/prev event, v grid mode (E1), a/o new event, A quick add, e edit,
-  x delete, u undo, y yank, p/P paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too),
+  H/L prev/next period, t today, d/w/m/Y/s day/week/month/year/schedule view, +/- zoom,
+  enter open, n/N next/prev event, v grid mode (E1), a/i new event, A quick add, e edit,
+  x delete, u undo, ctrl+r redo, y yank, p paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too),
   , . end and ; : start earlier/later (R1), f flash
   jump (day/week), g goto date, / search, r sync, c focus calendar list, M focus mini month, space
-  toggle calendar, tab mark event (batch copy, B1), shift+tab cycle focus,
+  toggle calendar, tab mark event (batch copy, B1),
   b sidebar, ? help, q quit, ctrl+s save, esc cancel. (Originally `y` = year view and `dd`
   delete: see S2, Y1.)
 - **D7 Mouse:** click date in minical, click calendar checkbox, click view tabs,
@@ -402,7 +403,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **Y3 QA3 fixes (feat-g1):** views keep their pick by `Occurrence.key` (uid + start) and
   re-resolve it after a reload, so a sync's new etag no longer drops or swaps the selection.
   Default move keys are now **`J`/`K` (±15 min) and `<`/`>` (±1 day)**, `ctrl+j/k/h/l` stay as
-  extras (`ctrl+h` arrives as backspace without the kitty protocol; tmux often takes ctrl+hjkl).
+  extras (`ctrl+h` arrives as backspace without the kitty protocol, see K5; tmux often takes ctrl+hjkl).
   An override moves without `MoveScope`; the scope answered for a series holds while the same
   occurrence keeps moving (`_move_run`, cleared by any other change). Paste/duplicate toast
   "Pasted “X” to Sun 22 · <calendar if different> · u undo".
@@ -614,6 +615,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **B2 Tab:** `focus_next` is now `shift+tab` (described "Cycle panes"; Textual's screen binds
   shift+tab to focus-previous first, which cycles just as well). Quick add's "full form" key
   is a fixed `tab` (it was `[keys] focus_next`; like its fixed enter).
+  *`focus_next` is gone, see K2.*
 - **B3 Yank/paste:** `y` with marks copies the marked events still shown (by start) and clears
   the marks; `Editor.yanked` is a list. `p` with several: the earliest lands on the selected
   day, the others keep their day offsets, times of day and durations (all-day included); each
@@ -635,7 +637,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   `app.set_grid_mode`), shared by day and week; the status bar badge reads "WEEK · GRID".
 - **E2 Event mode details:** no slot cursor is drawn (`GridFrame.cursor_rows` empty, placed
   at the selected event so flash labels still count from there); the view scrolls the selected
-  event's block into view. `a`/`o` (and enter with nothing selected): a new event at the
+  event's block into view. `a`/`i` (and enter with nothing selected): a new event at the
   selected timed event's end, else at the next full hour; `p`: at the selected timed event's
   start (`TimeGrid.paste_at`), else on the day. Flash: event label selects (mode unchanged),
   slot label switches to grid mode at that slot. Clicks are unchanged in both modes.
@@ -664,3 +666,21 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **G2** A picked event that starts in the slot stays selected even where its block rounds to
   the next row (10:50 at 2 rows/hour). Event mode keeps 15-min precision (double-click at 07:30
   still makes a 07:30 event) and zooming there no longer rounds the remembered time; moving/resizing events stays at 15 min.
+
+### Keys & redo (zoom-keys)
+
+- **K1 Fewer / other default keys (user request):** zoom is only `+`/`-` (no ctrl+up/down), paste
+  only `p` (no `P`), new event `a`/`i` (not `o`).
+- **K2 No pane cycling (user request):** the `focus_next` action is removed (a config that still
+  sets it gets the usual unknown-setting error) and `screens/main.MainScreen` drops Textual's
+  built-in tab / shift+tab; panes have their own keys (`c`, `M`, esc). Dialogs keep tab.
+- **K3 Redo:** `[keys] redo = ["ctrl+r"]`, `app.redo()`. `UndoStep` holds both toasts and both
+  selections; undoing or redoing a step captures the current rows first (`UndoStep.inverse`) and
+  pushes that on the other stack. A new change clears the redo stack.
+- **K4 `Store.restore` across calendars:** if the current row is in another calendar than the
+  restored one, its resource is deleted and a new one created (before, the push went to the
+  old calendar's resource): redoing a calendar move, or undoing one already pushed.
+- **K5 ctrl+h:** terminals without the kitty protocol send it as ^H, which Textual reports as
+  backspace, so `move_left` did nothing there. `TcalApp.on_event` turns ^H (not DEL, the real
+  Backspace key) into `ctrl+h` on the main screen. ctrl+non-ASCII keys (`ctrl+ö`) need the
+  kitty protocol.

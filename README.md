@@ -46,7 +46,7 @@ and edits made offline are queued and pushed later.
 - **Quick add** (`A`): one line like `Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal`.
 - **Yank / paste / duplicate / move / resize** events with the keyboard (`y` `p` `D`, `J` `K`
   `<` `>`; `,` `.` move the end and `;` `:` the start in 15-min steps) and an **undo** stack
-  (`u`, the last 20 changes).
+  (`u`, the last 20 changes; `ctrl+r` redoes).
 - **Event navigation** (day/week): the cursor keys jump between events — `j`/`k` the
   previous/next event of the day, `h`/`l` the nearest one on the previous/next day; `a` adds
   a new event right after the selected one, `p` pastes at its time. **Grid mode** (`v`, back
@@ -167,7 +167,7 @@ next_event = ["ctrl+n"]
 `tokyo-night` with a warning.
 
 **Keys** use Textual key names: `"plus"`, `"minus"`, `"slash"`, `"question_mark"`,
-`"less_than_sign"`, `"ctrl+up"`, `"H"` for shift+h, … Overriding an action replaces its whole
+`"less_than_sign"`, `"ctrl+s"`, `"H"` for shift+h, … Overriding an action replaces its whole
 key list. A key bound to two actions only triggers one of them: tcal warns at startup and
 `tcal config check` lists the conflicts.
 
@@ -198,23 +198,23 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `m` | Month view |
 | `Y` | Year view |
 | `s` | Schedule view (upcoming events) |
-| `+` `ctrl+up` | Zoom in (time grid) |
-| `-` `ctrl+down` | Zoom out (time grid) |
+| `+` | Zoom in (time grid) |
+| `-` | Zoom out (time grid) |
 | `c` | Focus the calendar list |
 | `M` | Focus the mini month (enter jumps to the day) |
 | `space` | Show/hide calendar (in the list) |
-| `shift+tab` | Cycle panes |
 | `b` | Show/hide the sidebar |
 | **Events** | |
 | `⏎` | Open event / else a new event |
-| `a` `o` | New event (time grid: after the selected event / at the grid slot) |
+| `a` `i` | New event (time grid: after the selected event / at the grid slot) |
 | `A` | Quick add (one line) |
 | `e` | Edit event |
 | `x` | Delete event |
 | `u` | Undo the last change |
+| `ctrl+r` | Redo the last undone change |
 | `tab` | Mark / unmark event (several: y copies all, esc clears) |
 | `y` | Copy (yank) event, or all marked events |
-| `p` `P` | Paste at the selected event / grid slot / day (several: from that day on) |
+| `p` | Paste at the selected event / grid slot / day (several: from that day on) |
 | `D` | Duplicate event to the next day |
 | `K` `ctrl+k` | Move event 15 min earlier (time grid) |
 | `J` `ctrl+j` | Move event 15 min later (time grid) |
@@ -235,11 +235,11 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `q` | Quit |
 <!-- keys:end -->
 
-`p` and `P` both paste the same way (there is no "paste before"). `j`/`k` scroll the event
-detail; in the sidebar (`c` calendar list, `M` mini month) the cursor keys move its own
-cursor, esc or a view key returns to the main view. `J`/`K` move and
-`,` `.` `;` `:` resize timed events in the day/week grid only. ctrl+h/j/k/l are extra move keys for
-terminals that pass them through (many send ctrl+h as backspace; tmux often takes them).
+`j`/`k` scroll the event detail; in the sidebar (`c` calendar list, `M` mini month) the cursor
+keys move its own cursor, esc or a view key returns to the main view. `J`/`K` move and
+`,` `.` `;` `:` resize timed events in the day/week grid only. ctrl+h/j/k/l are extra move keys
+(tmux often takes them); ctrl with a letter like `ö` needs a terminal with the kitty keyboard
+protocol.
 The sidebar hides itself below 120 columns (`b` pins your choice).
 
 ## Files
@@ -316,7 +316,8 @@ account (ideally `TCAL_HOME=.tcal` first, so a fresh cache is used):
 - [ ] Yank/paste (`y`, `p`) and duplicate (`D`) → plain copies on the iPhone.
 - [ ] Batch copy: mark a week's events with `tab`, `y`, go to the next week, `p` → all copies on the
   iPhone; `u` removes them all again.
-- [ ] Move an event to another calendar (edit → calendar), then undo it.
+- [ ] Move an event to another calendar (edit → calendar), sync, then undo it, sync, and
+      redo it (`ctrl+r`) → one copy, in the right calendar, each time.
 - [ ] Conflict: change an event on the iPhone, then change it in tcal before syncing → the
       iPhone version wins and tcal doesn't get stuck. With the event form open while the
       iPhone change syncs in, saving asks "overwrite / discard".

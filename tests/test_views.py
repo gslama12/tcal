@@ -142,7 +142,10 @@ async def test_narrow_sidebar_auto_hides_when_focus_leaves(app: RecordingApp) ->
         await pilot.press("escape")
         await pilot.pause()
         assert sidebar.display and isinstance(app.focused, CalendarList)
-        await pilot.press("tab")
+        for key in ("tab", "shift+tab"):  # don't cycle panes
+            await pilot.press(key)
+            assert isinstance(app.focused, CalendarList)
+        await pilot.press("escape")
         await pilot.pause()
         assert not sidebar.display and app.focused is not None
         await pilot.resize_terminal(*SIZE)

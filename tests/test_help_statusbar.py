@@ -56,11 +56,11 @@ async def test_help_hint_is_inside_the_titled_box(make_app) -> None:
 
 
 def test_sections_group_and_keep_unknown_actions() -> None:
-    keys = {"today": ["t"], "zoom_in": ["plus", "ctrl+up"], "new_thing": ["z"]}
+    keys = {"today": ["t"], "zoom_in": ["plus", "z"], "new_thing": ["Z"]}
     assert sections(keys) == [
         ("Navigation", [("t", "Jump to today")]),
-        ("Views", [("+ ctrl+up", "Zoom in (time grid)")]),
-        ("Other", [("z", "New thing")]),
+        ("Views", [("+ z", "Zoom in (time grid)")]),
+        ("Other", [("Z", "New thing")]),
     ]
 
 
