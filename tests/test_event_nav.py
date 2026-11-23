@@ -116,7 +116,7 @@ async def test_enter_and_new_event_in_event_mode(app: RecordingApp) -> None:
         assert isinstance(new, messages.NewEventRequested) and new.start == at("12:00")
         saturday = TODAY + timedelta(days=3)
         await pilot.press("l", "l", "l", "a", "enter")  # Sat: empty, the next full hour
-        await pilot.press("v", "a")  # grid mode: at the cursor slot (kept from Fri's 9:00)
+        await pilot.press("v", "i")  # grid mode: at the cursor slot (kept from Fri's 9:00)
         starts = [m.start for m in app.posted[2:] if isinstance(m, messages.NewEventRequested)]
         assert starts == [at("11:00", saturday)] * 2 + [at("09:00", saturday)]
 

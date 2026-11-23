@@ -50,7 +50,6 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("focus_calendars", "Focus the calendar list"),
         ("focus_minical", "Focus the mini month (enter jumps to the day)"),
         ("toggle_calendar", "Show/hide calendar (in the list)"),
-        ("focus_next", "Cycle panes"),
         ("toggle_sidebar", "Show/hide the sidebar"),
     ],
     "Events": [
@@ -60,6 +59,7 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("edit_event", "Edit event"),
         ("delete_event", "Delete event"),
         ("undo", "Undo the last change"),
+        ("redo", "Redo the last undone change"),
         ("toggle_mark", "Mark / unmark event (several: y copies all, esc clears)"),
         ("yank", "Copy (yank) event, or all marked events"),
         ("paste", "Paste at the selected event / grid slot / day (several: from that day on)"),
