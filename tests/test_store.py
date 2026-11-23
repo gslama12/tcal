@@ -165,3 +165,35 @@ def test_restore_undoes_a_move_to_another_calendar(db: Store) -> None:
     [row] = db.rows("e1")
     assert (row.calendar_id, row.summary, row.href) == ("cal", before[0].summary, "h")
     assert [(op.kind, op.event.calendar_id) for op in db.pending_ops()] == [("update", "cal")]
+
+
+def _moved(db: Store) -> tuple[list[Event], list[Event]]:
+    """Rows of "e1" (on the server in "cal") before and after a move to "other"."""
+    db.upsert_calendars([Calendar("cal", "Cal", "#123456"), Calendar("other", "Other", "#654321")])
+    db.upsert_events("cal", [_event(href="h", etag="1")])
+    before = db.rows("e1")
+    db.save_event(replace(before[0], calendar_id="other"))
+    return before, db.rows("e1")
+
+
+def _ops(db: Store) -> list[tuple[str, str, str | None]]:
+    return [(op.kind, op.event.calendar_id, op.event.href) for op in db.pending_ops()]
+
+
+def test_restore_redoes_a_move_to_another_calendar(db: Store) -> None:
+    before, after = _moved(db)
+    db.restore(before)
+    db.restore(after)
+    assert [r.calendar_id for r in db.rows("e1")] == ["other"]
+    assert _ops(db) == [("delete", "cal", "h"), ("create", "other", None)]
+    db.restore(before)  # and back again
+    assert _ops(db) == [("update", "cal", "h")]
+
+
+def test_restore_undoes_a_pushed_move_to_another_calendar(db: Store) -> None:
+    before, _ = _moved(db)
+    for op in db.pending_ops():
+        db.clear_op(op.id)
+    db.set_remote("e1", "h2", "2")
+    db.restore(before)
+    assert _ops(db) == [("delete", "other", "h2"), ("create", "cal", None)]
