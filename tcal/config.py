@@ -16,6 +16,7 @@ from tcal import paths
 from tcal.colors import APPLE_COLORS
 from tcal.dates import WEEKDAYS
 
+GRID_STEPS = (15, 30, 60)
 VIEWS = ("day", "week", "month", "year", "schedule")
 SUBSCRIPTION = "subscription"  # [[subscription]]: a list of tables, not a section
 
@@ -36,6 +37,7 @@ class ViewConfig:
     day_start: int  # minutes after midnight
     day_end: int  # minutes after midnight, up to 24 * 60
     rows_per_hour: int  # 0 = fit the terminal height
+    grid_step: int  # grid mode's slot in minutes, one of GRID_STEPS
     week_start: int  # 0 = Monday .. 6 = Sunday (date.weekday())
     default_view: str  # one of VIEWS
 
@@ -176,6 +178,8 @@ def _build(data: dict[str, Any]) -> Config:
         raise ConfigError("day_start must be before day_end")
     if not 0 <= view["rows_per_hour"] <= 8:
         raise ConfigError("rows_per_hour must be between 0 and 8")
+    if view["grid_step"] not in GRID_STEPS:
+        raise ConfigError(f"grid_step must be one of {', '.join(map(str, GRID_STEPS))}")
 
     keys = data["keys"]
     for action, value in keys.items():
@@ -188,6 +192,7 @@ def _build(data: dict[str, Any]) -> Config:
             day_start=day_start,
             day_end=day_end,
             rows_per_hour=view["rows_per_hour"],
+            grid_step=int(view["grid_step"]),
             week_start=WEEKDAYS.index(view["week_start"]),
             default_view=view["default_view"],
         ),

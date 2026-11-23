@@ -16,7 +16,8 @@ Cursor and scroll position are stored in minutes so they survive zooming.
 
 Two modes (``state.grid``): in event mode (default) the cursor keys move between the
 events (up/down within the day, left/right to the nearest one on the next day); in
-grid mode (``grid_mode`` key, escape leaves) they move a 15-min slot cursor.
+grid mode (``grid_mode`` key, escape leaves) they move a slot cursor by config
+``grid_step`` minutes (default an hour).
 """
 
 from dataclasses import replace
@@ -33,6 +34,7 @@ from tcal.ui.keys import EVENT_BINDINGS, binding
 from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.state import AppState, ViewMode
 from tcal.ui.timelayout import (
+    MINUTES,
     ZOOMS,
     Bar,
     Block,
@@ -49,7 +51,7 @@ from tcal.ui.widgets.base import CalendarView
 
 MAX_LANES = 3  # all-day strip rows shown at most
 SCROLL_ROWS = 2  # rows per mouse-wheel step
-SLOT_MINUTES = 15  # shortest cursor step (rows of 7.5 min are stepped two at a time)
+SLOT_MINUTES = 15  # event mode: the slot a click or the remembered time falls in
 HEADER_FORMATS = ("%A, {day} %B", "%A {day}", "%a {day}", "{day}")  # widest first
 
 
@@ -81,7 +83,7 @@ class TimeGrid(CalendarView):
     def __init__(self, *, id: str | None = None) -> None:
         super().__init__(id=id)
         self._zoom: int | None = None  # rows per hour; None = fit day_start..day_end
-        self._cursor_min = 0  # cursor slot, minutes after midnight
+        self._cursor_min = 0  # the cursor time (its slot holds it), minutes after midnight
         self._top_min = 0  # first visible grid row, as minutes
         self._picked: Occurrence | None = None  # chosen by n/p or click
         self._data: tuple[list[date], list[Occurrence], list[Bar]] | None = None
@@ -189,22 +191,43 @@ class TimeGrid(CalendarView):
         limit = max(0, scale.total_rows - self._grid_height())
         return min(max(0, scale.row_of(self._top_min)), limit)
 
-    def _slot_rows(self) -> int:
-        """Rows per cursor step: whole rows of at least ``SLOT_MINUTES``."""
-        scale = self.scale
-        return max(1, int(SLOT_MINUTES // scale.per_row)) if scale.even else 1
+    @property
+    def _step(self) -> int:
+        """Minutes per cursor slot."""
+        return self.tcal.config.view.grid_step if self.grid_mode else SLOT_MINUTES
 
-    def _snap(self, row: int) -> int:
-        """The cursor row (a slot start) holding ``row``."""
-        return row - row % self._slot_rows()
+    @property
+    def _row_slots(self) -> bool:
+        """Rows are longer than the step: the slots are the rows."""
+        return self.scale.per_row > self._step
+
+    def _slot_of(self, minute: int) -> int:
+        """Start minute of the slot holding ``minute``."""
+        if self._row_slots:
+            return self.scale.minute_of(self.scale.row_of(minute))
+        return minute - minute % self._step
+
+    def _slot_at(self, row: int) -> int:
+        """Start minute of the slot shown on ``row``."""
+        scale = self.scale
+        if self._row_slots:
+            return scale.minute_of(row)
+        starts = range(0, MINUTES, self._step)
+        return max((m for m in starts if scale.row_of(m) <= row), default=0)
+
+    @property
+    def _cursor_slot(self) -> int:
+        return self._slot_of(self._cursor_min)
 
     def _cursor_row(self) -> int:
-        return self._snap(self.scale.row_of(self._cursor_min))
+        return max(0, self.scale.row_of(self._cursor_slot))
 
     def _cursor_rows(self) -> range:
         """The rows the cursor slot covers."""
-        row = self._cursor_row()
-        return range(row, min(row + self._slot_rows(), self.scale.total_rows))
+        scale, row, end = self.scale, self._cursor_row(), self._cursor_slot + self._step
+        if self._row_slots:
+            return range(row, row + 1)
+        return range(row, scale.row_of(end) if end < MINUTES else scale.total_rows)
 
     def _columns(self) -> list[int]:
         """x of each day column's divider, plus the right edge."""
@@ -221,7 +244,7 @@ class TimeGrid(CalendarView):
     @property
     def cursor_time(self) -> datetime:
         """Start of the cursor slot (local, aware)."""
-        minute = self.scale.minute_of(self._cursor_row())
+        minute = self._cursor_slot
         return datetime.combine(self.tcal.state.day, time(minute // 60, minute % 60), now().tzinfo)
 
     @property
@@ -231,8 +254,9 @@ class TimeGrid(CalendarView):
     @property
     def selected(self) -> Occurrence | None:
         """Event mode: the picked event while it is on the selected day. Grid mode: the
-        picked event if still under the cursor, else the topmost event at the cursor
-        slot (the deepest in the cascade; of side-by-side ones the left)."""
+        picked event if still under the cursor (or starting in its slot, though drawn
+        on the next row), else the topmost event at the cursor slot (the deepest in the
+        cascade; of side-by-side ones the left)."""
         if not self.grid_mode:
             return self._picked if self._picked in self._day_events() else None
         days = self._load()[0]
@@ -249,6 +273,10 @@ class TimeGrid(CalendarView):
         if picked is not None and (
             any(bar.occ == picked for bar in self._bars())
             or any(picked in b.occs for b in at_cursor)
+            or (
+                picked in self._day_events()
+                and self._slot_of(self._span(picked)[0]) == self._cursor_slot
+            )
         ):
             return picked
         return at_cursor[0].occ if at_cursor else None
@@ -387,14 +415,14 @@ class TimeGrid(CalendarView):
         if not self.grid_mode:
             self._step_event(1)
             return
-        row = min(self._cursor_row() + self._slot_rows(), self._snap(self.scale.total_rows - 1))
-        self._move_cursor(self.scale.minute_of(row))
+        row = min(self._cursor_rows().stop, self.scale.total_rows - 1)
+        self._move_cursor(self._slot_at(row))
 
     def action_cursor_up(self) -> None:
         if not self.grid_mode:
             self._step_event(-1)
             return
-        self._move_cursor(self.scale.minute_of(max(self._cursor_row() - self._slot_rows(), 0)))
+        self._move_cursor(self._slot_at(max(self._cursor_row() - 1, 0)))
 
     def action_cursor_left(self) -> None:
         if self.grid_mode:
@@ -444,8 +472,9 @@ class TimeGrid(CalendarView):
         """Toggle grid mode; leaving it selects the event under / nearest the cursor."""
         if not self.grid_mode:
             self.tcal.set_grid_mode(True)
+            self._show_cursor()
             return
-        occ = self.selected or self._nearest(self._cursor_min)
+        occ = self.selected or self._nearest(self._cursor_slot)
         self._picked = occ
         self.tcal.set_grid_mode(False)
         if occ is not None:
@@ -476,10 +505,10 @@ class TimeGrid(CalendarView):
 
     def _set_zoom(self, choice: list[int | None]) -> None:
         if choice:
-            # Keep the shown time if it is a quarter hour; a level that can't show it
+            # Keep the slot shown (grid mode) if it is a quarter hour; a level that can't show it
             # (:20 at 3 rows/hour) doesn't move it, so zooming back returns to it.
-            shown = self.scale.minute_of(self._cursor_row())
-            if shown % SLOT_MINUTES == 0:
+            shown = self._cursor_slot
+            if self.grid_mode and shown % SLOT_MINUTES == 0:
                 self._cursor_min = shown
             self._zoom = choice[0]
             if self._zoom is None:
@@ -544,7 +573,7 @@ class TimeGrid(CalendarView):
                 ),
                 None,
             )
-            self._cursor_min = self.scale.minute_of(self._snap(row))
+            self._cursor_min = self._slot_at(row)
             self._picked = None
             if days[column] != self.tcal.state.day:
                 self.tcal.select_date(days[column])
@@ -586,12 +615,13 @@ class TimeGrid(CalendarView):
             self._redraw()
 
     def _jump(self, target: Target) -> None:
-        """An event label selects the event; a slot label goes to grid mode there."""
+        """An event label selects the event; a slot label goes to grid mode, to the slot
+        holding it."""
         if target.occ is not None:
             self.select(target.occ)
             return
         self.tcal.set_grid_mode(True)
-        self._move_cursor(target.minute)
+        self._move_cursor(self._slot_of(target.minute))
         day = self._load()[0][target.day]
         if day != self.tcal.state.day:
             self.tcal.select_date(day)
@@ -627,6 +657,7 @@ class TimeGrid(CalendarView):
             blocks=self._block_list(),
             day=self.tcal.state.day,
             cursor_rows=self._cursor_rows() if self.grid_mode else self._event_rows(),
+            cursor_minute=self._cursor_slot,
             selected=self.selected,
             now=now(),
             header_formats=self.header_formats,

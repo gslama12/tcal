@@ -11,6 +11,7 @@ password_cmd = ""                      # optional shell command printing the app
 day_start = "06:30"                    # first time shown in day/week view (scroll for earlier)
 day_end = "24:00"                      # last time shown in day/week view
 rows_per_hour = 0                      # time-grid zoom, 1..8; 0 = fit the terminal height
+grid_step = 60                         # grid mode (v): minutes per cursor slot, 15 | 30 | 60
 week_start = "monday"                  # monday .. sunday
 default_view = "week"                  # day | week | month | year | schedule
 
@@ -64,7 +65,7 @@ toggle_mark = ["tab"]                  # mark/unmark the selected event; y copie
 duplicate = ["D"]                      # a copy of the selected event on the next day
 # Moves: ctrl+h arrives as backspace in most terminals, and tmux often takes ctrl+h/j/k/l,
 # so the first keys are plain ones; ctrl+h/j/k/l work where the terminal passes them.
-grid_mode = ["v"]                      # day/week: the cursor keys move a 15-min slot cursor
+grid_mode = ["v"]                      # day/week: the cursor keys move a slot cursor (grid_step)
                                        # instead of between events (again or escape: back)
 move_down = ["J", "ctrl+j"]            # selected event 15 min later (day/week)
 move_up = ["K", "ctrl+k"]              # selected event 15 min earlier (day/week)

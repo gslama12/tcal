@@ -66,6 +66,18 @@ async def test_flash_jumps_to_a_slot_in_another_day(app: RecordingApp) -> None:
         assert grid.cursor_time == at("19:00", TODAY + timedelta(days=2))
 
 
+async def test_flash_to_a_half_hour_lands_on_its_hour(app: RecordingApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        grid = app.query_one(WeekView)
+        await pilot.press("f")
+        wednesday = grid.days().index(TODAY)
+        label = label_of(
+            grid, lambda t: t.occ is None and t.day == wednesday and t.minute == 15 * 60 + 30
+        )
+        await pilot.press(*label)
+        assert app.state.grid and grid.cursor_time == at("15:00")
+
+
 async def test_flash_selects_an_event(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         grid = app.query_one(WeekView)
@@ -96,7 +108,7 @@ async def test_other_keys_cancel_without_acting(app: RecordingApp) -> None:
         await pilot.press("f", "escape")
         assert not grid.flashing and grid.cursor_time == before
         await pilot.press("f", "1", "j")  # "1" cancels (used up); then j moves again
-        assert not grid.flashing and grid.cursor_time == before + timedelta(minutes=30)
+        assert not grid.flashing and grid.cursor_time == before + timedelta(hours=1)
         await pilot.press("f", "w")  # a label letter is not the week-view key now
         assert app.state.view == ViewMode.WEEK
 

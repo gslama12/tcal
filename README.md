@@ -50,10 +50,11 @@ and edits made offline are queued and pushed later.
 - **Event navigation** (day/week): the cursor keys jump between events — `j`/`k` the
   previous/next event of the day, `h`/`l` the nearest one on the previous/next day; `a` adds
   a new event right after the selected one, `p` pastes at its time. **Grid mode** (`v`, back
-  with `v` or esc; the status bar shows `WEEK · GRID`) moves a 15-min slot cursor instead.
+  with `v` or esc; the status bar shows `WEEK · GRID`) moves a 1-hour slot cursor instead
+  (`[view] grid_step`: 15, 30 or 60 minutes).
 - **Flash jump** (`f`, day/week): red labels on every event and hour / half hour on screen;
-  type one to jump there (an event label selects it, a slot label enters grid mode there;
-  nearest get single keys, any other key cancels).
+  type one to jump there (an event label selects it, a slot label enters grid mode
+  on the slot holding that time; nearest get single keys, any other key cancels).
 
 - **Batch copy:** mark events with `tab` (✓; marks stay while you browse), `y` copies them all,
   then `p` on another day pastes them with the same day offsets and times; `u` undoes the paste.
@@ -145,6 +146,7 @@ and keys bound to more than one action.
 day_start = "08:00"        # first time shown in day/week view (scroll for earlier)
 day_end = "20:00"          # last time shown
 rows_per_hour = 4          # zoom 1..8; 0 = fit the terminal height (default)
+grid_step = 30             # grid mode: minutes per cursor slot, 15 | 30 | 60 (default)
 week_start = "sunday"
 default_view = "schedule"  # day | week | month | year | schedule
 
@@ -182,7 +184,7 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `l` `→` | Next day (time grid: its nearest event) / move right |
 | `k` `↑` | Up (time grid: previous event, grid mode: earlier slot) |
 | `j` `↓` | Down (time grid: next event, grid mode: later slot) |
-| `v` | Grid mode: cursor keys move a 15-min slot cursor (again / esc: back) |
+| `v` | Grid mode: cursor keys move a slot cursor (again / esc: back) |
 | `H` | Previous day/week/month/year (schedule: 2 weeks) |
 | `L` | Next day/week/month/year (schedule: 2 weeks) |
 | `t` | Jump to today |
