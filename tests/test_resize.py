@@ -9,7 +9,7 @@ from tcal.model import Event, Occurrence
 from tcal.tz import local_midnight, local_zone
 from tcal.ui.app import TcalApp
 from tcal.ui.clipboard import quarter_step, shifted
-from tcal.ui.screens.event_detail import ResizeScope
+from tcal.ui.screens.prompt import Prompt
 from tcal.ui.widgets.month_view import MonthView
 from tcal.ui.widgets.schedule_view import ScheduleView
 from tcal.ui.widgets.timegrid import TimeGrid
@@ -193,17 +193,17 @@ async def test_series_this_event_or_all_events(make_app) -> None:
         grid.select(find(app, "Standup"))
         await pilot.press("full_stop")
         await pilot.pause()
-        assert isinstance(app.screen, ResizeScope)
+        assert isinstance(app.screen, Prompt)
         await pilot.press("o", "full_stop")  # this event; the override just resizes on
         await pilot.pause()
-        assert not isinstance(app.screen, ResizeScope)
+        assert not isinstance(app.screen, Prompt)
         assert span(app, "Standup") == (start, end + 2 * quarter)
         assert span(app, "Standup", tomorrow)[1] == end + timedelta(1)
 
         grid.select(find(app, "Standup", tomorrow))
         await pilot.press("semicolon", "s", "full_stop")  # all events, asked once
         await pilot.pause()
-        assert not isinstance(app.screen, ResizeScope)
+        assert not isinstance(app.screen, Prompt)
         for day, n in ((yesterday, -1), (tomorrow, 1)):
             by = timedelta(n)
             assert span(app, "Standup", day) == (start + by - quarter, end + by + quarter)

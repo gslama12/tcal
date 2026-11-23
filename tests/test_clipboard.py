@@ -7,7 +7,7 @@ from conftest import TODAY
 from tcal.model import Event, Occurrence
 from tcal.tz import local_midnight, local_zone
 from tcal.ui.clipboard import copy_at, shifted
-from tcal.ui.screens.event_detail import MoveScope
+from tcal.ui.screens.prompt import Prompt
 from tcal.ui.widgets.month_view import MonthView
 from tcal.ui.widgets.timegrid import TimeGrid
 
@@ -183,7 +183,7 @@ async def test_move_one_instance_or_the_series(make_app) -> None:
         grid.select(find(app, "Standup"))
         await pilot.press("ctrl+j")
         await pilot.pause()
-        assert isinstance(app.screen, MoveScope)
+        assert isinstance(app.screen, Prompt)
         await pilot.press("o")  # this event
         await pilot.pause()
         starts = {o.start for o in named(app, "Standup", TODAY - timedelta(2), 5)}
@@ -273,13 +273,13 @@ async def test_override_moves_without_asking_and_a_series_run_asks_once(make_app
         await pilot.press("J", "o")  # this event -> an override
         await pilot.press("J")  # no dialog for the override
         await pilot.pause()
-        assert not isinstance(app.screen, MoveScope)
+        assert not isinstance(app.screen, Prompt)
         assert grid.selected is not None and grid.selected.start == at(9, 30)
 
         grid.select(find(app, "Standup", TODAY + timedelta(1)))
         await pilot.press("K", "s", "K")  # all events, then again without asking
         await pilot.pause()
-        assert not isinstance(app.screen, MoveScope)
+        assert not isinstance(app.screen, Prompt)
         starts = {o.start for o in named(app, "Standup", TODAY - timedelta(2), 5)}
         assert at(8, 30, TODAY - timedelta(1)) in starts
 
@@ -325,7 +325,7 @@ async def test_undo_selects_the_restored_event(make_app) -> None:
         assert grid.selected is not None and grid.selected.start == at(18, day=tue)
         await pilot.press("ctrl+l")  # the selection is usable right away
         await pilot.pause()
-        assert isinstance(app.screen, MoveScope)
+        assert isinstance(app.screen, Prompt)
 
         await pilot.press("escape", "m")
         app.select_date(tue)

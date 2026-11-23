@@ -78,6 +78,7 @@ tcal/
       goto.py        jump to date prompt (parser: `tcal/dates.py`)
       search.py      search events in cache
       quick_add.py   one-line quick add with preview
+      prompt.py      the one y/n / scope question box
 tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
 ```
 
@@ -652,3 +653,13 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   are equal. Unlike moves (a plain ±15 min) the edge snaps to the next/previous **quarter hour**
   (`quarter_step`: 23:59 → 24:00). A shrink below `STEP` (15 min) is refused; growing a shorter
   event is fine. A series' start pushed over midnight shifts its BYDAY days as a move does.
+
+### Prompts (dialogs)
+
+- **PR1 One prompt:** `screens/prompt.Prompt(question, choices, cancel)` replaces every dialog with
+  buttons (`ScopeDialog`/`ConfirmDelete`/`EditScope`/`MoveScope`/`ResizeScope`, `ConfirmDiscard`,
+  `ServerChanged`): `scope_prompt(verb, occ)` and `delete_prompt` in `event_detail.py`,
+  `discard_prompt` and `server_changed_prompt` in `event_form.py`. A compact box with the question
+  and clickable key hints (todooit asks in its bar; a box was requested). Keys are the old ones
+  (y, o/s, o/d); enter still takes the first choice (bold), esc and n cancel in all of them.
+  Deleting is no longer red. Questions longer than 80 % of the screen's width wrap.
