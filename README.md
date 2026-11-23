@@ -45,8 +45,10 @@ and edits made offline are queued and pushed later.
   The detail view shows time zone, guests and their answers, alerts and URL.
 - **Quick add** (`A`): one line like `Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal`.
 - **Yank / paste / duplicate / move / resize** events with the keyboard (`y` `p` `D`, `J` `K`
-  `<` `>`; `,` `.` move the end and `;` `:` the start in 15-min steps) and an **undo** stack
-  (`u`, the last 20 changes; `ctrl+r` redoes).
+  `<` `>`) and an **undo** stack (`u`, the last 20 changes; `ctrl+r` redoes).
+- **Resize mode** (`o` on a timed event, day/week; the status bar shows `RESIZE · END`): `j`/`k`
+  move its end by 15 min (to the quarter hours), `o` again switches to its start and back, esc
+  leaves. The edge being moved is marked; each step can be undone.
 - **Event navigation** (day/week): the cursor keys jump between events — `j`/`k` the
   previous/next event of the day, `h`/`l` the nearest one on the previous/next day; `a` adds
   a new event right after the selected one, `p` pastes at its time. **Grid mode** (`v`, back
@@ -220,14 +222,11 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `J` `ctrl+j` | Move event 15 min later (time grid) |
 | `<` `ctrl+h` | Move event one day earlier |
 | `>` `ctrl+l` | Move event one day later |
-| `,` `shift+up` | End event 15 min earlier (time grid) |
-| `.` `shift+down` | End event 15 min later (time grid) |
-| `;` | Start event 15 min earlier (time grid) |
-| `:` | Start event 15 min later (time grid) |
+| `o` | Resize mode: up/down move the end, again: the start (esc: back) |
 | `/` | Search events |
 | **Event form** | |
 | `ctrl+s` | Save |
-| `esc` | Cancel / close dialog / leave grid mode / clear marks |
+| `esc` | Cancel / close dialog / leave resize, grid mode / clear marks |
 | **App** | |
 | `r` | Sync now |
 | `R` | Sync log (recent warnings and errors) |
@@ -237,7 +236,7 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 
 `j`/`k` scroll the event detail; in the sidebar (`c` calendar list, `M` mini month) the cursor
 keys move its own cursor, esc or a view key returns to the main view. `J`/`K` move and
-`,` `.` `;` `:` resize timed events in the day/week grid only. ctrl+h/j/k/l are extra move keys
+`o` resizes timed events in the day/week grid only. ctrl+h/j/k/l are extra move keys
 (tmux often takes them); ctrl with a letter like `ö` needs a terminal with the kitty keyboard
 protocol.
 The sidebar hides itself below 120 columns (`b` pins your choice).

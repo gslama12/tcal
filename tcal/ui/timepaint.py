@@ -15,6 +15,7 @@ from textual.strip import Strip
 
 from tcal.model import Occurrence
 from tcal.ui.canvas import Canvas, style
+from tcal.ui.state import Edge
 from tcal.ui.theme import EDGE, Palette, blend, event_colors
 from tcal.ui.timelayout import Bar, Block, TimeScale, sub_columns
 from tcal.ui.widgets.base import fit
@@ -47,6 +48,7 @@ class GridFrame:
     palette: Palette
     color: Callable[[str], str]  # calendar id -> colour
     marked: frozenset[tuple[str, datetime]] = frozenset()  # ``Occurrence.key``s with a ✓
+    edge: Edge | None = None  # resize mode: the edge of the selected event it moves
 
     @property
     def header(self) -> int:
@@ -82,6 +84,7 @@ def paint(frame: GridFrame, width: int, height: int) -> list[Strip]:
     _header(canvas, frame)
     _strip(canvas, frame)
     _grid(canvas, frame, frame.bottom(height))
+    _edge(canvas, frame, frame.bottom(height))
     _marks(canvas, frame, frame.bottom(height))
     return canvas.strips()
 
@@ -103,6 +106,38 @@ def _marks(canvas: Canvas, f: GridFrame, bottom: int) -> None:
         if first < min(block.bottom, bottom) and any(o.key in f.marked for o in block.occs):
             x = sub_columns(block, f.xs)[1] - 1
             canvas.text(f.header + first - f.top, x, x + 1, MARK, badge)
+
+
+def _edge(canvas: Canvas, f: GridFrame, bottom: int) -> None:
+    """Resize mode: the selected block's first / last row in bright, with an arrow at its
+    right end (cells another event covers stay as they are)."""
+    occ = f.selected
+    if f.edge is None or occ is None:
+        return
+    p = f.palette
+    fill = style(p.foreground3, event_colors(f.color(occ.calendar_id), p, True)[0]).bgcolor
+    bright = style(p.background1, p.foreground3, bold=True)
+    for block in f.blocks:
+        if occ != block.occ or block.group:
+            continue
+        day = f.days[block.day]
+        here = occ.start.date() == day if f.edge == "start" else occ.end <= _midnight(f, day)
+        row = block.top if f.edge == "start" else block.bottom - 1
+        if not here or not f.top <= row < bottom:
+            continue
+        y, (x0, x1) = f.header + row - f.top, sub_columns(block, f.xs)
+        for x in range(x0, x1):
+            if canvas.styles[y][x].bgcolor == fill:
+                canvas.styles[y][x] = bright
+                if canvas.chars[y][x] in ("╌", "─"):
+                    canvas.chars[y][x] = " "
+        if canvas.styles[y][x1 - 1] == bright and canvas.chars[y][x1 - 1] == " ":
+            canvas.text(y, x1 - 1, x1, "▲" if f.edge == "start" else "▼", bright)
+
+
+def _midnight(f: GridFrame, day: date) -> datetime:
+    """The end of ``day``."""
+    return datetime.combine(day + timedelta(days=1), time(), f.now.tzinfo)
 
 
 def _header(canvas: Canvas, f: GridFrame) -> None:
@@ -146,7 +181,7 @@ def _strip(canvas: Canvas, f: GridFrame) -> None:
     hidden = sum(1 for bar in f.bars if bar.lane >= rows)
     if hidden:
         canvas.text(rows, 0, AXIS, f"+{hidden}", style(p.foreground1, p.background1))
-    period_end = datetime.combine(f.days[-1] + timedelta(days=1), time(), f.now.tzinfo)
+    period_end = _midnight(f, f.days[-1])
     for bar in f.bars:
         if bar.lane >= rows:
             continue

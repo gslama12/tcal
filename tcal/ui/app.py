@@ -12,7 +12,7 @@ Layout::
 
 Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
-``set_view()``, ``set_grid_mode()``, ``toggle_calendar()``, ``refresh_data()``, ``current_occurrence()``, ``save_event()``,
+``set_view()``, ``set_grid_mode()``, ``set_resize()``, ``toggle_calendar()``, ``refresh_data()``, ``current_occurrence()``, ``save_event()``,
 ``delete_event()``, ``undo()``, ``redo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``, ``sync_log``,
 ``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event form),
 ``check_writable()``, ``focus_view()``, ``selected_occurrence()``, ``select_in_view()``,
@@ -47,7 +47,7 @@ from tcal.source import EventSource
 from tcal.sync import SyncSummary
 from tcal.synclog import LogEntry
 from tcal.tz import local_zone
-from tcal.ui.editing import Edge, Editor
+from tcal.ui.editing import Editor
 from tcal.ui.keys import binding, keymap
 from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.screens.event_detail import EventDetail, confirm_delete, short_when
@@ -56,7 +56,7 @@ from tcal.ui.screens.help import HelpScreen
 from tcal.ui.screens.main import MainScreen
 from tcal.ui.screens.search import SearchScreen
 from tcal.ui.screens.sync_log import SyncLogScreen
-from tcal.ui.state import AppState, ViewMode, add_months
+from tcal.ui.state import AppState, Resize, ViewMode, add_months
 from tcal.ui.sync_status import SyncState, SyncStatus
 from tcal.ui.theme import PALETTES, make_theme
 from tcal.ui.undo import UndoHistory, UndoStep
@@ -72,6 +72,8 @@ from tcal.ui.widgets.year_view import YearView
 SIDEBAR_MIN_WIDTH = 120  # terminal columns below which the sidebar starts hidden
 OCC_CACHE_SIZE = 32  # date ranges whose occurrences are kept until the next data refresh
 SELECTING_VIEWS = TimeGrid | MonthView | ScheduleView  # views with a selected event
+# What still works in resize mode (besides ``timegrid.RESIZE_ACTIONS``).
+RESIZE_ACTIONS = {"resize_mode", "undo", "redo", "sync", "help", "quit", "help_quit"}
 SYNC_LOG_SIZE = 200  # warnings/errors kept for the sync log screen
 
 log = logging.getLogger(__name__)
@@ -103,10 +105,7 @@ class TcalApp(App[None]):
         binding("move_up", "Earlier", action="move(-15, 0)"),
         binding("move_left", "Day earlier", action="move(0, -1)"),
         binding("move_right", "Day later", action="move(0, 1)"),
-        binding("start_earlier", "Start earlier", action="resize('start', -1)"),
-        binding("start_later", "Start later", action="resize('start', 1)"),
-        binding("end_earlier", "End earlier", action="resize('end', -1)"),
-        binding("end_later", "End later", action="resize('end', 1)"),
+        binding("resize_mode", "Resize"),
         binding("goto_date", "Go to date"),
         binding("search", "Search"),
         binding("sync", "Sync"),
@@ -412,7 +411,7 @@ class TcalApp(App[None]):
         self.state = replace(self.state, day=day)
 
     def set_view(self, mode: ViewMode | str) -> None:
-        self.state = replace(self.state, view=ViewMode(mode))
+        self.state = replace(self.state, view=ViewMode(mode), resize=None)
 
     def toggle_calendar(self, calendar_id: str) -> None:
         self.state = replace(
@@ -423,6 +422,11 @@ class TcalApp(App[None]):
         """Day/week: the cursor keys move the slot cursor (on) or between events (off)."""
         if self.state.grid != on:
             self.state = replace(self.state, grid=on)
+
+    def set_resize(self, resize: Resize | None) -> None:
+        """Enter resize mode / switch its edge, or leave it (None)."""
+        if self.state.resize != resize:
+            self.state = replace(self.state, resize=resize)
 
     def toggle_mark(self, occ: Occurrence) -> None:
         self.state = replace(self.state, marked=self.state.marked ^ {occ.key})
@@ -527,6 +531,11 @@ class TcalApp(App[None]):
 
     # ----- actions --------------------------------------------------------
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if self.state.resize is not None and isinstance(self.focused, TimeGrid):
+            return action in RESIZE_ACTIONS
+        return super().check_action(action, parameters)
+
     def action_toggle_sidebar(self) -> None:
         self._sidebar_pinned = True
         self._show_sidebar(not self.query_one("#sidebar").display)
@@ -626,9 +635,9 @@ class TcalApp(App[None]):
             return
         self.editor.move(occ, timedelta(days=days, minutes=minutes))
 
-    def action_resize(self, edge: Edge, step: int) -> None:
-        """Move the selected event's start or end by a 15-min ``step`` (timed events in a
-        time grid)."""
+    def action_resize_mode(self) -> None:
+        """Enter resize mode on the selected event (timed, in a time grid), its end first;
+        in the mode: switch between its end and start."""
         occ = self._selected()
         if occ is None:
             return
@@ -636,8 +645,10 @@ class TcalApp(App[None]):
             self.notify("All-day event: only timed events can be resized")
         elif not isinstance(self.focused, TimeGrid):
             self.notify("Resizing works in the day/week view")
-        else:
-            self.editor.resize(occ, edge, step)
+        elif self.state.resize is not None:
+            self.set_resize(self.state.resize.toggled())
+        elif self.check_writable(occ.calendar_id):
+            self.set_resize(Resize(occ.event.uid))
 
     def action_goto_date(self) -> None:
         def jump(day: date | None) -> None:
