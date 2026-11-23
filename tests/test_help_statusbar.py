@@ -4,7 +4,7 @@ from conftest import TODAY
 
 from tcal.model import Event
 from tcal.tz import local_zone
-from tcal.ui.screens.help import GROUPS, HelpScreen, KeyTable, sections, split_columns
+from tcal.ui.screens.help import FRAME, GROUPS, HelpScreen, KeyTable, sections
 from tcal.ui.state import ViewMode
 from tcal.ui.sync_status import SyncState, SyncStatus
 from tcal.ui.widgets.statusbar import StatusBar
@@ -146,62 +146,38 @@ async def test_help_pages_and_jumps(make_app) -> None:
 
 def help_lines(app) -> list[str]:
     table = app.screen.query_one(KeyTable)
-    return [table.render_line(y).text for y in range(table.size.height)]
+    return [table.render_line(y).text.rstrip() for y in range(table.size.height)]
 
 
-def test_split_columns_balances_and_keeps_order() -> None:
-    heights = [14, 14, 21, 4, 6]
-    assert split_columns(heights, 1) == [[0, 1, 2, 3, 4]]
-    assert split_columns(heights, 2) == [[0, 1], [2, 3, 4]]
-    three = split_columns(heights, 3)
-    assert sorted(i for column in three for i in column) == [0, 1, 2, 3, 4]
-    assert max(sum(heights[i] for i in column) for column in three) == 21
-    assert split_columns([5], 2) == [[0], []]
-
-
-async def test_help_is_one_column_when_narrow(make_app) -> None:
-    for width in (70, 80):
-        app = make_app()
-        async with app.run_test(size=(width, 35)) as pilot:
-            await pilot.press("question_mark")
-            await pilot.pause()
-            assert app.screen.query_one("#help").region.width == width * 9 // 10
-            lines = help_lines(app)
-            titles = [line.strip() for line in lines if line.strip() in GROUPS]
-            assert titles == list(GROUPS)  # each on a line of its own
-            panel = app.screen.query_one("#help-panel")
-            await pilot.press("j")
-            await pilot.pause(0.3)
-            assert panel.scroll_y > 0
-            await pilot.press("k")
-            await pilot.pause(0.3)
-            assert panel.scroll_y == 0
-
-
-async def test_help_uses_columns_when_wide(make_app) -> None:
-    for width, count in ((120, 2), (200, 3)):
-        app = make_app()
-        async with app.run_test(size=(width, 50)) as pilot:
-            await pilot.press("question_mark")
-            await pilot.pause()
-            box = app.screen.query_one("#help")
-            assert box.region.width == min(width * 9 // 10, 170)
-            lines = help_lines(app)
-            titles = [line for line in lines if sum(f" {t} " in f" {line} " for t in GROUPS) > 1]
-            assert sum(title in titles[0] for title in GROUPS) == count
-            # All of it is visible, nothing is cut off.
-            assert app.screen.query_one("#help-panel").max_scroll_y == 0
-            words = set(" ".join(lines).split())
-            assert all(set(d.split()) <= words for rows in GROUPS.values() for _, d in rows)
-
-
-async def test_help_relayouts_on_resize(make_app) -> None:
+async def test_help_is_one_column_without_wrapping(make_app) -> None:
     app = make_app()
-    async with app.run_test(size=(200, 35)) as pilot:
+    async with app.run_test(size=(120, 35)) as pilot:
         await pilot.press("question_mark")
         await pilot.pause()
-        wide = app.screen.query_one(KeyTable).size.height
-        await pilot.resize_terminal(80, 35)
+        lines = help_lines(app)
+        assert [line.strip() for line in lines if line.strip() in GROUPS] == list(GROUPS)
+        rows = [description for group in GROUPS.values() for _, description in group]
+        assert len(lines) == len(rows) + 2 * len(GROUPS) - 1  # titles and the rules between them
+        assert all(any(line.endswith(f" {row}") for line in lines) for row in rows)
+        # No wider than its longest line needs.
+        box = app.screen.query_one("#help")
+        panel = app.screen.query_one("#help-panel")
+        longest = max(len(line) for line in lines if not line.endswith("─"))
+        assert box.region.width == longest + FRAME < 120
+        assert panel.max_scroll_x == 0 and panel.max_scroll_y > 0
+
+
+async def test_help_wraps_only_when_narrow(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 35)) as pilot:
+        await pilot.press("question_mark")
         await pilot.pause()
-        assert app.screen.query_one(KeyTable).size.height > wide
-        assert app.screen.query_one("#help-panel").max_scroll_y > 0
+        height = len(help_lines(app))
+        await pilot.resize_terminal(70, 35)
+        await pilot.pause()
+        lines = help_lines(app)
+        assert len(lines) > height  # wrapped, nothing cut off
+        words = set(" ".join(lines).split())
+        assert all(set(d.split()) <= words for rows in GROUPS.values() for _, d in rows)
+        assert app.screen.query_one("#help").region.width <= 70
+        assert app.screen.query_one("#help-panel").max_scroll_x == 0

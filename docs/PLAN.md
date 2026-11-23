@@ -225,9 +225,8 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   sync status, `↑N pending` (new `EventSource.pending_count()` / `Store.pending_count()`), help key.
 - **H2 Help:** `HelpScreen(config.keys)` lists the active keymap grouped by `help.GROUPS`;
   actions not listed there (new `[keys]` entries) appear under "Other" — add them to GROUPS.
-  The box is 90% of the terminal wide (max 170, which gives three readable columns); `KeyColumns`
-  arranges the sections in 1–3 columns (each at least `MIN_COLUMN` wide, sections never split),
-  whichever is shortest.
+  One column; the box is as wide as its longest line needs (`line_width`), so lines wrap only
+  on terminals narrower than that.
 
 ### Goto / search notes (package 5)
 
