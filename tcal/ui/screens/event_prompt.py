@@ -38,8 +38,8 @@ if TYPE_CHECKING:
     from tcal.ui.app import TcalApp
 
 HINTS = (
-    ("Date", "tomorrow · fri · next mon · 24.12. · dec 3-5 · in 2 weeks"),
-    ("Time", "12:30-13:30 · 9am · 14:00 2h · all day"),
+    ("Date", "tom · fri · next mon · in 3d · 24.12. · 24 dec · dec 3-5"),
+    ("Time", "at 1pm · tom 13 · 13.30 · 10-11:30 · 1pm-3 · 14:00 2h · all day"),
     ("Repeat", "every week · every mon, wed until dec · daily 10 times"),
     ("More", '@place · #calendar (tab completes) · // notes · "as typed"'),
 )

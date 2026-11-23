@@ -63,7 +63,7 @@ and edits made offline are queued and pushed later.
 
 - **Batch copy:** mark events with `tab` (✓; marks stay while you browse), `y` copies them all,
   then `p` on another day pastes them with the same day offsets and times; `u` undoes the paste.
-- **Go to date** (`g`: `fri`, `next fri`, `+2w`, `in 3 days`, `24.12.`, `dec 24`, `dec`, `2027`, `2026-12-24`)
+- **Go to date** (`g`: `tom`, `fri`, `next fri`, `+2w`, `in 3 days`, `24.12.`, `dec 24`, `dec`, `2027`, `2026-12-24`)
   and **search** (`/`).
 - **iCloud sync** in the background, offline edits queued, server wins on conflicts;
   read-only **subscriptions** (holidays, sports, …) from any iCalendar URL.
@@ -246,13 +246,21 @@ One line; the pieces may come in any order, the rest is the title. Enter saves, 
 
 | | |
 |---|---|
-| Date | `tomorrow` `fri` `next mon` `24.12.` `dec 24` `2026-12-24` `in 2 weeks` `+3d`, ranges `dec 3-5` `mon-fri` |
-| Time | `12:30-13:30` `9-11am` `14:00` `9am` `noon`, `tomorrow 9`; length `2h` `90m` `1h30`; `all day` |
+| Date | `today`/`tod` `tomorrow`/`tom`/`tmr` `yest` `fri`/`fr` `next mon` `in 3d` `in 2 weeks` `+3d` `24.12.` `24/12` `1.1.27` `dec 24` `24 dec` `2026-12-24`, ranges `dec 3-5` `mo-fr` |
+| Time | `at 1pm` `1p` `1:30pm` `13h` `13.30` `14:00` `noon` `midnight`, right after a date also `tom 9` `fri 1330`, ranges `12:30-13:30` `10-11:30` `1-2pm` `1pm-3`; length `for 2h` `2h` `90m` `1h30`; `all day` |
 | Repeat | `daily` `every week` `every 2 weeks on mon, wed` `every weekday` `every tue, thu`, ending `until 24.12.` / `until dec` / `10 times`; `no repeat` |
 | Place | `@Cafe Central` |
 | Calendar | `#personal` (the start of its name is enough; tab completes, again for the next) |
 | Notes | `// everything after it` |
 | As typed | `"Issue #12 at 9:00"` is not read as a calendar or time |
+
+Short forms that could be a word, a name or a fraction (`tom`, `tod`, `mo` … `su`, `24/12`) are
+dates only in a date position: before a time (`tom at 1pm lunch`), where the title ends
+(`Dentist fr @Praxis`), before "with" (`Lunch tom with Anna`) or after `on`; `24/12` also first in
+the line. So "Meeting with Tom", "Call Tom 1pm", "Tom 1pm" (a title must remain), "How are we" and
+"Support 24/7" stay titles; another date in the line (`Tom fri 1pm`) wins too. `tmr`, `mon`
+and `24.12.` are always dates, quotes never. `1p` and a number after `at` (`at 13`) are times
+where the title ends, as in `Lunch at 13 @Cafe`; slash dates are day/month, the day above 12.
 
 When editing, the line is the event as text: delete the repeat, place or notes to remove them;
 a deleted date, time or calendar stays as it was. What has no words (notes of several lines,
