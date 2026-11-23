@@ -73,10 +73,10 @@ HelpScreen {
     background: $background1 70%;
 
     & > #help {
-        width: 70;
-        max-width: 90%;
+        width: 90%;
+        max-width: 170;
         height: auto;
-        max-height: 85%;
+        max-height: 90%;
         background: $background2;
         border: $border_type $primary;
         border-title-color: $foreground1;

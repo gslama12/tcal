@@ -1,7 +1,12 @@
 """``HelpScreen``: the key bindings, read from the active config (so overrides show)."""
 
-from rich.console import Group, RenderableType
+from dataclasses import dataclass
+from itertools import product
+from textwrap import wrap
+
+from rich.console import Console, ConsoleOptions, Group, RenderableType, RenderResult
 from rich.rule import Rule
+from rich.style import Style
 from rich.table import Table
 from rich.text import Text
 from textual import events
@@ -10,6 +15,12 @@ from textual.containers import Vertical, VerticalScroll
 from textual.keys import format_key
 from textual.screen import ModalScreen
 from textual.widgets import Static
+
+MIN_COLUMN = 48  # cells a column of sections needs
+MAX_COLUMNS = 3
+GAP = 3  # cells between columns
+
+Section = tuple[str, list[tuple[str, str]]]  # title, [(key labels, description)]
 
 # section -> [(action, description)], in display order. Actions missing here
 # (added to [keys] later) are still listed, under "Other".
@@ -76,8 +87,8 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
 }
 
 
-def sections(keys: dict[str, list[str]]) -> list[tuple[str, list[tuple[str, str]]]]:
-    """(section, [(key labels, description)]) for the keymap ``keys`` (action -> keys)."""
+def sections(keys: dict[str, list[str]]) -> list[Section]:
+    """The sections for the keymap ``keys`` (action -> keys)."""
 
     def label(action: str) -> str:
         return " ".join(format_key(k) for k in keys[action])
@@ -92,6 +103,74 @@ def sections(keys: dict[str, list[str]]) -> list[tuple[str, list[tuple[str, str]
     return [(title, rows) for title, rows in result if rows]
 
 
+def split_columns(heights: list[int], count: int) -> list[list[int]]:
+    """Indices of ``heights`` in ``count`` columns (each in order), the tallest as short as
+    possible; of equally short splits, the one that fills the left columns first."""
+
+    def tallest(columns: tuple[int, ...]) -> int:
+        return max(
+            sum(h for h, c in zip(heights, columns, strict=True) if c == column)
+            for column in range(count)
+        )
+
+    best = min(product(range(count), repeat=len(heights)), key=tallest)
+    return [[i for i, c in enumerate(best) if c == column] for column in range(count)]
+
+
+@dataclass(frozen=True)
+class KeyColumns:
+    """Rich renderable: the sections in as many columns as make it shortest at its width."""
+
+    sections: list[Section]
+    key_style: Style
+    title_style: Style
+    separator_style: Style
+
+    @property
+    def key_width(self) -> int:
+        return max((len(key) for _, rows in self.sections for key, _ in rows), default=0)
+
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
+        _, columns = min(
+            (self.arrange(options.max_width, count) for count in self.counts(options.max_width)),
+            key=lambda arranged: arranged[0],
+        )
+        grid = Table.grid(expand=True, padding=(0, GAP, 0, 0), pad_edge=False)
+        for _ in columns:
+            grid.add_column(ratio=1)
+        grid.add_row(*(self.column([self.sections[i] for i in column]) for column in columns))
+        yield grid
+
+    def counts(self, width: int) -> range:
+        """The column counts that fit in ``width`` (one always does)."""
+        fitting = (width + GAP) // (MIN_COLUMN + GAP)
+        return range(1, max(1, min(MAX_COLUMNS, fitting)) + 1)
+
+    def arrange(self, width: int, count: int) -> tuple[int, list[list[int]]]:
+        """(height, section indices per column) for ``count`` columns."""
+        text_width = max(1, (width + GAP) // count - GAP - self.key_width - 2)
+        heights = [
+            2 + sum(len(wrap(description, text_width)) for _, description in rows)
+            for _, rows in self.sections
+        ]
+        columns = split_columns(heights, count)
+        return max(sum(heights[i] for i in column) for column in columns), columns
+
+    def column(self, groups: list[Section]) -> Group:
+        parts: list[RenderableType] = []
+        for title, rows in groups:
+            if parts:
+                parts.append(Rule(style=self.separator_style))
+            parts.append(Text(f" {title}", style=self.title_style))
+            table = Table.grid(expand=True, padding=(0, 1))
+            table.add_column(width=self.key_width)
+            table.add_column(ratio=1)
+            for key, description in rows:
+                table.add_row(Text(key, style=self.key_style), description)
+            parts.append(table)
+        return Group(*parts)
+
+
 class KeyTable(Static):
     COMPONENT_CLASSES = {"keytable--key", "keytable--title", "keytable--separator"}
 
@@ -100,22 +179,12 @@ class KeyTable(Static):
         self.keys = keys
 
     def render(self) -> RenderableType:
-        groups = sections(self.keys)
-        key_width = max(len(key) for _, rows in groups for key, _ in rows)
-        parts: list[RenderableType] = []
-        for title, rows in groups:
-            if parts:
-                parts.append(Rule(style=self.get_component_rich_style("keytable--separator")))
-            parts.append(Text(f" {title}", style=self.get_component_rich_style("keytable--title")))
-            table = Table.grid(expand=True, padding=(0, 1))
-            table.add_column(width=key_width)
-            table.add_column(ratio=1)
-            for key, description in rows:
-                table.add_row(
-                    Text(key, style=self.get_component_rich_style("keytable--key")), description
-                )
-            parts.append(table)
-        return Group(*parts)
+        return KeyColumns(
+            sections(self.keys),
+            key_style=self.get_component_rich_style("keytable--key"),
+            title_style=self.get_component_rich_style("keytable--title"),
+            separator_style=self.get_component_rich_style("keytable--separator"),
+        )
 
 
 class HelpScreen(ModalScreen[None]):
