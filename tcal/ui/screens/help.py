@@ -57,6 +57,10 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("move_down", "Move event 15 min later (time grid)"),
         ("move_left", "Move event one day earlier"),
         ("move_right", "Move event one day later"),
+        ("end_earlier", "End event 15 min earlier (time grid)"),
+        ("end_later", "End event 15 min later (time grid)"),
+        ("start_earlier", "Start event 15 min earlier (time grid)"),
+        ("start_later", "Start event 15 min later (time grid)"),
         ("search", "Search events"),
     ],
     "Event form": [

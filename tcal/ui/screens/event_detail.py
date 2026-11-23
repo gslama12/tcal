@@ -212,9 +212,15 @@ class EditScope(ScopeDialog):
 
 
 class MoveScope(EditScope):
-    """Before moving an instance of a series (ctrl+h/j/k/l): o = this event, s = all events."""
+    """Before moving an instance of a series: o = this event, s = all events."""
 
     verb = "Move"
+
+
+class ResizeScope(EditScope):
+    """Before moving the start/end of an instance of a series."""
+
+    verb = "Resize"
 
 
 class EventDetail(ModalScreen[None]):

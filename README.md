@@ -44,8 +44,9 @@ and edits made offline are queued and pushed later.
   repeat rules with an end (on a date / after N times), alarms and invitees kept on edit.
   The detail view shows time zone, guests and their answers, alerts and URL.
 - **Quick add** (`A`): one line like `Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal`.
-- **Yank / paste / duplicate / move** events with the keyboard (`y` `p` `D`, `J` `K` `<` `>`)
-  and an **undo** stack (`u`, the last 20 changes).
+- **Yank / paste / duplicate / move / resize** events with the keyboard (`y` `p` `D`, `J` `K`
+  `<` `>`; `,` `.` move the end and `;` `:` the start in 15-min steps) and an **undo** stack
+  (`u`, the last 20 changes).
 - **Event navigation** (day/week): the cursor keys jump between events — `j`/`k` the
   previous/next event of the day, `h`/`l` the nearest one on the previous/next day; `a` adds
   a new event right after the selected one, `p` pastes at its time. **Grid mode** (`v`, back
@@ -217,6 +218,10 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `J` `ctrl+j` | Move event 15 min later (time grid) |
 | `<` `ctrl+h` | Move event one day earlier |
 | `>` `ctrl+l` | Move event one day later |
+| `,` `shift+up` | End event 15 min earlier (time grid) |
+| `.` `shift+down` | End event 15 min later (time grid) |
+| `;` | Start event 15 min earlier (time grid) |
+| `:` | Start event 15 min later (time grid) |
 | `/` | Search events |
 | **Event form** | |
 | `ctrl+s` | Save |
@@ -230,8 +235,8 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 
 `p` and `P` both paste the same way (there is no "paste before"). `j`/`k` scroll the event
 detail; in the sidebar (`c` calendar list, `M` mini month) the cursor keys move its own
-cursor, esc or a view key returns to the main view. `J`/`K` move timed events in the day/week
-grid only. ctrl+h/j/k/l are extra move keys for
+cursor, esc or a view key returns to the main view. `J`/`K` move and
+`,` `.` `;` `:` resize timed events in the day/week grid only. ctrl+h/j/k/l are extra move keys for
 terminals that pass them through (many send ctrl+h as backspace; tmux often takes them).
 The sidebar hides itself below 120 columns (`b` pins your choice).
 
@@ -303,6 +308,8 @@ account (ideally `TCAL_HOME=.tcal` first, so a fresh cache is used):
 - [ ] Move events with `J`/`K`/`<`/`>`: a one-off, one instance of a series ("this event") and a
       whole series ("all events", incl. a weekly one on Tue/Thu moved by one day) → same on
       the iPhone. Then `u` repeatedly undoes each step on the server too.
+- [ ] Resize events (`,` `.` `;` `:`): a one-off, one instance and a whole series → same times on
+      the iPhone; `u` restores them.
 - [ ] Delete an event, sync (`r`), then `u` → it comes back on the iPhone.
 - [ ] Yank/paste (`y`, `p`) and duplicate (`D`) → plain copies on the iPhone.
 - [ ] Batch copy: mark a week's events with `tab`, `y`, go to the next week, `p` → all copies on the

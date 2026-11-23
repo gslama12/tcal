@@ -19,7 +19,7 @@ Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``save_events()`` (several as one undo step), ``toggle_mark()``, ``clear_marks()``,
 ``marked_occurrences()`` (the tab-marked events for a batch yank).
 
-Editing flows (form, quick add, clipboard, moving) live in ``tcal.ui.editing.Editor``
+Editing flows (form, quick add, clipboard, moving, resizing) live in ``tcal.ui.editing.Editor``
 (``app.editor``), the undo stack in ``tcal.ui.undo`` (``app.history``).
 
 The sidebar hides itself below ``SIDEBAR_MIN_WIDTH`` columns (and again when focus
@@ -47,7 +47,7 @@ from tcal.source import EventSource
 from tcal.sync import SyncSummary
 from tcal.synclog import LogEntry
 from tcal.tz import local_zone
-from tcal.ui.editing import Editor
+from tcal.ui.editing import Edge, Editor
 from tcal.ui.keys import binding, keymap
 from tcal.ui.messages import EventSelected, NewEventRequested
 from tcal.ui.screens.event_detail import EventDetail, confirm_delete, short_when
@@ -101,6 +101,10 @@ class TcalApp(App[None]):
         binding("move_up", "Earlier", action="move(-15, 0)"),
         binding("move_left", "Day earlier", action="move(0, -1)"),
         binding("move_right", "Day later", action="move(0, 1)"),
+        binding("start_earlier", "Start earlier", action="resize('start', -1)"),
+        binding("start_later", "Start later", action="resize('start', 1)"),
+        binding("end_earlier", "End earlier", action="resize('end', -1)"),
+        binding("end_later", "End later", action="resize('end', 1)"),
         binding("goto_date", "Go to date"),
         binding("search", "Search"),
         binding("sync", "Sync"),
@@ -575,6 +579,19 @@ class TcalApp(App[None]):
             self.notify("Moving by time works for timed events in the day/week view")
             return
         self.editor.move(occ, timedelta(days=days, minutes=minutes))
+
+    def action_resize(self, edge: Edge, step: int) -> None:
+        """Move the selected event's start or end by a 15-min ``step`` (timed events in a
+        time grid)."""
+        occ = self._selected()
+        if occ is None:
+            return
+        if occ.all_day:
+            self.notify("All-day event: only timed events can be resized")
+        elif not isinstance(self.focused, TimeGrid):
+            self.notify("Resizing works in the day/week view")
+        else:
+            self.editor.resize(occ, edge, step)
 
     def action_goto_date(self) -> None:
         def jump(day: date | None) -> None:

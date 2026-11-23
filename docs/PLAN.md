@@ -55,7 +55,7 @@ tcal/
     app.py           TcalApp: layout, bindings from config, data seam, sync, actions
     state.py         immutable AppState (day, view, hidden calendars)
     keys.py          binding(action): Binding.id == [keys] action
-    editing.py       Editor: form, quick add, yank/paste/duplicate, moves
+    editing.py       Editor: form, quick add, yank/paste/duplicate, moves, resizes
     undo.py          UndoHistory; clipboard.py: pure event transforms
     timelayout.py    time-grid geometry; timepaint.py: pure painting; canvas.py; calgrid.py
     sync_status.py   SyncStatus for the status bar
@@ -102,7 +102,8 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
   Current defaults (`tcal/default_config.toml`, README table): h/j/k/l move cursor,
   H/L prev/next period, t today, d/w/m/Y/s day/week/month/year/schedule view, +/- (or
   ctrl+up/down) zoom, enter open, n/N next/prev event, v grid mode (E1), a/o new event, A quick add, e edit,
-  x delete, u undo, y yank, p/P paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too), f flash
+  x delete, u undo, y yank, p/P paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too),
+  , . end and ; : start earlier/later (R1), f flash
   jump (day/week), g goto date, / search, r sync, c focus calendar list, M focus mini month, space
   toggle calendar, tab mark event (batch copy, B1), shift+tab cycle focus,
   b sidebar, ? help, q quit, ctrl+s save, esc cancel. (Originally `y` = year view and `dd`
@@ -630,3 +631,15 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   start (`TimeGrid.paste_at`), else on the day. Flash: event label selects (mode unchanged),
   slot label switches to grid mode at that slot. Clicks are unchanged in both modes.
   Old grid-cursor tests now call `app.set_grid_mode(True)` first.
+
+### Resizing (resize)
+
+- **R1 Keys:** `end_earlier` (`,`, shift+up), `end_later` (`.`, shift+down), `start_earlier` (`;`)
+  and `start_later` (`:`): unshifted / shifted `,` `.` on a German keyboard, no AltGr brackets.
+  Like `move_up/down` they need a timed event in a time grid (event or grid mode).
+- **R2 Behaviour:** `Editor.resize(occ, edge, step)` goes through the same `_shift` as `move`
+  (read-only check, `ResizeScope` for a series with the answer shared with moves via `move_run`,
+  one undo step, sync); `clipboard.shifted(event, start_by, end_by)` is a move when both deltas
+  are equal. Unlike moves (a plain ±15 min) the edge snaps to the next/previous **quarter hour**
+  (`quarter_step`: 23:59 → 24:00). A shrink below `STEP` (15 min) is refused; growing a shorter
+  event is fine. A series' start pushed over midnight shifts its BYDAY days as a move does.

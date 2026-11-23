@@ -1,5 +1,5 @@
-"""Pure event transforms for editing: copies (yank/paste/duplicate), moves
-(ctrl+h/j/k/l) and single instances of a series."""
+"""Pure event transforms for editing: copies (yank/paste/duplicate), moves,
+resizes and single instances of a series."""
 
 import re
 from dataclasses import replace
@@ -8,6 +8,8 @@ from uuid import uuid4
 
 from tcal.model import Event, Occurrence
 from tcal.tz import local_midnight, local_zone
+
+STEP = timedelta(minutes=15)  # the grid a resized start/end snaps to; the minimum duration
 
 
 def copy_at(occ: Occurrence, at: date | datetime, calendar_id: str) -> Event:
@@ -42,11 +44,20 @@ WEEKDAY_CODES = ("MO", "TU", "WE", "TH", "FR", "SA", "SU")
 _BYDAY = re.compile(r"(?<![A-Z])BYDAY=([^;]*)", re.IGNORECASE)
 
 
-def shifted(event: Event, delta: timedelta) -> Event | None:
-    """``event`` moved by ``delta`` (wall-clock); a series' deleted instances move along
-    and its BYDAY weekdays shift by the days the start moves (MO,FR -> TU,SA).
+def quarter_step(moment: datetime, step: int) -> timedelta:
+    """From ``moment`` to the next (``step`` 1) / previous (-1) quarter hour."""
+    past = timedelta(
+        minutes=moment.minute % 15, seconds=moment.second, microseconds=moment.microsecond
+    )
+    return STEP - past if step > 0 else -(past or STEP)
+
+
+def shifted(event: Event, start_by: timedelta, end_by: timedelta) -> Event | None:
+    """``event`` with its start and end shifted (wall-clock; equal deltas: a move). A
+    series' deleted instances move along with the start and its BYDAY weekdays shift by
+    the days the start moves (MO,FR -> TU,SA).
     None if that can't be done: BYDAY with an ordinal ("2MO", "-1FR")."""
-    start = event.start + delta
+    start = event.start + start_by
     rrule = event.rrule
     if rrule and (days := (start.date() - event.start.date()).days % 7):
         m = _BYDAY.search(rrule)
@@ -59,9 +70,9 @@ def shifted(event: Event, delta: timedelta) -> Event | None:
     return replace(
         event,
         start=start,
-        end=event.end + delta,
+        end=event.end + end_by,
         rrule=rrule,
-        exdates=tuple(x + delta for x in event.exdates),
+        exdates=tuple(x + start_by for x in event.exdates),
     )
 
 
