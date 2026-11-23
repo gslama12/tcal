@@ -23,6 +23,7 @@ AXIS = 6  # width of the time axis: "HH:MM "
 HOUR_ALPHA = 0.1  # hour lines through an event: its text colour over its fill, faint
 NOW_ALPHA = 0.7  # the now line through an event
 CURSOR_ALPHA = 0.45  # the cursor slot: the primary colour over the background
+HOUR_LINE = "▔"  # on the top edge of the hour's first row: where its events start
 LINE_ALPHA = 0.6  # the grid's hour lines: the divider colour over the background
 
 
@@ -192,7 +193,7 @@ def _grid(canvas: Canvas, f: GridFrame, bottom: int) -> None:
         for i, x in enumerate(xs[:-1]):
             canvas.fill(y, x, x + 1, divider, "│")
             if hour_start and scale.rows_per_hour >= 2:
-                canvas.fill(y, x + 1, xs[i + 1], hour_line, "╌")
+                canvas.fill(y, x + 1, xs[i + 1], hour_line, HOUR_LINE)
         if row in f.cursor_rows:
             canvas.fill(y, xs[sel_col] + 1, xs[sel_col + 1], cursor)
         if now_col is not None and row == f.now_row():
@@ -317,7 +318,7 @@ def _gaps(canvas: Canvas, f: GridFrame, block: Block, bottom: int) -> None:
         y = f.header + row - f.top
         for x in (x0 - 1, x1):
             inside = f.xs[block.day] < x < f.xs[block.day + 1]
-            if inside and canvas.chars[y][x] in ("╌", "─"):
+            if inside and canvas.chars[y][x] in (HOUR_LINE, "─"):
                 canvas.chars[y][x] = " "
 
 
@@ -350,8 +351,9 @@ def _block(
         y = f.header + row - f.top
         for x in range(x0, x1):
             char = empty[y][x]
-            if char in ("╌", "─"):  # hour and now lines show through, in the block's tone
-                line, strength = (fg, HOUR_ALPHA) if char == "╌" else (now_line, NOW_ALPHA)
+            if char == "─" or (char == HOUR_LINE and row > block.top):
+                # Hour lines inside and the now line show through, in the block's tone.
+                line, strength = (fg, HOUR_ALPHA) if char == HOUR_LINE else (now_line, NOW_ALPHA)
                 canvas.chars[y][x] = char
                 canvas.styles[y][x] = style(blend(line, bg, strength), bg)
             else:

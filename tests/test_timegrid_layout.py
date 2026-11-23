@@ -61,6 +61,22 @@ def test_fit_scale_shows_day_start_to_end_exactly(height: int) -> None:
         assert scale.minute_of(scale.row_of(hour * 60)) == hour * 60
 
 
+@pytest.mark.parametrize("start", [0, 390, 480])
+@pytest.mark.parametrize("end", [1200, 1380, 1410, 1440])
+def test_whole_hour_blocks_fill_exactly_their_cells(start: int, end: int) -> None:
+    for scale in [*map(TimeScale, ZOOMS), *(fit_scale(h, start, end) for h in range(8, 150))]:
+        # An hour's cell: its line's row up to the next hour's, the last one to the grid's end.
+        lines = [scale.row_of(60 * hour) for hour in range(24)]
+        assert lines[0] == 0
+        occs = [occ(f"{h:02d}:00", f"{h + 1:02d}:00") for h in range(23)]
+        occs.append(occ("23:00", "00:00", days=1))
+        blocks = layout_blocks(occs, [DAY], scale)
+        assert [b.top for b in blocks] == lines
+        assert [b.bottom for b in blocks] == [*lines[1:], scale.total_rows]
+        (late,) = layout_blocks([occ("23:50", "23:55")], [DAY], scale)
+        assert late.bottom <= scale.total_rows
+
+
 def test_fit_scale_limits_and_slot_times() -> None:
     start, end = 6 * 60 + 30, 24 * 60
     assert fit_scale(35, start, end) == TimeScale(2)

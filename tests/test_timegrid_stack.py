@@ -151,7 +151,7 @@ async def test_blocks_are_translucent_with_an_accent_bar(app: RecordingApp) -> N
         fill = blend(work, p.background1, ALPHA)
         char, style = cell(workshop.top + 2, x0 + 1)  # 14:00: an hour row below Coffee
         assert style.bgcolor and style.bgcolor.name == fill.lower()
-        assert cell(workshop.top + 2, x1 - 1)[0] == "╌"  # the hour line shows through
+        assert cell(workshop.top + 2, x1 - 1)[0] == "▔"  # the hour line shows through
         on_top = blend(personal, p.background1, ALPHA)  # Coffee over Workshop: not mixed
         assert cell(coffee.top + 1, x1 - 2)[1].bgcolor.name == on_top.lower()  # type: ignore[union-attr]
         for row in (workshop.top + 2, workshop.bottom - 1):  # the accent bar, every row

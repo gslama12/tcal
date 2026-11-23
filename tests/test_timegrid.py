@@ -6,12 +6,13 @@ import pytest
 from conftest import TODAY, RecordingApp
 from textual import events
 
+from tcal.model import Event
 from tcal.store import Store
 from tcal.ui import messages, timepaint
 from tcal.ui.state import ViewMode
 from tcal.ui.theme import EDGE, blend
 from tcal.ui.timelayout import sub_columns
-from tcal.ui.timepaint import CURSOR_ALPHA
+from tcal.ui.timepaint import CURSOR_ALPHA, HOUR_LINE
 from tcal.ui.widgets import timegrid
 from tcal.ui.widgets.timegrid import AXIS, DayView, TimeGrid, WeekView
 
@@ -381,7 +382,7 @@ async def test_markers_and_hour_lines_leave_events_alone(app: RecordingApp) -> N
                 y = grid._header_height() + row - grid._top_row()
                 if y < len(lines):
                     assert not {"▲", "▼"} & set(lines[y][left:right])
-                    assert "╌" not in lines[y][right : right + 1] + lines[y][left - 1 : left]
+                    assert "▔" not in lines[y][right : right + 1] + lines[y][left - 1 : left]
         assert any("later" in line for line in lines)
 
 
@@ -511,3 +512,39 @@ async def test_a_covered_time_moves_below_its_cover(
         title = next(i for i, c in enumerate(cells) if "Inte" in c)
         assert "14:00" not in cells[title]
         assert any("14:00" in c for c in cells[:title] + cells[title + 1 :])  # still shown
+
+
+@pytest.mark.parametrize("height", [24, 40, 45, 53])
+@pytest.mark.parametrize("zooms", range(3))
+async def test_an_hour_fills_the_cell_between_two_hour_lines(
+    app: RecordingApp, height: int, zooms: int
+) -> None:
+    sat, sun = TODAY + timedelta(days=3), TODAY + timedelta(days=4)
+    async with app.run_test(size=(140, height)) as pilot:
+        await pilot.press(*["plus"] * zooms)
+        app.save_event(Event("new", "work", "Hour", at("10:00", sat), at("11:00", sat)))
+        for calendar in app.calendars():
+            if calendar.id != "work":  # the weekend's demo events
+                app.toggle_calendar(calendar.id)
+        await pilot.pause()
+        grid = app.query_one(WeekView)
+        xs, lines = grid._columns(), text(grid)
+        first, end = (
+            next(y for y, t in enumerate(lines) if t[:5] == h) for h in ("10:00", "11:00")
+        )
+        cell = list(range(first, end))
+        assert [y for y, t in enumerate(lines) if t[xs[5] + 1] == EDGE] == cell
+        if grid.rows_per_hour >= 2:  # the lines are the top edges of the rows below them
+            ruled = [y for y, t in enumerate(lines) if t[xs[6] + 1] == HOUR_LINE]
+            assert ruled[ruled.index(first) + 1] == end
+
+        app.set_grid_mode(True)
+        app.select_date(sun)
+        await pilot.pause()
+        accent = blend(app.palette.primary, app.palette.background1, CURSOR_ALPHA).lower()
+        rows = []
+        for y in range(grid.size.height):
+            style = next(iter(grid.render_line(y).crop(xs[6] + 1, xs[6] + 2))).style
+            if style and style.bgcolor and style.bgcolor.name == accent:
+                rows.append(y)
+        assert rows == cell
