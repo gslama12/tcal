@@ -1,13 +1,14 @@
 """Flash jump for the Day/Week grid (``f``), after todooit's flash mode.
 
-Every event on screen and every visible hour (and half hour, when it has a row of
-its own) of each day column gets a red label; typing a label moves the cursor there.
+Every event on screen and every visible grid-mode slot (config ``grid_step``, an hour
+by default) of each day column gets a red label; typing a label moves the cursor there.
 Nearest the cursor get the shortest labels. While the labels are up every key goes
 to the flash: a label prefix narrows them, anything else (escape too) cancels.
 
 Pure: ``targets`` reads a ``GridFrame``, ``overlay`` draws over painted lines.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from rich.segment import Segment
@@ -50,8 +51,8 @@ def flash_labels(count: int, alphabet: str = ALPHABET) -> list[str]:
     return (list(alphabet[:singles]) + pairs)[:count]
 
 
-def targets(frame: GridFrame, height: int) -> list[Target]:
-    """The events and slots on screen, nearest the cursor first."""
+def targets(frame: GridFrame, height: int, slots: Sequence[int]) -> list[Target]:
+    """The events and slots (start minutes ``slots``) on screen, nearest the cursor first."""
     xs, scale, top, header = frame.xs, frame.scale, frame.top, frame.header
     bottom = frame.bottom(height)
     found: list[Target] = []
@@ -63,13 +64,10 @@ def targets(frame: GridFrame, height: int) -> list[Target]:
             y = header + max(block.top, top) - top
             found.append(Target(sub_columns(block, xs)[0], y, block.day, occ=block.occ))
     taken = {(t.x + dx, t.y) for t in found for dx in (0, 1)}
-    step = 30 if scale.rows_per_hour >= 2 else 60
-    rows: dict[int, int] = {}  # row -> its first slot minute
-    for minute in range(0, 24 * 60, step):
-        rows.setdefault(scale.row_of(minute), minute)
     for day in range(len(frame.days)):
         x = xs[day] + 1
-        for row, minute in rows.items():
+        for minute in slots:
+            row = scale.row_of(minute)
             y = header + row - top
             if top <= row < bottom and not {(x, y), (x + 1, y)} & taken:
                 found.append(Target(x, y, day, minute))

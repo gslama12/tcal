@@ -52,9 +52,9 @@ and edits made offline are queued and pushed later.
   a new event right after the selected one, `p` pastes at its time. **Grid mode** (`v`, back
   with `v` or esc; the status bar shows `WEEK · GRID`) moves a 1-hour slot cursor instead
   (`[view] grid_step`: 15, 30 or 60 minutes).
-- **Flash jump** (`f`, day/week): red labels on every event and hour / half hour on screen;
-  type one to jump there (an event label selects it, a slot label enters grid mode
-  on the slot holding that time; nearest get single keys, any other key cancels).
+- **Flash jump** (`f`, day/week): red labels on every event and every `grid_step` slot
+  (default: each hour) on screen; type one to jump there (an event label selects it, a
+  slot label enters grid mode on that slot; nearest get single keys, any other key cancels).
 
 - **Batch copy:** mark events with `tab` (✓; marks stay while you browse), `y` copies them all,
   then `p` on another day pastes them with the same day offsets and times; `u` undoes the paste.
