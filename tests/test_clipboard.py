@@ -45,7 +45,7 @@ def test_copy_at_all_day_keeps_its_days() -> None:
 
 def test_shifted_moves_exdates_along() -> None:
     event = Event("u", "work", "S", at(9), at(10), rrule="FREQ=DAILY", exdates=(at(9, day=TODAY),))
-    moved = shifted(event, timedelta(days=1))
+    moved = shifted(event, timedelta(days=1), timedelta(days=1))
     assert moved is not None
     assert moved.start == at(9, day=TODAY + timedelta(1))
     assert moved.exdates == (at(9, day=TODAY + timedelta(1)),)
@@ -63,9 +63,14 @@ def test_shifted_moves_exdates_along() -> None:
     ],
 )
 def test_shifted_moves_byday_weekdays(rrule: str, days: int, expected: str | None) -> None:
-    moved = shifted(Event("u", "work", "S", at(9), at(10), rrule=rrule), timedelta(days=days))
+    moved = shifted(
+        Event("u", "work", "S", at(9), at(10), rrule=rrule),
+        timedelta(days=days),
+        timedelta(days=days),
+    )
     assert (moved.rrule if moved else None) == expected
-    assert shifted(Event("u", "work", "S", at(9), at(10), rrule=rrule), timedelta(hours=1))
+    hour = timedelta(hours=1)
+    assert shifted(Event("u", "work", "S", at(9), at(10), rrule=rrule), hour, hour)
 
 
 async def test_move_weekday_series_by_a_day_keeps_every_instance(make_app) -> None:

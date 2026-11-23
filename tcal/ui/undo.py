@@ -24,10 +24,10 @@ class UndoStep:
 
 
 class UndoHistory:
-    """The last ``UNDO_DEPTH`` changes, plus the scope of a run of moves.
+    """The last ``UNDO_DEPTH`` changes, plus the scope of a run of moves/resizes.
 
     ``move_run`` = (the moved occurrence's key, the "this/all events" answer): further
-    moves of that occurrence reuse the answer; any other change ends the run.
+    moves and resizes of that occurrence reuse the answer; any other change ends the run.
     """
 
     def __init__(self) -> None:

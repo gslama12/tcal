@@ -1,13 +1,13 @@
 """Event editing flows behind TcalApp's keys: the event form (new, quick add,
 edit "this/all events"), the yank/paste/duplicate clipboard (one event, or the
-tab-marked ones as a batch) and moving events.
+tab-marked ones as a batch), moving and resizing events.
 
 ``Editor(app)`` only opens screens and calls the app's data seam
 (``save_event`` / ``source``), so undo and syncing work as for any other edit.
 """
 
 from datetime import date, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from textual.keys import format_key
@@ -15,14 +15,25 @@ from textual.keys import format_key
 from tcal.model import Calendar, Event, Occurrence
 from tcal.quickadd import QuickAdd
 from tcal.tz import local_midnight
-from tcal.ui.clipboard import copy_at, instance_of, shifted
-from tcal.ui.screens.event_detail import EditScope, MoveScope, Scope, is_recurring, short_when
+from tcal.ui.clipboard import STEP, copy_at, instance_of, quarter_step, shifted
+from tcal.ui.screens.event_detail import (
+    EditScope,
+    MoveScope,
+    ResizeScope,
+    Scope,
+    ScopeDialog,
+    is_recurring,
+    short_when,
+    time_range,
+)
 from tcal.ui.screens.event_form import EventForm
 from tcal.ui.screens.quick_add import Mode, QuickAddScreen
 from tcal.ui.widgets.timegrid import TimeGrid
 
 if TYPE_CHECKING:
     from tcal.ui.app import TcalApp
+
+Edge = Literal["start", "end"]
 
 
 class Editor:
@@ -111,7 +122,7 @@ class Editor:
             self.select_event(saved.uid, saved.start)
         self.app.notify(f"{verb} “{event.summary}” · {self.app.undo_hint}")
 
-    # ----- clipboard & moving ---------------------------------------------
+    # ----- clipboard, moving & resizing ----------------------------------
 
     def yank(self, occ: Occurrence) -> None:
         self.yanked = [occ]
@@ -175,12 +186,42 @@ class Editor:
         app.notify(f"{verb} “{copy.summary}” to {day:%a} {day.day}{where} · {app.undo_hint}")
 
     def move(self, occ: Occurrence, delta: timedelta) -> None:
-        """Shift ``occ`` by ``delta``. For a series ask "this event" / "all events", as
-        for editing; the answer holds while the same occurrence is moved on (no other
-        change in between). An override just moves."""
+        """Shift ``occ`` by ``delta``."""
         if not self.app.check_writable(occ.calendar_id):
             return
-        history = self.app.history
+        undone = f"move of {{}} (back to {short_when(occ.start, occ.all_day)})"
+        self._shift(occ, delta, delta, MoveScope(occ), undone)
+
+    def resize(self, occ: Occurrence, edge: Edge, step: int) -> None:
+        """Move the start or end of timed ``occ`` to the next (``step`` 1) / previous (-1)
+        quarter hour; it can't get shorter than ``STEP``."""
+        if not self.app.check_writable(occ.calendar_id):
+            return
+        zero = timedelta(0)
+        if edge == "start":
+            start_by, end_by = quarter_step(occ.start, step), zero
+        else:
+            start_by, end_by = zero, quarter_step(occ.end, step)
+        duration = occ.end - occ.start
+        if duration + end_by - start_by < min(STEP, duration):
+            self.app.notify("Events are at least 15 min long")
+            return
+        undone = f"resize of {{}} (back to {time_range(occ)})"
+        self._shift(occ, start_by, end_by, ResizeScope(occ), undone)
+
+    def _shift(
+        self,
+        occ: Occurrence,
+        start_by: timedelta,
+        end_by: timedelta,
+        ask: ScopeDialog,
+        undone: str,
+    ) -> None:
+        """Shift ``occ``'s start and end. For a series ``ask`` "this event" / "all events",
+        as for editing; the answer holds while the same occurrence is moved or resized on
+        (no other change in between). An override just changes. ``undone`` describes
+        the change for the undo toast, "{}" being the event(s)."""
+        history, start = self.app.history, occ.start + start_by
 
         def done(scope: Scope | None) -> None:
             if scope is None:
@@ -189,21 +230,20 @@ class Editor:
                 event = self._series(occ)
             else:
                 event = instance_of(occ) if is_recurring(occ) else occ.event
-            if (moved := shifted(event, delta)) is None:
+            if (moved := shifted(event, start_by, end_by)) is None:
                 self.app.notify("Change the days of this series in the form", severity="warning")
                 return
             what = f"all “{occ.summary}” events" if scope == "series" else f"“{occ.summary}”"
-            back = short_when(occ.start, occ.all_day)
-            self.app.save_event(moved, f"Undid move of {what} (back to {back})", occ.start)
-            self.select_event(occ.event.uid, occ.start + delta)
-            history.move_run = ((occ.event.uid, occ.start + delta), scope)
+            self.app.save_event(moved, f"Undid {undone.format(what)}", occ.start)
+            self.select_event(occ.event.uid, start)
+            history.move_run = ((occ.event.uid, start), scope)
 
         if not is_recurring(occ) or occ.event.recurrence_id is not None:
             done("occurrence")
         elif history.move_run is not None and history.move_run[0] == occ.key:
             done(history.move_run[1])
         else:
-            self.app.push_screen(MoveScope(occ), done)
+            self.app.push_screen(ask, done)
 
     # ----- helpers --------------------------------------------------------
 
