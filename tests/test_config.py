@@ -31,6 +31,8 @@ def test_user_file_merges_over_defaults(write_config) -> None:
         "[nope]\nx = 1\n",
         "[view]\nday_strat = '08:00'\n",
         "[keys]\nfly = ['f']\n",
+        "[keys]\nnext_event = ['n']\n",  # removed
+        "[keys]\nprev_event = ['N']\n",
         "[keys]\nquit = 'q'\n",
         "[view]\ndefault_view = 'decade'\n",
         "[view]\ngrid_step = 45\n",

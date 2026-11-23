@@ -69,8 +69,8 @@ class TimeGrid(CalendarView):
 
     Keys: in event mode j/k select the previous/next event of the day, h/l the
     nearest event on the previous/next day; in grid mode (v) j/k move the slot cursor,
-    h/l the day. n/p cycle events (from the cursor), enter opens the selected event
-    (``EventSelected``) or requests a new one (``NewEventRequested``), +/- zoom.
+    h/l the day. Enter opens the selected event (``EventSelected``) or requests a new
+    one (``NewEventRequested``), +/- zoom.
     Mouse: click selects a slot / opens an event, double-click on an empty slot
     requests a new one, the wheel scrolls.
     """
@@ -90,7 +90,7 @@ class TimeGrid(CalendarView):
         self._zoom: int | None = None  # rows per hour; None = fit day_start..day_end
         self._cursor_min = 0  # the cursor time (its slot holds it), minutes after midnight
         self._top_min = 0  # first visible grid row, as minutes
-        self._picked: Occurrence | None = None  # chosen by n/p or click
+        self._picked: Occurrence | None = None  # chosen by a key, flash or click
         self._data: tuple[list[date], list[Occurrence], list[Bar]] | None = None
         self._blocks: tuple[TimeScale, int, list[Block]] | None = None
         self._lines: list[Strip] | None = None
@@ -341,8 +341,8 @@ class TimeGrid(CalendarView):
         self._redraw()
 
     def select(self, occ: Occurrence) -> None:
-        """Select ``occ`` (it must be in view), as n/p would: move to its day and
-        (timed events) its start slot."""
+        """Select ``occ`` (it must be in view): move to its day and (timed events) its
+        start slot."""
         days = self._load()[0]
         day = min(max(occ.start.date(), days[0]), days[-1])
         self._picked = occ
@@ -411,28 +411,6 @@ class TimeGrid(CalendarView):
             self.select(occ)
         elif minute is not None:
             self._cursor_min = minute
-
-    def _stop_key(self, occ: Occurrence) -> tuple[date, bool, datetime]:
-        """n/p order: by day, all-day bars first, then by start."""
-        return max(occ.start.date(), self._load()[0][0]), not is_bar(occ), occ.start
-
-    def action_cycle(self, step: int) -> None:
-        """Select the next (``step`` 1) / previous (-1) event: from the selected one, else
-        from the cursor slot; wraps at the ends."""
-        stops = sorted(self._occurrences(), key=self._stop_key)
-        if not stops:
-            return
-        current = self.selected
-        if current in stops:
-            index = stops.index(current) + step
-        else:
-            here = (self.tcal.state.day, True, self.cursor_time)
-            keys = [self._stop_key(occ) for occ in stops]
-            if step > 0:
-                index = next((i for i, k in enumerate(keys) if k > here), 0)
-            else:
-                index = next((i for i in reversed(range(len(keys))) if keys[i] < here), -1)
-        self.select(stops[index % len(stops)])
 
     # ----- resize mode ----------------------------------------------------
 
