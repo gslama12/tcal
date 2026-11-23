@@ -120,7 +120,7 @@ events and gets a ⚠ in the calendar list and the status bar.
 [[subscription]]
 name = "US Holidays"
 url = "webcal://calendars.icloud.com/holidays/us_en.ics"
-color = "#BF616A"          # optional
+color = "#FF2968"          # optional; default: one of Apple's calendar colours
 
 [[subscription]]
 name = "Feiertage"

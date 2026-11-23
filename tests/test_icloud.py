@@ -102,7 +102,7 @@ WORK = Calendar(HOME + "work/", "Work", "#FF2968")
 def test_list_calendars(icloud: ICloudProvider, client: FakeClient) -> None:
     cals = icloud.list_calendars()
     assert [(c.name, c.color, c.readonly) for c in cals] == [
-        ("Shared", "#5E81AC", True),
+        ("Shared", "#1BADF8", True),
         ("Work", "#FF2968", False),
     ]
     assert cals[1].id == WORK.id
