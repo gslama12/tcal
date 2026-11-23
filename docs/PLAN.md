@@ -103,7 +103,7 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
 - **D6 Keybinds:** vim-like, all configurable in `[keys]` of config.toml (action -> list of keys).
   Current defaults (`tcal/default_config.toml`, README table): h/j/k/l move cursor,
   H/L prev/next period, t today, d/w/m/Y/s day/week/month/year/schedule view, +/- zoom,
-  enter open, n/N next/prev event, v grid mode (E1), a/i new event, A quick add, e edit,
+  enter open, v grid mode (E1), a/i new event, A quick add, e edit,
   x delete, u undo, ctrl+r redo, y yank, p paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too),
   , . end and ; : start earlier/later (R1), f flash
   jump (day/week), g goto date, / search, r sync, c focus calendar list, M focus mini month, space
@@ -202,7 +202,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   event) and `NewEventRequested(start)` (enter on an empty slot, `new_event` key while a grid is
   focused), handled by `TcalApp.on_event_selected` / `on_new_event_requested`.
 - **T2 Keys:** new `[keys]` actions `next_event` (n) / `prev_event` (p) cycle through the events
-  in view (by day, all-day first, then start time). *Superseded: prev is `N` (Y1).*
+  in view (by day, all-day first, then start time). *Removed, see NN1.*
 - **T3 Zoom:** levels 1, 2, 3, 4, 6, 8 rows/hour (3 = 20-min slots fits ~53-row grids); cursor
   and scroll position are kept in minutes so they survive zoom and resize.
 - **T5 Fit (QA #1/#4–6):** a minute belongs to the row whose start is *nearest* (ties: earlier
@@ -215,7 +215,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **T6 Overlaps (QA #2/#3/#8), superseded by "Stacked blocks" below:** clusters needing blocks
   narrower than `MIN_WIDTH` (4) in the narrowest day column collapse into one `Block` with `group`
   (its events by start): drawn as "N events" (plus the selected event's title/time), enter/click
-  opens the first, n/p cycle through them. The now-line `●` replaces the column's divider.
+  opens the first. The now-line `●` replaces the column's divider.
 - **T4 Strip:** all-day events and timed events lasting ≥ 24 h are bars in the all-day strip
   (max 3 lanes, "+N" in the axis for the rest); shorter events crossing midnight are split.
 
@@ -292,9 +292,9 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 
 ### Month view notes (QA #9–#11)
 
-- **M1 Cursor:** `MonthView.selected` (n/p over the shown chips of the displayed month's days,
-  click on a chip); enter opens it, else the Day view; h/j/k/l drop it. Events hidden behind
-  "+N more" and days of the adjacent months are skipped (selecting those would switch month).
+- **M1 Cursor:** `MonthView.selected` (click on a chip; n/p until NN1); enter opens it, else the Day
+  view; h/j/k/l drop it. Events hidden behind "+N more" and days of the adjacent months are skipped
+  (selecting those would switch month).
 - **M2 Layout:** `layout_week` packs all-day / ≥24 h events (`timegrid.is_bar`/`layout_bars`)
   into lanes per week row → one bar across the cells and borders, title once (◂/▸ when it
   continues); timed chips follow the day's bars. Week rows share the full height (rows differ
@@ -353,7 +353,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **A1 Schedule:** `ViewMode.SCHEDULE` (`[keys] view_schedule = ["s"]`, tab "Schedule",
   `default_view = "schedule"` allowed): `widgets/schedule_view.py` lists the days from the
   selected day (header per non-empty day, today accented; events: time range / "All day", colour
-  dot, title, dim location). j/k and n/p step through events, h/l jump to the previous/next day's
+  dot, title, dim location). j/k step through events, h/l jump to the previous/next day's
   first event; the cursor's day becomes `state.day` without restarting the list, any other change
   of `state.day` (H/L = ±14 days, goto, minical, today) restarts it there. Loads `CHUNK_DAYS` (28)
   more when the cursor or the mouse wheel reaches the end (one load scans ≤ 366 days). Own scroll
@@ -366,8 +366,8 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **R1 Tidy-up (no behaviour change):** the time grid's pure geometry (`TimeScale`, `fit_scale`,
   `pack_*`, `layout_blocks`/`layout_bars`, `is_bar`, `Block`/`Bar`) moved from
   `widgets/timegrid.py` to `tcal/ui/timelayout.py` (the month view uses it too, like `calgrid.py`).
-  Views with an event cursor use `keys.EVENT_BINDINGS` (n/p → `action_cycle(step)`, ids unchanged),
-  `CalendarView.cursor_style()` and `base.join_lines()`; `app.calendar(id)` is the one lookup.
+  Views with an event cursor use `keys.EVENT_BINDINGS`, `CalendarView.cursor_style()`
+  and `base.join_lines()`; `app.calendar(id)` is the one lookup.
 
 ### Quick add notes (feat-quickadd)
 
@@ -387,13 +387,13 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   matches read-only calendars (after the writable ones) to say "Holidays is read-only".
   Quick add's keys are `[keys] cancel` and `focus_next` (tab; a separate key would collide with
   it), shown in its hint; the form opened from it asks "Discard changes?" (`EventForm(edited=True)`).
-  Month `n`/`N` without a selection start at the selected day, like the time grids.
 
 ### Clipboard & moving (feat-yank)
 
 - **Y1 Keys:** `yank` (y), `paste` (p, P: same action), `duplicate` (D), `move_down/up` (ctrl+j/k,
   ±15 min, timed events in a time grid only) and `move_left/right` (ctrl+h/l, ±1 day, any view
-  with a selection). To free y/p: **`view_year` is now `Y`, `prev_event` is `N`** (vim's n/N).
+  with a selection). To free y/p: **`view_year` is now `Y`** (`prev_event`
+  became `N`; removed, see NN1).
 - **Y2 Behaviour:** `tcal/ui/clipboard.py` (`copy_at`, `shifted`). A paste/duplicate is a new
   one-off event (no RRULE/overrides) keeping the duration, in the source calendar or, if that is
   read-only, the first writable one; paste goes to the time grid's cursor slot, else the selected
@@ -581,7 +581,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   pad is that bar's cell. Corners are plain square: `╭╮╰╯` are thin lines and cannot round a
   filled cell, so a clean rounded look (like the pane borders) is not achievable.
 - **Picking:** the cursor selects the deepest block at its slot (side by side: the left one);
-  clicks hit the topmost block under the pointer; n/p order is unchanged (by start).
+  clicks hit the topmost block under the pointer.
 
 ## Colour polish (ui-colors)
 
@@ -695,3 +695,10 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   and clickable key hints (todooit asks in its bar; a box was requested). Keys are the old ones
   (y, o/s, o/d); enter still takes the first choice (bold), esc and n cancel in all of them.
   Deleting is no longer red. Questions longer than 80 % of the screen's width wrap.
+
+### No next/prev event keys (rm-next)
+
+- **NN1 (user request):** the `next_event` / `prev_event` actions (n / N, `action_cycle`) are gone;
+  a config that still sets them gets the usual unknown-setting error. Day/week step through events
+  with j/k/h/l in event mode (and flash), the schedule with j/k. The month view has no key to pick
+  an event any more: click one, or use enter (Day view) or search. `n` still means "no" in prompts.

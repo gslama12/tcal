@@ -82,7 +82,7 @@ async def test_delete_one_occurrence_with_x_in_view(make_app) -> None:
     async with app.run_test(size=SIZE) as pilot:
         grid = app.query_one("#week", TimeGrid)
         while grid.selected is None or grid.selected.summary != "Standup":
-            await pilot.press("n")
+            await pilot.press("j")
         picked = grid.selected
         monday = TODAY - timedelta(days=TODAY.weekday())
         week = find(app, "Standup", days=7, start=monday)

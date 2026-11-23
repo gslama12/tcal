@@ -118,20 +118,18 @@ async def test_cursor_and_clicks_pick_the_topmost_block(app: RecordingApp) -> No
         assert opened == ["Coffee", "Workshop"]
 
 
-@pytest.mark.usefixtures("quarter_steps")
-async def test_cycling_visits_stacked_and_side_by_side_events(app: RecordingApp) -> None:
+async def test_stepping_visits_stacked_and_side_by_side_events(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        app.set_grid_mode(True)  # the slot cursor
         grid = app.query_one(WeekView)
-        await pilot.press("l", "l", *"jjjjj")  # Fri 12:30
+        app.select_date(FRI)
         seen = []
-        for _ in range(5):
-            await pilot.press("n")
+        for _ in range(5):  # up from the day's last event
+            await pilot.press("k")
             assert grid.selected is not None
             seen.append(grid.selected.summary)
-        assert sorted(seen[:2]) == ["Coffee", "Workshop"]
+        assert sorted(seen[:2]) == ["Pickup A", "Pickup B"]
         assert seen[2] == "Call with New York"  # 15:00, on top of Workshop
-        assert sorted(seen[3:]) == ["Pickup A", "Pickup B"]
+        assert sorted(seen[3:]) == ["Coffee", "Workshop"]
 
 
 async def test_blocks_are_translucent_with_an_accent_bar(app: RecordingApp) -> None:

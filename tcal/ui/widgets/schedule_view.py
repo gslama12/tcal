@@ -96,7 +96,7 @@ def day_of(occ: Occurrence, day: date) -> str:
 
 
 class ScheduleView(CalendarView):
-    """The schedule list. j/k (and n/p) move between events, h/l jump to the
+    """The schedule list. j/k move between events, h/l jump to the
     previous/next day's first event, enter opens the selected event (``selected``),
     H/L (the app's prev/next period) re-start the list two weeks earlier/later.
     Moving or scrolling past the first/last loaded day loads more days."""
@@ -279,9 +279,6 @@ class ScheduleView(CalendarView):
 
     def action_cursor_up(self) -> None:
         self._step(-1)
-
-    def action_cycle(self, step: int) -> None:
-        self._step(step)
 
     def action_cursor_right(self) -> None:
         self._jump_day(1)

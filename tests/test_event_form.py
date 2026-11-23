@@ -126,7 +126,7 @@ async def test_edit_key_on_selected_event_and_readonly(make_app) -> None:
     app = make_app()
     async with app.run_test(size=(120, 50)) as pilot:
         grid = app.query_one(WeekView)
-        await pilot.press("n")
+        await pilot.press("j")
         occ = grid.selected
         assert occ is not None
         await pilot.press("e")
