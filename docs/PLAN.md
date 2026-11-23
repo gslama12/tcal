@@ -121,8 +121,7 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
   instead of refusing to start; `tcal config check` still reports it as an error.
 - Sidebar (QA2 #9/#11): the toggle key pins the user's choice (resizes no longer change it);
   unpinned on a narrow terminal, a sidebar shown by `focus_calendars` hides again when focus
-  leaves it. Month/schedule text in calendar colours goes through `theme.legible` (darkened on
-  light themes); the time grid keeps its own `_readable`.
+  leaves it. (Text in calendar colours: see "Colour polish".)
 - Flash jump (`f`, day/week): `tcal/ui/flash.py` (pure: targets from the `GridFrame`, labels,
   overlay over the painted lines; `timepaint` untouched). todooit's alphabet and red labels, but
   labels mix single keys and pairs (prefix-free) so the targets nearest the cursor get one key;
@@ -570,11 +569,11 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **Text:** a block's lines go only on rows that no block drawn above it covers, so a covered
   title moves below its cover (one free row: compact "HH:MM title"). Replaces `_place_time`.
 - **Look:** fills are the calendar colour at `ALPHA` over the plain grid background (the
-  cursor stays hidden under events), `SELECTED_ALPHA` for the selected one; a block fully replaces
-  a lower one, so overlapping colours never mix (nomix; it used to blend over the lower block); text uses `text_on(fill)`, the title bold. Hour lines (`╌`) show through faintly
+  cursor stays hidden under events); a block fully replaces
+  a lower one, so overlapping colours never mix (nomix; it used to blend over the lower block); text colours: see "Colour polish". Hour lines (`╌`) show through faintly
   (`HOUR_ALPHA`), the now line clearly (text covers them). *Superseded (ui-colors):* the
   quarter-block rounded corners looked stair-stepped; every event now has a thin accent bar `▎`
-  in its calendar colour on its left edge (`▌` in the text colour when selected); the left text
+  in its calendar colour on its left edge; the left text
   pad is that bar's cell. Corners are plain square: `╭╮╰╯` are thin lines and cannot round a
   filled cell, so a clean rounded look (like the pane borders) is not achievable.
 - **Picking:** the cursor selects the deepest block at its slot (side by side: the left one);
@@ -582,13 +581,21 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 
 ## Colour polish (ui-colors)
 
-- **Calendar colours:** `theme.harmonize(color, palette)` (applied in `app.calendar_color`, the one
-  place views get a calendar's colour) keeps the hue but clamps HLS lightness to a band per
-  background (dark 0.62–0.78, light 0.38–0.52) and caps saturation (0.9 / 0.7), so arbitrary
-  iCloud colours sit calmly with the theme. Demo calendars use Tokyo Night accents.
-- **One event look:** `theme.ALPHA`/`SELECTED_ALPHA`/`EDGE`/`SELECTED_EDGE` are shared by timed
-  blocks, all-day bars (Day/Week strip) and month-view bars: translucent fill + accent bar,
-  never an opaque fill.
+- **Calendar colours (apple-colors):** exactly the server's `calendar-color` (alpha byte dropped);
+  `app.calendar_color` no longer adapts them to the theme (`harmonize`/`legible`/`text_on` are
+  gone). `tcal/colors.py` holds Apple's picker palette (`APPLE_COLORS`): used by the demo
+  calendars, iCloud calendars without a colour (blue) and `[[subscription]]`s without one (the
+  next of the palette by position, so feeds differ). tcal has no colour picker; the default
+  config lists the values. `symbolic-color` is ignored: the hex value is used as sent.
+- **One event look (apple-colors, Apple Calendar's):** `theme.event_colors(color, palette,
+  selected)` -> (fill, text), shared by timed blocks, all-day bars and month bars. Fill: the colour
+  at `ALPHA` over the plain background, with an accent bar `EDGE` in the exact colour. Text:
+  `theme.tint`, the colour mixed toward white (light themes: black), further until it has
+  `MIN_CONTRAST`; titles (all wrapped lines) bold. Selected: filled with the full colour, no
+  bar, white text if that has contrast 3 or more on it (of Apple's: red, brown; see
+  `MIN_WHITE_CONTRAST`), else black; the now line through it is drawn in the text colour.
+  Month chips: accent bar + tinted text, selected ones filled. Dots and squares (schedule,
+  sidebar, search, detail) are the exact colour.
 - **Quieter chrome:** hour lines are the divider colour at `LINE_ALPHA` over the background; the
   cursor slot is `primary` at `CURSOR_ALPHA` (not solid); the status bar's help chip is neutral
   (`foreground2` on `background3`), leaving `primary` for the mode chip and active view.

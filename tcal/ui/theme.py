@@ -6,7 +6,6 @@ styles.tcss; ``primary``/``secondary`` map to Textual's own ``$primary`` and
 reads ``app.palette``.
 """
 
-import colorsys
 from dataclasses import asdict, dataclass
 from functools import lru_cache
 
@@ -82,11 +81,15 @@ PALETTES = {
     "catppuccin-latte": CATPPUCCIN_LATTE,
 }
 LIGHT = {"catppuccin-latte"}
-# Events (time grid blocks, all-day bars, month bars): the calendar colour at this
-# opacity over the background, with an accent bar in the full colour on the left.
-ALPHA, SELECTED_ALPHA = 0.3, 0.55
-EDGE, SELECTED_EDGE = "▎", "▌"
-MAX_TEXT_LUMA = 0.45  # brighter text (e.g. a pastel calendar colour) is hard to read on light
+# Events look like Apple Calendar's: the calendar colour at this opacity over the
+# background, an accent bar in the full colour on the left, text in a tint of it;
+# the selected event is filled with the full colour.
+ALPHA = 0.3
+EDGE = "▎"
+TINT = 0.45  # text: the calendar colour mixed this far toward white (light themes: black)
+MIN_CONTRAST = 4.5  # of tinted text; colours needing it are mixed further
+MIN_WHITE_CONTRAST = 3.0  # of white text on a full-colour fill; else black
+BLACK, WHITE = "#000000", "#FFFFFF"
 
 
 def luma(hex_color: str) -> float:
@@ -108,36 +111,34 @@ def _rgb(hex_color: str) -> tuple[int, int, int]:
     return r, g, b
 
 
-# Calendar colours are brought into these HLS ranges (hue kept): pastel enough to
-# sit calmly on a dark background, deep and muted enough on a light one.
-# (lightness range, max saturation) per background:
-DARK_TONE, LIGHT_TONE = ((0.62, 0.78), 0.9), ((0.38, 0.52), 0.7)
+def contrast(a: str, b: str) -> float:
+    """The WCAG contrast ratio of two colours, 1 .. 21."""
+    dark, light = sorted((_luminance(a), _luminance(b)))
+    return (light + 0.05) / (dark + 0.05)
 
 
-def harmonize(color: str, palette: Palette) -> str:
-    """``color`` (e.g. a calendar's from iCloud) nudged toward the palette's tone:
-    lightness clamped for its background, saturation capped, hue unchanged."""
-    (lo, hi), max_s = LIGHT_TONE if luma(palette.background1) > 0.5 else DARK_TONE
-    h, lightness, s = colorsys.rgb_to_hls(*(c / 255 for c in _rgb(color)))
-    rgb = colorsys.hls_to_rgb(h, min(max(lightness, lo), hi), min(s, max_s))
-    r, g, b = (round(c * 255) for c in rgb)
-    return f"#{r:02X}{g:02X}{b:02X}"
+def _luminance(color: str) -> float:
+    r, g, b = (
+        c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+        for c in (v / 255 for v in _rgb(color))
+    )
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
-def legible(color: str, palette: Palette) -> str:
-    """``color`` as text on the palette's background: darkened on light themes."""
-    level = luma(color)
-    if luma(palette.background1) < 0.5 or level <= MAX_TEXT_LUMA:
-        return color
-    scale = MAX_TEXT_LUMA / level
-    r, g, b = (round(int(color.lstrip("#")[i : i + 2], 16) * scale) for i in (0, 2, 4))
-    return f"#{r:02X}{g:02X}{b:02X}"
+@lru_cache(maxsize=256)
+def tint(color: str, fill: str, palette: Palette) -> str:
+    """``color`` as text on ``fill``: a light tint (light themes: a dark shade) of it."""
+    toward = BLACK if luma(palette.background1) > 0.5 else WHITE
+    steps = (blend(toward, color, TINT + i * 0.05) for i in range(11))
+    return next((c for c in steps if contrast(c, fill) >= MIN_CONTRAST), toward)
 
 
-def text_on(color: str, palette: Palette) -> str:
-    """The palette's background or text colour, whichever reads better on ``color``."""
-    dark, light = sorted((palette.background1, palette.foreground3), key=luma)
-    return dark if luma(color) > 0.6 else light
+def event_colors(color: str, palette: Palette, selected: bool) -> tuple[str, str]:
+    """(fill, text) of an event in a calendar's ``color``."""
+    if selected:
+        return color, WHITE if contrast(WHITE, color) >= MIN_WHITE_CONTRAST else BLACK
+    fill = blend(color, palette.background1, ALPHA)
+    return fill, tint(color, fill, palette)
 
 
 def make_theme(name: str) -> Theme:

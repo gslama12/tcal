@@ -37,6 +37,7 @@ uv run ruff check && uv run ruff format --check && uv run mypy
   from `[keys]`; the app applies the user's keys with `set_keymap`.
 - `tcal/ui/theme.py`, `styles.tcss` — todooit palettes as Textual themes
   (`$background1..3`, `$foreground1..3`, `$red`… plus `$primary`/`$secondary`).
+  Event colours: `event_colors`/`tint`; Apple's palette is `tcal/colors.py`.
 - `tcal/ui/timelayout.py` — time-grid geometry (`TimeScale`, blocks, bars, `sub_columns`);
   `tcal/ui/timepaint.py` — pure `paint(GridFrame, w, h)` for Day/Week, on `canvas.Canvas`.
   `tcal/ui/flash.py` — flash jump (`f`): targets, labels, overlay over painted lines.

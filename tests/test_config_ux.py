@@ -7,7 +7,7 @@ from click.testing import CliRunner
 from tcal import paths
 from tcal.__main__ import cli
 from tcal.config import commented_defaults, default_data, key_conflicts, load_config
-from tcal.ui.theme import PALETTES, legible, luma, make_theme, text_on
+from tcal.ui.theme import PALETTES, make_theme
 
 
 def test_defaults_have_no_key_conflicts() -> None:
@@ -87,13 +87,3 @@ async def test_theme_renders(name, make_app, write_config, tmp_path) -> None:
         assert app.theme == f"tcal-{name}"
         svg = app.export_screenshot()
         assert PALETTES[name].background1.lower() in svg.lower()
-
-
-def test_calendar_colours_are_darkened_on_light_themes() -> None:
-    latte, nord = PALETTES["catppuccin-latte"], PALETTES["nord"]
-    green = "#A3BE8C"
-    assert luma(legible(green, latte)) < 0.46 < luma(green)
-    assert legible(green, nord) == green
-    assert legible("#1E66F5", latte) == "#1E66F5"  # already dark enough
-    assert text_on(green, latte) == latte.foreground3  # dark text on a light bar
-    assert text_on(green, nord) == nord.background1

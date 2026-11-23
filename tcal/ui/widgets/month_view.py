@@ -10,7 +10,7 @@ from tcal.model import Occurrence
 from tcal.ui.calgrid import by_day, month_weeks, occurrence_days, weekday_names
 from tcal.ui.keys import EVENT_BINDINGS
 from tcal.ui.messages import EventSelected, NewEventRequested
-from tcal.ui.theme import ALPHA, EDGE, SELECTED_ALPHA, SELECTED_EDGE, blend, legible, text_on
+from tcal.ui.theme import EDGE, event_colors, tint
 from tcal.ui.timelayout import is_bar, layout_bars
 from tcal.ui.widgets.base import fit, join_lines
 from tcal.ui.widgets.day_cursor import DayCursorView
@@ -248,19 +248,27 @@ class MonthView(DayCursorView):
                 title = fit(chip.summary, width - 1 - len(after))
                 label = f"{title}".ljust(width - 1 - len(after)) + after
                 # Translucent with an accent bar, like the time grid's events.
-                fill = blend(color, p.background1, SELECTED_ALPHA if selected else ALPHA)
-                edge = before if before != " " else SELECTED_EDGE if selected else EDGE
-                accent = p.foreground3 if selected else color
+                fill, fg = event_colors(color, p, selected)
+                edge = before if before != " " or selected else EDGE
+                accent = fg if selected else color
                 text.append(edge, style=Style(color=accent, bgcolor=fill, bold=True))
-                text.append(label, style=Style(color=text_on(fill, p), bgcolor=fill, bold=True))
+                text.append(label, style=Style(color=fg, bgcolor=fill, bold=True))
             else:
-                color = legible(color, p)
+                # An accent bar, then text in a tint; selected: filled with the colour.
+                if selected:
+                    fill, fg = event_colors(color, p, selected)
+                    body = Style(color=fg, bgcolor=fill)
+                else:
+                    on = p.background3 if day == self.tcal.state.day else p.background1
+                    body = Style(color=tint(color, on, p))
+                bold = body + Style(bold=True)
                 time = f"{chip.start:%H:%M} " if chip.start.date() == day else ""
-                mark = Style(color=p.primary, bold=True, reverse=selected)
-                text.append("✓" if marked else " ", style=mark)
-                text.append(time, style=Style(color=color, bold=True, reverse=selected))
-                title = fit(chip.summary, width - 1 - len(time))
-                text.append(title, style=Style(color=color, reverse=selected))
+                if marked:
+                    text.append("✓", style=bold if selected else Style(color=p.primary, bold=True))
+                else:
+                    text.append(" " if selected else EDGE, style=body + Style(color=color))
+                text.append(time, style=bold)
+                text.append(fit(chip.summary, width - 1 - len(time)), style=body)
         text.truncate(width, pad=True)
         return text
 

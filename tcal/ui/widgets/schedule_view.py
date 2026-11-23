@@ -21,7 +21,6 @@ from tcal.ui.calgrid import by_day, occurrence_days
 from tcal.ui.keys import EVENT_BINDINGS
 from tcal.ui.messages import EventSelected
 from tcal.ui.state import AppState, ViewMode
-from tcal.ui.theme import legible
 from tcal.ui.widgets.base import CalendarView, join_lines
 
 CHUNK_DAYS = 28  # days loaded at a time
@@ -340,7 +339,7 @@ class ScheduleView(CalendarView):
             f"   {time_range(occ, row.day):<{TIME_WIDTH}}  ",
             style=Style(color=p.foreground1 if past else p.foreground2),
         )
-        color = legible(self.tcal.calendar_color(occ.calendar_id), p)
+        color = self.tcal.calendar_color(occ.calendar_id)
         if occ.key in self.tcal.state.marked:  # tab
             text.append("✓ ", style=Style(color=p.primary, bold=True))
         else:

@@ -322,7 +322,7 @@ async def test_now_line_keeps_event_text(app: RecordingApp) -> None:
         row = next(line for line in text(grid) if line[AXIS] == "●")
         assert row.startswith("10:00")  # the slot keeps its label; no "10:15" replaces it
         event = row[AXIS + 1 : row.index("Design review") + len("Design review")]
-        assert event == "▌10:00 Design review"  # text not covered (one free row: time + title)
+        assert event == " 10:00 Design review"  # text not covered (one free row: time + title)
         assert "─" in row[row.index("Design review") :]  # the line goes on beside the event
 
 

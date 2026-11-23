@@ -7,11 +7,12 @@ from conftest import TODAY, RecordingApp
 from rich.segment import Segment
 from rich.style import Style
 
+from tcal.colors import GREEN, RED
 from tcal.model import Event, Occurrence
 from tcal.providers.fake import FakeProvider
 from tcal.tz import local_zone
 from tcal.ui import messages
-from tcal.ui.theme import ALPHA, CATPPUCCIN_LATTE, EDGE, TOKYO_NIGHT, blend, harmonize
+from tcal.ui.theme import ALPHA, EDGE, TOKYO_NIGHT, blend
 from tcal.ui.timelayout import Block, TimeScale, sub_columns
 from tcal.ui.timepaint import GridFrame, paint
 from tcal.ui.widgets import timegrid
@@ -175,7 +176,7 @@ def test_overlapping_colours_do_not_mix(selected: bool, now: str) -> None:
             days=[FRI], xs=xs, scale=scale, top=0, strip_rows=0, bars=[], blocks=blocks,
             day=FRI, cursor_rows=range(0), selected=over if selected else None, now=at(now),
             header_formats=("%a",), palette=TOKYO_NIGHT,
-            color={"red": "#F7768E", "green": "#9ECE6A"}.__getitem__,
+            color={"red": RED, "green": GREEN}.__getitem__,
         )  # fmt: skip
         x0, x1 = sub_columns(top, xs)
         lines = paint(frame, 40, 60)[frame.header + top.top : frame.header + top.bottom]
@@ -190,9 +191,3 @@ def test_blend() -> None:
     assert blend("#FF0000", "#000000", 1) == "#FF0000"
     assert blend("#FF0000", "#0000FF", 0.5) == "#800080"
     assert blend("#FFFFFF", "#000000", 0) == "#000000"
-
-
-def test_harmonize_keeps_hue_and_tames_tone() -> None:
-    assert harmonize("#7AA2F7", TOKYO_NIGHT) == "#7AA2F7"  # the theme's own accents stay
-    assert harmonize("#000080", TOKYO_NIGHT) == "#4747F5"  # navy: lifted for a dark background
-    assert harmonize("#FFFF80", CATPPUCCIN_LATTE) == "#DADA2F"  # pale yellow: deepened on light
