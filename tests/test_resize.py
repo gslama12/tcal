@@ -1,18 +1,21 @@
-"""Resizing: , . move the selected event's end and ; : its start by quarter hours."""
+"""Resize mode (o): up/down move the selected event's end or start by quarter hours."""
 
 from datetime import date, datetime, time, timedelta
 
 import pytest
 from conftest import TODAY
+from rich.segment import Segment
 
 from tcal.model import Event, Occurrence
 from tcal.tz import local_midnight, local_zone
 from tcal.ui.app import TcalApp
 from tcal.ui.clipboard import quarter_step, shifted
 from tcal.ui.screens.prompt import Prompt
+from tcal.ui.state import Resize
 from tcal.ui.widgets.month_view import MonthView
 from tcal.ui.widgets.schedule_view import ScheduleView
-from tcal.ui.widgets.timegrid import TimeGrid
+from tcal.ui.widgets.statusbar import StatusBar
+from tcal.ui.widgets.timegrid import TimeGrid, WeekView
 
 SIZE = (140, 50)
 
@@ -64,21 +67,24 @@ async def test_keys_move_the_end_and_the_start(make_app, view: str, grid_mode: b
         grid = app.query_one(f"#{view}", TimeGrid)
         grid.select(find(app, "Dentist"))  # 11:00 - 12:00
         for key, expected in [
-            ("full_stop", (at(11), at(12, 15))),
-            ("shift+down", (at(11), at(12, 30))),
-            ("comma", (at(11), at(12, 15))),
-            ("shift+up", (at(11), at(12))),
-            ("semicolon", (at(10, 45), at(12))),
-            ("colon", (at(11), at(12))),
-            (":", (at(11, 15), at(12))),  # as typed
-            (".", (at(11, 15), at(12, 15))),
-            (",", (at(11, 15), at(12))),
-            (";", (at(11), at(12))),
+            ("o", (at(11), at(12))),  # the end first
+            ("j", (at(11), at(12, 15))),
+            ("down", (at(11), at(12, 30))),
+            ("k", (at(11), at(12, 15))),
+            ("up", (at(11), at(12))),
+            ("o", (at(11), at(12))),  # the start
+            ("k", (at(10, 45), at(12))),
+            ("j", (at(11), at(12))),
+            ("j", (at(11, 15), at(12))),
+            ("o", (at(11, 15), at(12))),  # the end again
+            ("j", (at(11, 15), at(12, 15))),
+            ("escape", (at(11, 15), at(12, 15))),
         ]:
             await pilot.press(key)
             await pilot.pause()
             assert span(app, "Dentist") == expected, key
             assert grid.selected is not None and grid.selected == find(app, "Dentist")
+        assert app.state.resize is None and app.state.grid is grid_mode
 
 
 async def test_undo_takes_back_each_step(make_app) -> None:
@@ -86,13 +92,14 @@ async def test_undo_takes_back_each_step(make_app) -> None:
     async with app.run_test(size=SIZE) as pilot:
         grid = app.query_one("#week", TimeGrid)
         grid.select(find(app, "Dentist"))
-        await pilot.press("full_stop", "semicolon")
+        await pilot.press("o", "j", "o", "k")
         await pilot.pause()
         assert span(app, "Dentist") == (at(10, 45), at(12, 15))
         await pilot.press("u")
         await pilot.pause()
         assert span(app, "Dentist") == (at(11), at(12, 15))
         assert grid.selected == find(app, "Dentist")
+        assert app.state.resize == Resize(find(app, "Dentist").event.uid, "start")  # still on
         await pilot.press("u")
         await pilot.pause()
         assert span(app, "Dentist") == (at(11), at(12))
@@ -106,14 +113,14 @@ async def test_events_stay_at_least_15_min_long(make_app, store) -> None:
     async with app.run_test(size=SIZE) as pilot:
         grid = app.query_one("#week", TimeGrid)
         grid.select(find(app, "Short"))
-        await pilot.press("colon")  # 15:15 - 15:20 would be too short
+        await pilot.press("o", "o", "j")  # 15:15 - 15:20 would be too short
         await pilot.pause()
         assert span(app, "Short") == (at(15), at(15, 20))
         assert messages(app) == ["Events are at least 15 min long"]
-        await pilot.press("comma")
+        await pilot.press("o", "k")
         await pilot.pause()
         assert span(app, "Short") == (at(15), at(15, 15))
-        await pilot.press("comma")
+        await pilot.press("k")
         await pilot.pause()
         assert span(app, "Short") == (at(15), at(15, 15))
         await pilot.press("u")  # the refused steps are not on the undo stack
@@ -121,7 +128,7 @@ async def test_events_stay_at_least_15_min_long(make_app, store) -> None:
         assert span(app, "Short") == (at(15), at(15, 20))
 
         grid.select(find(app, "Tiny"))  # shorter already: growing is fine
-        await pilot.press("full_stop")
+        await pilot.press("escape", "o", "j")
         await pilot.pause()
         assert span(app, "Tiny") == (at(16, 5), at(16, 15))
 
@@ -131,7 +138,7 @@ async def test_over_midnight(make_app) -> None:
     async with app.run_test(size=SIZE) as pilot:
         grid = app.query_one("#week", TimeGrid)
         grid.select(find(app, "Late movie"))  # 22:30 - 23:59
-        await pilot.press("full_stop", "full_stop")
+        await pilot.press("o", "j", "j")
         await pilot.pause()
         assert span(app, "Late movie") == (at(22, 30), at(0, 15, TODAY + timedelta(1)))
         assert app.state.day == TODAY and grid.selected == find(app, "Late movie")
@@ -143,20 +150,22 @@ async def test_resized_event_is_scrolled_into_view(make_app) -> None:
         await pilot.press("plus", "plus", "plus")
         grid = app.query_one("#week", TimeGrid)
         grid.select(find(app, "Dentist"))
-        for _ in range(6):
-            await pilot.press("full_stop")
-        await pilot.pause()
-        rows, top = grid._focus_rows(), grid._top_row()
-        assert top <= rows.start and rows.stop <= top + grid._grid_height()
+        await pilot.press("o", *"j" * 12)  # the block gets taller than the grid
+        for edge, minute in (("end", 14 * 60 + 45), ("start", 11 * 60)):
+            await pilot.pause()
+            assert app.state.resize is not None and app.state.resize.edge == edge
+            row, top = grid.scale.row_of(minute), grid._top_row()
+            assert top <= row < top + grid._grid_height(), edge
+            await pilot.press("o")
 
 
 async def test_only_timed_events_in_a_time_grid(make_app) -> None:
     app = make_app()
     async with app.run_test(size=SIZE) as pilot:
-        await pilot.press("full_stop")
+        await pilot.press("o")
         assert messages(app) == ["No event selected"]
         app.query_one("#week", TimeGrid).select(find(app, "Anna's birthday"))
-        await pilot.press("full_stop")
+        await pilot.press("o")
         await pilot.pause()
         assert span(app, "Anna's birthday")[0] == local_midnight(TODAY)
         assert messages(app)[-1] == "All-day event: only timed events can be resized"
@@ -166,10 +175,11 @@ async def test_only_timed_events_in_a_time_grid(make_app) -> None:
             await pilot.press(key)
             await pilot.pause()
             app.query_one(view).select(find(app, "Gym", yesterday))
-            await pilot.press("full_stop")
+            await pilot.press("o")
             await pilot.pause()
             assert span(app, "Gym", yesterday) == gym
             assert messages(app)[-1] == "Resizing works in the day/week view"
+            assert app.state.resize is None
 
 
 async def test_read_only_calendar(make_app, store) -> None:
@@ -177,10 +187,10 @@ async def test_read_only_calendar(make_app, store) -> None:
     app = make_app()
     async with app.run_test(size=SIZE) as pilot:
         app.query_one("#week", TimeGrid).select(find(app, "Fixed"))
-        await pilot.press("full_stop", "colon")
+        await pilot.press("o")
         await pilot.pause()
-        assert span(app, "Fixed") == (at(15), at(16))
-        assert messages(app) == ["Holidays is read-only"] * 2
+        assert app.state.resize is None
+        assert messages(app) == ["Holidays is read-only"]
 
 
 async def test_series_this_event_or_all_events(make_app) -> None:
@@ -191,17 +201,17 @@ async def test_series_this_event_or_all_events(make_app) -> None:
         start, end = span(app, "Standup")
         quarter = timedelta(minutes=15)
         grid.select(find(app, "Standup"))
-        await pilot.press("full_stop")
+        await pilot.press("o", "j")
         await pilot.pause()
         assert isinstance(app.screen, Prompt)
-        await pilot.press("o", "full_stop")  # this event; the override just resizes on
+        await pilot.press("o", "j")  # this event; the override just resizes on
         await pilot.pause()
         assert not isinstance(app.screen, Prompt)
         assert span(app, "Standup") == (start, end + 2 * quarter)
         assert span(app, "Standup", tomorrow)[1] == end + timedelta(1)
 
         grid.select(find(app, "Standup", tomorrow))
-        await pilot.press("semicolon", "s", "full_stop")  # all events, asked once
+        await pilot.press("escape", "o", "o", "k", "s", "o", "j")  # all events, asked once
         await pilot.pause()
         assert not isinstance(app.screen, Prompt)
         for day, n in ((yesterday, -1), (tomorrow, 1)):
@@ -212,3 +222,104 @@ async def test_series_this_event_or_all_events(make_app) -> None:
         await pilot.pause()
         assert span(app, "Standup", tomorrow) == (start + timedelta(1), end + timedelta(1))
         assert span(app, "Standup") == (start, end + 2 * quarter)
+
+
+async def test_the_configured_keys_resize(make_app, write_config) -> None:
+    config = write_config(
+        '[keys]\ncursor_down = ["k"]\ncursor_up = ["l"]\ncursor_right = ["ö"]\n'
+        'resize_mode = ["comma"]\n'
+    )
+    app = make_app(config)
+    async with app.run_test(size=SIZE) as pilot:
+        app.query_one(WeekView).select(find(app, "Dentist"))
+        await pilot.press("comma", "k", "k", "l", "ö", "j", "o", "down")
+        await pilot.pause()
+        assert span(app, "Dentist") == (at(11), at(12, 15))
+        assert app.state.resize is not None and app.state.day == TODAY
+
+
+async def test_other_commands_are_ignored(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        grid = app.query_one(WeekView)
+        grid.select(find(app, "Dentist"))
+        await pilot.press("o")
+        before = app.state
+        for key in [*"hlnNaexypJK>fvwdmtHLc", "tab", "enter", "slash"]:
+            await pilot.press(key)
+            await pilot.pause()
+            assert app.state == before and app.focused is grid and len(app.screen_stack) == 1, key
+            assert not grid.flashing
+        assert span(app, "Dentist") == (at(11), at(12))
+        await pilot.press("plus")  # zooming works
+        assert grid.rows_per_hour > 2 and app.state.resize is not None
+        await pilot.press("escape", "j")
+        assert app.state.resize is None and span(app, "Dentist") == (at(11), at(12))
+        assert grid.selected != find(app, "Dentist")  # j selects again
+
+
+async def test_the_mode_ends_with_its_selection(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        grid = app.query_one(WeekView)
+
+        async def enter() -> None:
+            app.focus_view()
+            grid.select(find(app, "Dentist"))
+            await pilot.press("o")
+            await pilot.pause()
+            assert app.state.resize is not None
+
+        await enter()
+        app.action_next_period()
+        await pilot.pause()
+        assert app.state.resize is None
+        app.select_date(TODAY)
+        await enter()
+        app.set_view("day")
+        assert app.state.resize is None
+        app.set_view("week")
+        await enter()
+        await pilot.click(WeekView, offset=(20, 12))  # another slot
+        assert app.state.resize is None
+        app.select_date(TODAY)
+        await enter()
+        app.action_focus_calendars()
+        await pilot.pause()
+        assert app.state.resize is None
+        await enter()
+        app.delete_event(find(app, "Dentist").event.uid)
+        await pilot.pause()
+        assert app.state.resize is None
+
+
+async def test_the_active_edge_is_shown(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        bar, grid = app.query_one(StatusBar), app.query_one(WeekView)
+        await pilot.press("plus", "plus")
+        grid.select(find(app, "Dentist"))
+
+        def bright() -> dict[int, Segment]:
+            """line -> its bright (edge) segment."""
+            fill = app.palette.foreground3.lower()
+            found = {}
+            for y in range(grid.size.height):
+                for segment in grid.render_line(y):
+                    style = segment.style
+                    if style and style.bgcolor and style.bgcolor.name.lower() == fill:
+                        found[y] = segment
+            return found
+
+        assert bright() == {}
+        y = grid._header_height() + grid.scale.row_of(11 * 60) - grid._top_row()
+        rows = grid.scale.row_of(12 * 60) - grid.scale.row_of(11 * 60)
+        await pilot.press("o")
+        assert "RESIZE · END" in str(bar.render())
+        assert list(bright()) == [y + rows - 1] and "▼" in bright()[y + rows - 1].text
+        await pilot.press("o")
+        assert "RESIZE · START" in str(bar.render())
+        assert list(bright()) == [y] and "Dentist" in bright()[y].text and "▲" in bright()[y].text
+        await pilot.press("escape")
+        assert "RESIZE" not in str(bar.render()) and "WEEK" in str(bar.render())
+        assert bright() == {}

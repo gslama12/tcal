@@ -7,7 +7,7 @@ tab-marked ones as a batch), moving and resizing events.
 """
 
 from datetime import date, datetime, timedelta
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from textual.keys import format_key
@@ -23,12 +23,11 @@ from tcal.ui.screens.event_detail import (
     time_range,
 )
 from tcal.ui.screens.event_prompt import EventPrompt
+from tcal.ui.state import Edge
 from tcal.ui.widgets.timegrid import TimeGrid
 
 if TYPE_CHECKING:
     from tcal.ui.app import TcalApp
-
-Edge = Literal["start", "end"]
 
 
 class Editor:

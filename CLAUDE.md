@@ -44,14 +44,15 @@ uv run ruff check && uv run ruff format --check && uv run mypy
   `tcal/ui/timepaint.py` — pure `paint(GridFrame, w, h)` for Day/Week, on `canvas.Canvas`.
   `tcal/ui/flash.py` — flash jump (`f`): targets, labels, overlay over painted lines.
   `widgets/timegrid.py` keeps cursor/scroll/zoom/selection/mouse/flash keys only
-  (event mode by default; grid mode = `state.grid`, `app.set_grid_mode`).
+  (event mode by default; grid mode = `state.grid`, `app.set_grid_mode`; resize mode =
+  `state.resize`, `app.set_resize`).
 - `tcal/ui/widgets/` — one widget per module; subclass `TcalWidget`/`CalendarView`
   from `base.py` and redraw in `on_state`.
 
 ## Conventions
 
 - Widgets never mutate state directly: call `app.select_date/set_view/toggle_calendar/
-  set_grid_mode`;
+  set_grid_mode/set_resize`;
   edit data with `app.save_event/delete_event` (they refresh and sync);
   after other data changes call `app.refresh_data()`. Watching `app.state` is the one redraw signal.
 - New keybinds: add the action to `[keys]` in `default_config.toml`, declare it with

@@ -646,6 +646,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 
 ### Resizing (resize)
 
+- *R1's keys are superseded by resize mode (RM1–RM3 below).*
 - **R1 Keys:** `end_earlier` (`,`, shift+up), `end_later` (`.`, shift+down), `start_earlier` (`;`)
   and `start_later` (`:`): unshifted / shifted `,` `.` on a German keyboard, no AltGr brackets.
   Like `move_up/down` they need a timed event in a time grid (event or grid mode).
@@ -709,6 +710,23 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   an uneven fit, late events left a gap row) and no minute before it is past the last row (a
   23:45 event at 1 row/hour was drawn below the grid). `TimeScale.aligned` rounds ties so that
   `row_of(0)` is 0 (was -1 for e.g. 08:00–24:00 with a tie).
+
+### Resize mode (resize-mode)
+
+- **RM1 Keys:** `[keys] resize_mode = ["o"]` replaces `end_earlier/end_later/start_earlier/start_later`
+  (a config that still sets them gets the usual unknown-setting error). On a timed, writable event
+  in a time grid it enters resize mode with the end active, pressed again it toggles the edge;
+  `cursor_up`/`cursor_down` move it (`Editor.resize`), `cancel` leaves and keeps the changes.
+- **RM2 State:** `AppState.resize: Resize(uid, edge) | None` (`app.set_resize`). Other actions are
+  refused by `check_action` (`RESIZE_ACTIONS` in `app.py` and `timegrid.py`: undo, redo, zoom, sync,
+  help and quit still work), so remapped keys need nothing special. The mode also ends with a
+  click in the grid, a view change, focus leaving the grid (not the terminal), or when its event
+  is not the selected one any more (undo of another change, sync, other day).
+- **RM3** Each step is its own undo step, as before: `u` in the mode takes back one step and stays
+  in it. The series scope is asked once (`move_run`; again after an undo).
+- **RM4 Look:** status chip `RESIZE · START`/`RESIZE · END` (yellow, instead of the view badge); a
+  post-pass `timepaint._edge` draws the active edge's row of the block bright with ▲/▼ at its right
+  end. Not marked: bars (24 h and longer) and collapsed clusters (chip only).
 
 ### Event prompt (nl-form)
 

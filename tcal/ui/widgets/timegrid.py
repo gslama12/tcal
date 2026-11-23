@@ -18,6 +18,8 @@ Two modes (``state.grid``): in event mode (default) the cursor keys move between
 events (up/down within the day, left/right to the nearest one on the next day); in
 grid mode (``grid_mode`` key, escape leaves) they move a slot cursor by config
 ``grid_step`` minutes (default an hour).
+In either, resize mode (``state.resize``, the app's ``resize_mode`` key, escape leaves)
+makes up/down move the selected event's start or end.
 """
 
 from dataclasses import replace
@@ -32,7 +34,7 @@ from tcal.model import Occurrence
 from tcal.ui.flash import Flash, Target, overlay, targets
 from tcal.ui.keys import EVENT_BINDINGS, binding
 from tcal.ui.messages import EventSelected, NewEventRequested
-from tcal.ui.state import AppState, ViewMode
+from tcal.ui.state import AppState, Edge, ViewMode
 from tcal.ui.timelayout import (
     MINUTES,
     ZOOMS,
@@ -52,6 +54,8 @@ from tcal.ui.widgets.base import CalendarView
 MAX_LANES = 3  # all-day strip rows shown at most
 SCROLL_ROWS = 2  # rows per mouse-wheel step
 SLOT_MINUTES = 15  # event mode: the slot a click or the remembered time falls in
+# The grid's own actions that still work in resize mode.
+RESIZE_ACTIONS = {"cursor_up", "cursor_down", "cancel", "zoom_in", "zoom_out"}
 HEADER_FORMATS = ("%A, {day} %B", "%A {day}", "%a {day}", "{day}")  # widest first
 
 
@@ -73,7 +77,7 @@ class TimeGrid(CalendarView):
 
     BINDINGS = [
         *(b for b in EVENT_BINDINGS if not (isinstance(b, Binding) and b.id == "cancel")),
-        binding("cancel", "Leave grid mode / clear marks"),
+        binding("cancel", "Leave resize / grid mode, clear marks"),
         binding("grid_mode", "Grid mode"),
         binding("new_event", "New event"),
         binding("quick_add", "New event", action="new_event"),
@@ -90,6 +94,7 @@ class TimeGrid(CalendarView):
         self._data: tuple[list[date], list[Occurrence], list[Bar]] | None = None
         self._blocks: tuple[TimeScale, int, list[Block]] | None = None
         self._lines: list[Strip] | None = None
+        self._edge: Edge | None = None  # resize mode: the edge it moved at the last redraw
         self._flash: Flash | None = None  # labels up (f) until a jump or cancel
 
     def days(self) -> list[date]:
@@ -118,6 +123,11 @@ class TimeGrid(CalendarView):
         if self._picked is not None:  # the reloaded copy (or None if it is gone)
             key = self._picked.key
             self._picked = next((o for o in self._occurrences() if o.key == key), None)
+        if state.resize is not None and state.view.value == self.id:
+            self.call_later(self._check_resize)  # once an edit has selected its event again
+            if self._edge != state.resize.edge:
+                self._ensure_visible()
+        self._edge = state.resize.edge if state.resize is not None else None
         self._redraw()
 
     def on_show(self) -> None:
@@ -129,6 +139,8 @@ class TimeGrid(CalendarView):
 
     def on_blur(self) -> None:
         self._end_flash()
+        if self.app.app_focus:  # not just the terminal losing focus
+            self.tcal.set_resize(None)
 
     def _show_cursor(self) -> None:
         """Scroll the cursor slot (now, or the selected event) into view: the grid has
@@ -309,11 +321,16 @@ class TimeGrid(CalendarView):
             self._top_min = scale.minute_of(min(rows.start, rows.stop - height))
 
     def _focus_rows(self) -> range:
-        """The rows to keep on screen: the cursor slot, or the selected event's block."""
-        occ = self.selected if not self.grid_mode else None
+        """The rows to keep on screen: the cursor slot, or the selected event's block
+        (resize mode: the row of the edge it moves)."""
+        resize = self.tcal.state.resize
+        occ = self.selected if resize is not None or not self.grid_mode else None
         if occ is not None:
             day = self._load()[0].index(self.tcal.state.day)
             block = next((b for b in self._block_list() if b.day == day and occ in b.occs), None)
+            if block is not None and resize is not None:
+                row = block.top if resize.edge == "start" else block.bottom - 1
+                return range(row, row + 1)
             if block is not None:
                 return range(block.top, block.bottom)
         return self._cursor_rows()
@@ -417,9 +434,34 @@ class TimeGrid(CalendarView):
                 index = next((i for i in reversed(range(len(keys))) if keys[i] < here), -1)
         self.select(stops[index % len(stops)])
 
+    # ----- resize mode ----------------------------------------------------
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if self.tcal.state.resize is not None:
+            return action in RESIZE_ACTIONS
+        return super().check_action(action, parameters)
+
+    def _resize(self, step: int) -> bool:
+        """Resize mode: move the active edge (False: not in the mode)."""
+        resize, occ = self.tcal.state.resize, self.selected
+        if resize is None:
+            return False
+        if occ is not None:
+            self.tcal.editor.resize(occ, resize.edge, step)
+        return True
+
+    def _check_resize(self) -> None:
+        """Leave resize mode once its event is not the selected one any more (an undo of
+        another change, a sync, another day)."""
+        resize, occ = self.tcal.state.resize, self.selected
+        if resize is not None and (occ is None or occ.event.uid != resize.uid):
+            self.tcal.set_resize(None)
+
     # ----- actions --------------------------------------------------------
 
     def action_cursor_down(self) -> None:
+        if self._resize(1):
+            return
         if not self.grid_mode:
             self._step_event(1)
             return
@@ -427,6 +469,8 @@ class TimeGrid(CalendarView):
         self._move_cursor(self._slot_at(row))
 
     def action_cursor_up(self) -> None:
+        if self._resize(-1):
+            return
         if not self.grid_mode:
             self._step_event(-1)
             return
@@ -489,8 +533,10 @@ class TimeGrid(CalendarView):
             self.select(occ)
 
     def action_cancel(self) -> None:
-        """Escape: leave grid mode, else clear the marks."""
-        if self.grid_mode:
+        """Escape: leave resize mode, else grid mode, else clear the marks."""
+        if self.tcal.state.resize is not None:
+            self.tcal.set_resize(None)
+        elif self.grid_mode:
             self.action_grid_mode()
         else:
             self.tcal.clear_marks()
@@ -545,6 +591,7 @@ class TimeGrid(CalendarView):
         if column is None:
             return
         event.stop()
+        self.tcal.set_resize(None)
         marker = next(
             (
                 m
@@ -654,6 +701,7 @@ class TimeGrid(CalendarView):
 
     def _frame(self) -> GridFrame:
         days, _, bars = self._load()
+        resize = self.tcal.state.resize
         return GridFrame(
             days=days,
             xs=self._columns(),
@@ -671,6 +719,7 @@ class TimeGrid(CalendarView):
             palette=self.tcal.palette,
             color=self.tcal.calendar_color,
             marked=self.tcal.state.marked,
+            edge=resize.edge if resize is not None else None,
         )
 
 

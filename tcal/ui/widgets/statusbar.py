@@ -1,6 +1,6 @@
 """One-line bar at the bottom in todooit's style.
 
-Left: view-mode badge ("WEEK · GRID" in grid mode); middle: selected date; right: "N selected" (tab marks),
+Left: view-mode badge ("WEEK · GRID" in grid mode, "RESIZE · END" in resize mode); middle: selected date; right: "N selected" (tab marks),
 sync status, pending edits (if any) and the help key. When narrow, "↑N pending" becomes "↑N" and
 then the date is dropped, so the help key stays readable.
 """
@@ -33,7 +33,10 @@ class StatusBar(TcalWidget):
         state = self.tcal.state
         mode = " · GRID" if state.grid and state.view in (ViewMode.DAY, ViewMode.WEEK) else ""
         label = f" {state.view.value.upper()}{mode} "
-        badge = Text(label, style=f"bold {p.background1} on {p.primary}")
+        color = p.primary
+        if state.resize is not None:
+            label, color = f" RESIZE · {state.resize.edge.upper()} ", p.yellow
+        badge = Text(label, style=f"bold {p.background1} on {color}")
         day = Text(f"{state.day:%a %-d %b %Y}", style=p.foreground2)
 
         pending = self.tcal.source.pending_count()

@@ -71,12 +71,9 @@ move_down = ["J", "ctrl+j"]            # selected event 15 min later (day/week)
 move_up = ["K", "ctrl+k"]              # selected event 15 min earlier (day/week)
 move_left = ["less_than_sign", "ctrl+h"]     # "<": selected event one day earlier
 move_right = ["greater_than_sign", "ctrl+l"] # ">": selected event one day later
-# Resizing (day/week): the selected event's start or end to the next/previous quarter hour;
-# an event stays at least 15 min long.
-end_earlier = ["comma", "shift+up"]    # ",": ends earlier
-end_later = ["full_stop", "shift+down"] # ".": ends later
-start_earlier = ["semicolon"]          # ";" (German shift+,): starts earlier
-start_later = ["colon"]                # ":" (German shift+.): starts later
+# Resize mode (day/week): cursor_up/cursor_down move the selected event's end (the key again:
+# its start) to the previous/next quarter hour; escape leaves.
+resize_mode = ["o"]
 flash = ["f"]                          # day/week: labels on events and slots, type one to jump there
 goto_date = ["g"]
 search = ["slash"]
@@ -89,4 +86,4 @@ toggle_sidebar = ["b"]
 help = ["question_mark"]
 quit = ["q"]
 save = ["ctrl+s"]                      # event prompt (enter saves too)
-cancel = ["escape"]                    # close the prompt / a dialog; leave grid mode; clear the marks
+cancel = ["escape"]                    # close the prompt / a dialog; leave resize / grid mode; clear the marks
