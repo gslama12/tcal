@@ -23,7 +23,7 @@ async def test_help_lists_user_overridden_key(make_app, write_config) -> None:
         rows = dict(row for _, rows in sections(table.keys) for row in rows)
         assert rows["S"] == "Sync now"
         assert "r" not in rows
-        await pilot.press("d")  # app keys don't reach the panes behind the modal
+        await pilot.press("m")  # app keys don't reach the panes behind the modal
         assert app.state.view is ViewMode.WEEK
         await pilot.press("f1")
         assert not isinstance(app.screen, HelpScreen)

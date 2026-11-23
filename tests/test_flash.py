@@ -1,4 +1,4 @@
-"""Flash jump (f) in the Day/Week grid: labels, typing them, cancelling."""
+"""Flash jump (f) in the Week grid: labels, typing them, cancelling."""
 
 from datetime import datetime, time, timedelta
 
@@ -10,7 +10,7 @@ from tcal.store import Store
 from tcal.ui.flash import ALPHABET, Flash, Target, flash_labels
 from tcal.ui.state import ViewMode
 from tcal.ui.widgets import timegrid
-from tcal.ui.widgets.timegrid import WeekView
+from tcal.ui.widgets.timegrid import TimeGrid
 
 NOW = datetime.combine(TODAY, time(10, 15)).astimezone()
 SIZE = (140, 45)
@@ -47,14 +47,14 @@ def test_press_narrows_jumps_and_cancels() -> None:
     assert flash.press("escape") is None and flash.done
 
 
-def label_of(grid: WeekView, pred) -> str:
+def label_of(grid: TimeGrid, pred) -> str:
     assert grid._flash is not None
     return next(k for k, t in grid._flash.labels.items() if pred(t))
 
 
 async def test_flash_jumps_to_a_slot_in_another_day(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("f")
         assert grid.flashing
         friday = (TODAY + timedelta(days=2) - grid.days()[0]).days
@@ -76,7 +76,7 @@ async def test_one_slot_label_per_grid_step(
     write_config(f"[view]\ngrid_step = {step}\n")
     app = RecordingApp(store, load_config())
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press(*["plus"] * zooms, "f")
         assert grid._flash is not None
         slots = [t for t in grid._flash.labels.values() if t.occ is None]
@@ -99,7 +99,7 @@ async def test_flash_lands_on_the_slot_start(
     write_config(f"[view]\ngrid_step = {step}\n")
     app = RecordingApp(store, load_config())
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press(*["plus"] * zooms, "f")
         assert grid._flash is not None
         for target in [t for t in grid._flash.labels.values() if t.occ is None]:
@@ -110,7 +110,7 @@ async def test_flash_lands_on_the_slot_start(
 
 async def test_flash_selects_an_event(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("f")
         label = label_of(grid, lambda t: t.occ is not None and t.occ.summary == "Dinner")
         await pilot.press(*label)
@@ -120,7 +120,7 @@ async def test_flash_selects_an_event(app: RecordingApp) -> None:
 
 async def test_nearest_gets_a_single_key(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("f")
         assert grid._flash is not None
         first = grid._flash.labels["a"]
@@ -133,7 +133,7 @@ async def test_nearest_gets_a_single_key(app: RecordingApp) -> None:
 async def test_other_keys_cancel_without_acting(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # j moves the slot cursor
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         before = grid.cursor_time
         await pilot.press("f", "escape")
         assert not grid.flashing and grid.cursor_time == before

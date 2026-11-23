@@ -14,7 +14,6 @@ from tcal.dates import add_months
 
 
 class ViewMode(StrEnum):
-    DAY = "day"
     WEEK = "week"
     MONTH = "month"
     YEAR = "year"
@@ -44,15 +43,13 @@ class AppState:
     week_start: int = 0  # 0 = Monday .. 6 = Sunday
     hidden_calendars: frozenset[str] = frozenset()
     marked: frozenset[tuple[str, datetime]] = frozenset()  # tab-marked ``Occurrence.key``s
-    grid: bool = False  # day/week: the cursor keys move a slot cursor, not between events
-    resize: Resize | None = None  # day/week: resize mode, and the edge it moves
+    grid: bool = False  # week: the cursor keys move a slot cursor, not between events
+    resize: Resize | None = None  # week: resize mode, and the edge it moves
 
     def period(self) -> tuple[date, date]:
         """The [start, end) day range of the current view's period."""
         d = self.day
         match self.view:
-            case ViewMode.DAY:
-                return d, d + timedelta(days=1)
             case ViewMode.WEEK:
                 start = d - timedelta(days=(d.weekday() - self.week_start) % 7)
                 return start, start + timedelta(days=7)
@@ -67,8 +64,6 @@ class AppState:
     def shifted(self, n: int) -> "AppState":
         """Move the selected date by ``n`` periods (prev/next)."""
         match self.view:
-            case ViewMode.DAY:
-                new = self.day + timedelta(days=n)
             case ViewMode.WEEK:
                 new = self.day + timedelta(weeks=n)
             case ViewMode.MONTH:
@@ -81,12 +76,10 @@ class AppState:
 
     def title(self, short: bool = False) -> str:
         """Human title of the current period, e.g. 'November 2026'
-        (``short``: abbreviated names, e.g. 'Nov 2026', 'Sat 21 Nov 2026')."""
+        (``short``: abbreviated names, e.g. 'Nov 2026')."""
         start, end = self.period()
         last = end - timedelta(days=1)
         match self.view:
-            case ViewMode.DAY:
-                return f"{start:%a %-d %b %Y}" if short else f"{start:%A, %-d %B %Y}"
             case ViewMode.WEEK:
                 if start.year != last.year:
                     return f"{start:%-d %b %Y} – {last:%-d %b %Y}"

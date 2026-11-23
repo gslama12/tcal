@@ -9,7 +9,7 @@ Look & feel modelled on todooit; layout modelled on the Google Calendar web app.
 
 ## Status (2026-11-21)
 
-- **Done:** all six work packages plus QA rounds 1–4. Day/week/month/year/schedule views,
+- **Done:** all six work packages plus QA rounds 1–4. Week/month/year/schedule views,
   sidebar, event CRUD (incl. recurring scopes, repeat ends), detail extras, quick add,
   yank/paste/duplicate/move, undo stack (20), goto, search, help, iCloud CalDAV sync with
   offline queue, subscriptions, `tcal login|sync|calendars|doctor|config`, five themes.
@@ -65,8 +65,8 @@ tcal/
     widgets/
       minical.py     small month calendar (sidebar top)
       calendar_list.py  toggleable calendar list with colors (sidebar)
-      view_switcher.py  Day | Week | Month | Year tabs + current range title + "Today"
-      timegrid.py    Day & Week views: cursor/scroll/zoom/selection/mouse (drawing: timepaint)
+      view_switcher.py  Week | Month | Year tabs + current range title + "Today"
+      timegrid.py    the Week view: cursor/scroll/zoom/selection/mouse (drawing: timepaint)
       month_view.py  6x7 grid with event chips, "+N more"
       year_view.py   12 mini-months, days with events highlighted
       schedule_view.py  upcoming events as a list (A1)
@@ -76,6 +76,9 @@ tcal/
       main.py        the base screen (no tab focus cycling)
       event_prompt.py  create/edit by typing one line, live preview card (NL1)
       event_detail.py  modal: view event, e=edit, x=delete
+
+      event_form.py  modal: create/edit (title, calendar, date, start, end, all-day, location, notes)
+      event_detail.py  modal: view event, e=edit, d=delete
       help.py        keybinding list
       goto.py        jump to date prompt (parser: `tcal/dates.py`)
       search.py      search events in cache
@@ -102,11 +105,11 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
   day gets shorter than the grid.
 - **D6 Keybinds:** vim-like, all configurable in `[keys]` of config.toml (action -> list of keys).
   Current defaults (`tcal/default_config.toml`, README table): h/j/k/l move cursor,
-  H/L prev/next period, t today, d/w/m/Y/s day/week/month/year/schedule view, +/- zoom,
+  H/L prev/next period, t today, w/m/Y/s week/month/year/schedule view, +/- zoom,
   enter open, v grid mode (E1), a/i new event, A quick add, e edit,
-  x delete, u undo, ctrl+r redo, y yank, p paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too),
+  d delete, u undo, ctrl+r redo, y yank, p paste, D duplicate, J/K/</> move (ctrl+j/k/h/l too),
   , . end and ; : start earlier/later (R1), f flash
-  jump (day/week), g goto date, / search, r sync, c focus calendar list, M focus mini month, space
+  jump (week), g goto date, / search, r sync, c focus calendar list, M focus mini month, space
   toggle calendar, tab mark event (batch copy, B1),
   b sidebar, ? help, q quit, ctrl+s save, esc cancel. (Originally `y` = year view and `dd`
   delete: see S2, Y1.)
@@ -761,3 +764,12 @@ Supersedes the event form (E3 ff.) and the quick-add screen (QA1, QA3): both are
   removes it. One instance of a series refuses `#calendar` and repeats.
 - **NL4:** `describe_rrule`/`until_date` moved from `event_detail.py` to `tcal/repeat.py`;
   `server_changed_prompt` (PR1) now lives in `event_prompt.py`; `discard_prompt` is gone.
+
+### No Day view (no-day)
+
+- **ND1 (user request):** the Day view is gone (`view_day`, `ViewMode.DAY`, `DayView`,
+  `default_view = "day"`: all now unknown/invalid in a config). `TimeGrid` *is* the week view
+  (no `WeekView` subclass; `GridFrame.header_formats` is the constant `HEADER_FORMATS`). What
+  opened the Day view (enter / click on a month or year day, "+N more") goes to that day's week.
+- **ND2 (user request):** `delete_event = ["d"]` (x is unbound; supersedes S2). Older notes above
+  that mention day/week or `x` describe the state at their time.

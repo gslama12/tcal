@@ -1,4 +1,4 @@
-"""Stacked (cascading), translucent event blocks in the Day/Week grid."""
+"""Stacked (cascading), translucent event blocks in the Week grid."""
 
 from datetime import datetime, timedelta
 
@@ -16,7 +16,7 @@ from tcal.ui.theme import ALPHA, EDGE, TOKYO_NIGHT, blend
 from tcal.ui.timelayout import Block, TimeScale, sub_columns
 from tcal.ui.timepaint import GridFrame, paint
 from tcal.ui.widgets import timegrid
-from tcal.ui.widgets.timegrid import TimeGrid, WeekView
+from tcal.ui.widgets.timegrid import TimeGrid
 
 FRI = TODAY + timedelta(days=2)
 SIZE = (140, 45)  # 2 rows/hour, 06:30-24:00
@@ -61,7 +61,7 @@ def y_of(grid: TimeGrid, row: int) -> int:
 async def test_same_start_stacks_the_shorter_on_top(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         await pilot.pause()
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         workshop, coffee = blocks(grid)["Workshop"], blocks(grid)["Coffee"]
         assert (workshop.depth, coffee.depth) == (0, 1)
         order = grid._block_list()
@@ -78,7 +78,7 @@ async def test_same_start_stacks_the_shorter_on_top(app: RecordingApp) -> None:
 async def test_identical_times_go_side_by_side(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         await pilot.pause()
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         a, b = blocks(grid)["Pickup A"], blocks(grid)["Pickup B"]
         assert (a.depth, a.col, a.cols, b.depth, b.col, b.cols) == (0, 0, 2, 0, 1, 2)
         xs = grid._columns()
@@ -91,7 +91,7 @@ async def test_now_line_skips_the_gap_between_events(
     monkeypatch.setattr(timegrid, "now", lambda: at("17:00"))
     async with app.run_test(size=SIZE) as pilot:
         await pilot.pause()
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         xs, a = grid._columns(), blocks(grid)["Pickup A"]
         gap = sub_columns(a, xs)[1]
         line = next(line for line in text(grid) if line[xs[4]] == "●")
@@ -102,7 +102,7 @@ async def test_now_line_skips_the_gap_between_events(
 async def test_cursor_and_clicks_pick_the_topmost_block(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("l", "l")  # Fri
         await pilot.press(*"jjjjjj")  # 13:00
         assert grid.selected is not None and grid.selected.summary == "Coffee"
@@ -112,15 +112,15 @@ async def test_cursor_and_clicks_pick_the_topmost_block(app: RecordingApp) -> No
         coffee = blocks(grid)["Coffee"]
         x0 = sub_columns(coffee, xs)[0]
         y = 1 + y_of(grid, coffee.top)  # +1: the view's border
-        await pilot.click(WeekView, offset=(x0 + 3, y))
-        await pilot.click(WeekView, offset=(x0 - 1, y))  # the strip of the one below
+        await pilot.click(TimeGrid, offset=(x0 + 3, y))
+        await pilot.click(TimeGrid, offset=(x0 - 1, y))  # the strip of the one below
         opened = [m.occurrence.summary for m in app.posted if isinstance(m, messages.EventSelected)]
         assert opened == ["Coffee", "Workshop"]
 
 
 async def test_stepping_visits_stacked_and_side_by_side_events(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         app.select_date(FRI)
         seen = []
         for _ in range(5):  # up from the day's last event
@@ -135,7 +135,7 @@ async def test_stepping_visits_stacked_and_side_by_side_events(app: RecordingApp
 async def test_blocks_are_translucent_with_an_accent_bar(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         await pilot.pause()
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         p, xs = app.palette, grid._columns()
         workshop, coffee = blocks(grid)["Workshop"], blocks(grid)["Coffee"]
         x0, x1 = sub_columns(workshop, xs)
@@ -175,7 +175,7 @@ def test_overlapping_colours_do_not_mix(selected: bool, now: str) -> None:
         frame = GridFrame(
             days=[FRI], xs=xs, scale=scale, top=0, strip_rows=0, bars=[], blocks=blocks,
             day=FRI, cursor_rows=range(0), cursor_minute=0, selected=over if selected else None, now=at(now),
-            header_formats=("%a",), palette=TOKYO_NIGHT,
+            palette=TOKYO_NIGHT,
             color={"red": RED, "green": GREEN}.__getitem__,
         )  # fmt: skip
         x0, x1 = sub_columns(top, xs)

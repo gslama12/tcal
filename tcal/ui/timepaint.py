@@ -1,4 +1,4 @@
-"""Drawing one frame of the Day/Week time grid (see ``tcal.ui.widgets.timegrid``).
+"""Drawing one frame of the Week time grid (see ``tcal.ui.widgets.timegrid``).
 
 ``paint(frame, width, height)`` is pure: the widget gathers what is shown into a
 ``GridFrame`` (geometry from ``tcal.ui.timelayout``, cursor, selection, current time)
@@ -27,6 +27,8 @@ CURSOR_ALPHA = 0.45  # the cursor slot: the primary colour over the background
 HOUR_LINE = "▔"  # on the top edge of the hour's first row: where its events start
 LINE_ALPHA = 0.6  # the grid's hour lines: the divider colour over the background
 
+HEADER_FORMATS = ("%A, {day} %B", "%A {day}", "%a {day}", "{day}")  # widest first
+
 
 @dataclass(frozen=True)
 class GridFrame:
@@ -44,7 +46,6 @@ class GridFrame:
     cursor_minute: int  # the slot's start, its label
     selected: Occurrence | None
     now: datetime
-    header_formats: tuple[str, ...]  # widest first
     palette: Palette
     color: Callable[[str], str]  # calendar id -> colour
     marked: frozenset[tuple[str, datetime]] = frozenset()  # ``Occurrence.key``s with a ✓
@@ -158,8 +159,8 @@ def _header_label(f: GridFrame, i: int) -> tuple[int, str]:
     xs = f.xs
     narrowest = min(b - a - 1 for a, b in zip(xs, xs[1:], strict=False))
     fmt = next(
-        (fm for fm in f.header_formats if max(len(_day(fm, d)) for d in f.days) + 2 <= narrowest),
-        f.header_formats[-1],
+        (fm for fm in HEADER_FORMATS if max(len(_day(fm, d)) for d in f.days) + 2 <= narrowest),
+        HEADER_FORMATS[-1],
     )
     x0, x1 = xs[i] + 1, xs[i + 1]
     label = f" {_day(fmt, f.days[i])} "

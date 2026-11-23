@@ -4,7 +4,7 @@
 D = duplicate, the cursor up/down keys scroll, esc/q = close; it follows a sync's changes to the event
 (closes if it's gone). A read-only calendar's event hints only "y copy  esc close";
 e/x give a notice and keep the detail open.
-``confirm_delete(app, occ)`` is the one delete flow, also used by the ``x`` key
+``confirm_delete(app, occ)`` is the one delete flow, also used by the ``d`` key
 in the views: read-only calendars only get a notice; a recurring event asks
 "this event" vs "all events". ``scope_prompt(verb, occ)`` asks the same before editing,
 moving or resizing one instance of a series.

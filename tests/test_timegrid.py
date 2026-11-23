@@ -1,4 +1,4 @@
-"""Day/Week time grid in the running app: navigation, zoom, selection, mouse."""
+"""Week time grid in the running app: navigation, zoom, selection, mouse."""
 
 from datetime import datetime, time, timedelta
 
@@ -9,12 +9,11 @@ from textual import events
 from tcal.model import Event
 from tcal.store import Store
 from tcal.ui import messages, timepaint
-from tcal.ui.state import ViewMode
 from tcal.ui.theme import EDGE, blend
 from tcal.ui.timelayout import sub_columns
 from tcal.ui.timepaint import CURSOR_ALPHA, HOUR_LINE
 from tcal.ui.widgets import timegrid
-from tcal.ui.widgets.timegrid import AXIS, DayView, TimeGrid, WeekView
+from tcal.ui.widgets.timegrid import TimeGrid
 
 NOW = datetime.combine(TODAY, time(10, 15)).astimezone()
 SIZE = (140, 45)  # week grid: 4 header rows + 35 rows -> 06:30-24:00 at 2 rows/hour
@@ -36,7 +35,7 @@ def at(hhmm: str, day=TODAY) -> datetime:
 async def test_week_renders_header_strip_events_and_now_line(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         await pilot.pause()
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         lines = text(grid)
         assert "Mon 16" in lines[0] and "Wed 18" in lines[0] and "Sun 22" in lines[0]
         assert any("Conference" in line for line in lines[1:3])
@@ -61,7 +60,7 @@ async def test_week_renders_header_strip_events_and_now_line(app: RecordingApp) 
 async def test_cursor_moves_and_crosses_week(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("j", "j", "k")
         assert grid.cursor_time == at("10:30")
         await pilot.press("l")
@@ -76,7 +75,7 @@ async def test_cursor_moves_and_crosses_week(app: RecordingApp) -> None:
 async def test_cursor_scrolls_to_early_hours(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press(*["k"] * 30)
         assert grid.cursor_time == at("00:00")
         lines = text(grid)
@@ -88,7 +87,7 @@ async def test_cursor_scrolls_to_early_hours(app: RecordingApp) -> None:
 async def test_zoom(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("plus")
         assert grid.rows_per_hour == 3
         assert grid.cursor_time == at("10:00")  # zoom keeps the cursor time
@@ -105,7 +104,7 @@ async def test_zoom(app: RecordingApp) -> None:
 
 async def test_auto_zoom_follows_resize(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         assert grid.rows_per_hour == 2
         for height in (30, 55, 70):
             await pilot.resize_terminal(140, height)
@@ -124,7 +123,7 @@ async def test_headers_share_one_format(store: Store) -> None:
     for width, label in ((200, "Wednesday 18"), (140, "Wed 18"), (90, "18")):
         app = RecordingApp(store)
         async with app.run_test(size=(width, 45)):
-            line = text(app.query_one(WeekView))[0]
+            line = text(app.query_one(TimeGrid))[0]
             assert label in line
             assert "," not in line  # "Monday, 16 November" only when every column fits it
 
@@ -133,7 +132,7 @@ async def test_headers_share_one_format(store: Store) -> None:
 async def test_cursor_slot_has_accent_background(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press(*"jjjjj")  # 12:30, an empty slot on Wed
         row = grid._cursor_row() - grid._top_row() + grid._header_height()
         backgrounds = {
@@ -149,7 +148,7 @@ async def test_cursor_slot_has_accent_background(app: RecordingApp) -> None:
 async def test_cursor_selects_and_opens(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("j", "j", "j")  # 11:30 on today: inside "Dentist"
         assert grid.selected is not None and grid.selected.summary == "Dentist"
         await pilot.press("enter")
@@ -162,7 +161,7 @@ async def test_cursor_selects_and_opens(app: RecordingApp) -> None:
 async def test_new_event_on_empty_slot(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("k", "k", "k")  # 08:30, free
         assert grid.selected is None
         await pilot.press("enter", "a")
@@ -175,18 +174,18 @@ async def test_new_event_on_empty_slot(app: RecordingApp) -> None:
 
 async def test_mouse_click_slot_and_event(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         xs, header = grid._columns(), grid._header_height()
         # The widget has a 1-cell border: content (x, y) is at offset (x + 1, y + 1).
-        await pilot.click(WeekView, offset=(xs[4] + 3, 1 + header + 2))  # Fri 07:30
+        await pilot.click(TimeGrid, offset=(xs[4] + 3, 1 + header + 2))  # Fri 07:30
         assert app.state.day == TODAY + timedelta(days=2)
         assert grid.cursor_time == at("07:30", TODAY + timedelta(days=2))
         assert app.posted == []
-        await pilot.click(WeekView, offset=(xs[0] + 3, 1 + header + 14))  # Mon 13:30
+        await pilot.click(TimeGrid, offset=(xs[0] + 3, 1 + header + 14))  # Mon 13:30
         await pilot.pause()
         assert isinstance(app.posted[-1], messages.EventSelected)
         assert app.posted[-1].occurrence.summary == "Sprint planning"
-        await pilot.click(WeekView, offset=(xs[2] + 3, 1))  # header of Wed
+        await pilot.click(TimeGrid, offset=(xs[2] + 3, 1))  # header of Wed
         assert app.state.day == TODAY
 
 
@@ -196,7 +195,7 @@ def wheel(grid: TimeGrid, event: type[events.MouseScrollUp | events.MouseScrollD
 
 async def test_mouse_wheel_scrolls(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         wheel(grid, events.MouseScrollUp)
         await pilot.pause()
         assert text(grid)[5].startswith("06:00")  # two rows up: 05:30 on top
@@ -206,19 +205,6 @@ async def test_mouse_wheel_scrolls(app: RecordingApp) -> None:
         assert text(grid)[5].startswith("07:00")  # clamped: 23:30 stays the last row
 
 
-async def test_day_view(app: RecordingApp) -> None:
-    async with app.run_test(size=SIZE) as pilot:
-        await pilot.press("d")
-        assert app.state.view is ViewMode.DAY
-        grid = app.query_one(DayView)
-        lines = text(grid)
-        assert lines[0].strip() == "Wed 18"  # the toolbar already shows the full date
-        body = "\n".join(lines)
-        assert "Design review" in body and "1:1 with Alex" in body and "Dentist" in body
-        await pilot.press("l")
-        assert "Thu 19" in text(grid)[0]
-
-
 FITTED = (140, 40)  # 30-row grid: 06:30-24:00 at 1.71 rows/hour (35 min per row)
 
 
@@ -226,12 +212,12 @@ FITTED = (140, 40)  # 30-row grid: 06:30-24:00 at 1.71 rows/hour (35 min per row
 async def test_fitted_slots_snap_to_quarter_hours(app: RecordingApp) -> None:
     async with app.run_test(size=FITTED) as pilot:
         app.set_grid_mode(True)  # the slot cursor
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         assert grid.scale.even is False
         assert grid.cursor_time == at("10:00")  # now = 10:15
         xs, header = grid._columns(), grid._header_height()
         y = next(y for y, line in enumerate(text(grid)) if line.startswith("16:00"))
-        await pilot.click(WeekView, offset=(xs[2] + 3, 1 + y))  # next to the 16:00 label
+        await pilot.click(TimeGrid, offset=(xs[2] + 3, 1 + y))  # next to the 16:00 label
         assert grid.cursor_time == at("16:00")
         assert text(grid)[y].startswith("16:00")
         times = set()
@@ -244,7 +230,7 @@ async def test_fitted_slots_snap_to_quarter_hours(app: RecordingApp) -> None:
 
 async def test_zoom_ladder_returns_to_fit(app: RecordingApp) -> None:
     async with app.run_test(size=FITTED) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         fitted = grid.scale
         await pilot.press(*["plus"] * 5)
         assert grid.rows_per_hour == 8
@@ -262,7 +248,7 @@ async def test_zoom_ladder_returns_to_fit(app: RecordingApp) -> None:
 async def test_hidden_events_have_markers(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         lines, xs, header = text(grid), grid._columns(), grid._header_height()
         early = next(o for o in grid._occurrences() if o.summary == "Early run")
         col = grid._load()[0].index(early.start.date())
@@ -279,10 +265,9 @@ async def test_overlaps_stack_google_style(
 ) -> None:
     monkeypatch.setattr(timegrid, "now", lambda: at("08:00"))  # nothing selected, no now line
     async with app.run_test(size=(200, 55)) as pilot:
-        await pilot.press("d")
         await pilot.pause()
-        grid = app.query_one(DayView)
-        blocks = {b.occ.summary: b for b in grid._block_list() if b.day == 0}
+        grid = app.query_one(TimeGrid)
+        blocks = {b.occ.summary: b for b in grid._block_list() if b.day == 2}
         review, one, dentist = blocks["Design review"], blocks["1:1 with Alex"], blocks["Dentist"]
         assert (review.depth, one.depth, dentist.depth) == (0, 1, 1)
         xs = grid._columns()
@@ -299,7 +284,7 @@ async def test_overlaps_stack_google_style(
 async def test_narrow_columns_collapse_cluster(app: RecordingApp) -> None:
     async with app.run_test(size=(70, 35)) as pilot:
         await pilot.pause()
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         group = next(b for b in grid._block_list() if b.group)
         assert [o.summary for o in group.occs] == ["Design review", "1:1 with Alex", "Dentist"]
         assert any("Des… +2" in line for line in text(grid))  # first title + count
@@ -317,23 +302,23 @@ async def test_narrow_columns_collapse_cluster(app: RecordingApp) -> None:
 
 @pytest.mark.usefixtures("quarter_steps")
 async def test_now_line_keeps_event_text(app: RecordingApp) -> None:
-    async with app.run_test(size=SIZE) as pilot:
+    async with app.run_test(size=(400, SIZE[1])) as pilot:
         app.set_grid_mode(True)  # the slot cursor
-        await pilot.press("d")
         await pilot.pause()
-        grid = app.query_one(DayView)
-        row = next(line for line in text(grid) if line[AXIS] == "●")
+        grid = app.query_one(TimeGrid)
+        x0, x1 = grid._columns()[2:4]
+        row = next(line for line in text(grid) if line[x0] == "●")
         assert row.startswith("10:00")  # the slot keeps its label; no "10:15" replaces it
-        event = row[AXIS + 1 : row.index("Design review") + len("Design review")]
+        event = row[x0 + 1 : row.index("Design review") + len("Design review")]
         assert event == " 10:00 Design review"  # text not covered (one free row: time + title)
-        assert "─" in row[row.index("Design review") :]  # the line goes on beside the event
+        assert "─" in row[row.index("Design review") : x1]  # the line goes on beside the event
 
 
 async def test_double_click_empty_slot_requests_new_event(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         xs, header = grid._columns(), grid._header_height()
-        await pilot.click(WeekView, offset=(xs[4] + 3, 1 + header + 2), times=2)  # Fri 07:30
+        await pilot.click(TimeGrid, offset=(xs[4] + 3, 1 + header + 2), times=2)  # Fri 07:30
         await pilot.pause()
         assert [type(m) for m in app.posted] == [messages.NewEventRequested]
         assert isinstance(app.posted[0], messages.NewEventRequested)
@@ -343,7 +328,7 @@ async def test_double_click_empty_slot_requests_new_event(app: RecordingApp) -> 
 async def test_text_is_cut_with_ellipsis_never_mid_number(app: RecordingApp) -> None:
     async with app.run_test(size=(100, 35)) as pilot:
         await pilot.pause()
-        body = "\n".join(text(app.query_one(WeekView)))
+        body = "\n".join(text(app.query_one(TimeGrid)))
         assert "Anna's bir…" in body and "Rele…" in body
         assert "13:00–15:00" in body and "14:00 Rele…" in body  # no "14:00–1"
         assert "–1 " not in body and "–1│" not in body
@@ -352,7 +337,7 @@ async def test_text_is_cut_with_ellipsis_never_mid_number(app: RecordingApp) -> 
 async def test_markers_and_hour_lines_leave_events_alone(app: RecordingApp) -> None:
     async with app.run_test(size=(100, 35)) as pilot:
         await pilot.press(*["plus"] * 6)  # 8 rows/hour: events cross the bottom edge
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         xs, lines = grid._columns(), text(grid)
         for block in grid._block_list():
             left, right = sub_columns(block, xs)
@@ -375,7 +360,7 @@ def test_wrap_breaks_titles_at_words() -> None:
 async def test_tall_blocks_wrap_the_title_before_the_time(app: RecordingApp) -> None:
     async with app.run_test(size=(100, 35)) as pilot:
         await pilot.pause()
-        lines = text(app.query_one(WeekView))
+        lines = text(app.query_one(TimeGrid))
         sprint = next(i for i, line in enumerate(lines) if "Sprint" in line)
         assert "planning" in lines[sprint + 1] and "13:00–15:00" in lines[sprint + 2]
 
@@ -386,7 +371,7 @@ async def test_later_marker_moves_to_the_header_off_the_cursor_row(app: Recordin
         app.set_grid_mode(True)  # the slot cursor
         await pilot.press(*["plus"] * 7, *["j"] * 30)  # 8 rows/hour, cursor on the bottom rows
         await pilot.press(*["k"] * 10, *["j"] * 10)  # (scrolls down while moving, so back up)
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         xs, lines = grid._columns(), text(grid)
         cursor_y = grid._header_height() + grid._cursor_row() - grid._top_row()
         column = slice(xs[2] + 1, xs[3])  # Wed, the selected day
@@ -400,7 +385,7 @@ async def test_later_marker_moves_to_the_header_off_the_cursor_row(app: Recordin
 async def test_max_zoom_keeps_the_cursor_on_quarter_hours(app: RecordingApp) -> None:
     async with app.run_test(size=(100, 35)) as pilot:
         app.set_grid_mode(True)  # the slot cursor
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("plus", "plus", "plus", "j")
         assert grid.rows_per_hour == 4
         before = grid.cursor_time
@@ -416,7 +401,7 @@ async def test_max_zoom_keeps_the_cursor_on_quarter_hours(app: RecordingApp) -> 
         assert len(grid._cursor_rows()) == 2
         xs, header = grid._columns(), grid._header_height()
         odd = grid._cursor_row() + 1 - grid._top_row()  # the slot's second row
-        await pilot.click(WeekView, offset=(xs[2] + 3, 1 + header + odd))
+        await pilot.click(TimeGrid, offset=(xs[2] + 3, 1 + header + odd))
         assert grid.cursor_time.minute % 15 == 0
         await pilot.press(*["minus"] * 7)
         assert grid.cursor_time.minute % 15 == 0
@@ -428,7 +413,7 @@ async def test_later_marker_goes_to_the_header_when_events_fill_the_edge_row(
     app = RecordingApp(store)
     async with app.run_test(size=(80, 24)) as pilot:  # 1 row/hour, 06:00-20:00 shown
         app.set_grid_mode(True)  # the slot cursor
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press(*["j"] * 9)  # 19:00, the last row: Dinner fills it
         xs, col = grid._columns(), grid._load()[0].index(TODAY)
         frame = grid._frame()
@@ -438,20 +423,20 @@ async def test_later_marker_goes_to_the_header_when_events_fill_the_edge_row(
         marker = next(m for m in timepaint.markers(frame, grid.size.height) if m.day == col)
         assert late in marker.hidden and marker.label == "▼1" and marker.y == 0
         assert text(grid)[0][xs[col] : xs[col + 1]].endswith("18▼1")  # not above Dinner
-        await pilot.click(WeekView, offset=(1 + marker.x0, 1))
+        await pilot.click(TimeGrid, offset=(1 + marker.x0, 1))
         assert grid.selected == late
 
 
 async def test_clicking_a_marker_scrolls_to_the_hidden_event(app: RecordingApp) -> None:
     async with app.run_test(size=(200, 55)) as pilot:
         await pilot.pause()
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         early = next(o for o in grid._occurrences() if o.summary == "Early run")
         frame = grid._frame()
         marker = next(m for m in timepaint.markers(frame, grid.size.height) if "▲" in m.label)
         assert early in marker.hidden
         assert marker.y == grid._header_height()  # the top edge row
-        await pilot.click(WeekView, offset=(1 + marker.x0 + 1, 1 + marker.y))
+        await pilot.click(TimeGrid, offset=(1 + marker.x0 + 1, 1 + marker.y))
         assert grid.selected == early
         assert grid._top_row() <= grid.scale.row_of(5 * 60 + 45)  # now in view
         assert not app.posted  # selects, doesn't open
@@ -470,7 +455,7 @@ async def test_opening_the_week_scrolls_to_the_cursor(
         app.set_grid_mode(True)  # the slot cursor
         await pilot.press("w")
         await pilot.pause()
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         top = grid._top_row()
         assert top <= grid._cursor_row() < top + grid._grid_height()
         assert grid.selected is not None and grid.selected.summary == "Dinner"
@@ -483,7 +468,7 @@ async def test_a_covered_time_moves_below_its_cover(
 ) -> None:
     async with app.run_test(size=size) as pilot:
         await pilot.pause()
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         xs, lines = grid._columns(), text(grid)
         thu = slice(xs[3] + 1, xs[4])  # Release 14:00 under Interview 14:30
         cells = [line[thu] for line in lines]
@@ -505,7 +490,7 @@ async def test_an_hour_fills_the_cell_between_two_hour_lines(
             if calendar.id != "work":  # the weekend's demo events
                 app.toggle_calendar(calendar.id)
         await pilot.pause()
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         xs, lines = grid._columns(), text(grid)
         first, end = (
             next(y for y, t in enumerate(lines) if t[:5] == h) for h in ("10:00", "11:00")

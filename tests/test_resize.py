@@ -15,7 +15,7 @@ from tcal.ui.state import Resize
 from tcal.ui.widgets.month_view import MonthView
 from tcal.ui.widgets.schedule_view import ScheduleView
 from tcal.ui.widgets.statusbar import StatusBar
-from tcal.ui.widgets.timegrid import TimeGrid, WeekView
+from tcal.ui.widgets.timegrid import TimeGrid
 
 SIZE = (140, 50)
 
@@ -56,15 +56,13 @@ def test_shifted_start_over_midnight_shifts_the_series_days() -> None:
     assert moved.exdates == (moved.start,)
 
 
-@pytest.mark.parametrize("view", ["day", "week"])
 @pytest.mark.parametrize("grid_mode", [False, True])
-async def test_keys_move_the_end_and_the_start(make_app, view: str, grid_mode: bool) -> None:
+async def test_keys_move_the_end_and_the_start(make_app, grid_mode: bool) -> None:
     app = make_app()
     async with app.run_test(size=SIZE) as pilot:
-        app.action_set_view(view)
         app.set_grid_mode(grid_mode)
         await pilot.pause()
-        grid = app.query_one(f"#{view}", TimeGrid)
+        grid = app.query_one("#week", TimeGrid)
         grid.select(find(app, "Dentist"))  # 11:00 - 12:00
         for key, expected in [
             ("o", (at(11), at(12))),  # the end first
@@ -178,7 +176,7 @@ async def test_only_timed_events_in_a_time_grid(make_app) -> None:
             await pilot.press("o")
             await pilot.pause()
             assert span(app, "Gym", yesterday) == gym
-            assert messages(app)[-1] == "Resizing works in the day/week view"
+            assert messages(app)[-1] == "Resizing works in the week view"
             assert app.state.resize is None
 
 
@@ -231,7 +229,7 @@ async def test_the_configured_keys_resize(make_app, write_config) -> None:
     )
     app = make_app(config)
     async with app.run_test(size=SIZE) as pilot:
-        app.query_one(WeekView).select(find(app, "Dentist"))
+        app.query_one(TimeGrid).select(find(app, "Dentist"))
         await pilot.press("comma", "k", "k", "l", "ö", "j", "o", "down")
         await pilot.pause()
         assert span(app, "Dentist") == (at(11), at(12, 15))
@@ -241,7 +239,7 @@ async def test_the_configured_keys_resize(make_app, write_config) -> None:
 async def test_other_commands_are_ignored(make_app) -> None:
     app = make_app()
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         grid.select(find(app, "Dentist"))
         await pilot.press("o")
         before = app.state
@@ -261,7 +259,7 @@ async def test_other_commands_are_ignored(make_app) -> None:
 async def test_the_mode_ends_with_its_selection(make_app) -> None:
     app = make_app()
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
 
         async def enter() -> None:
             app.focus_view()
@@ -276,11 +274,11 @@ async def test_the_mode_ends_with_its_selection(make_app) -> None:
         assert app.state.resize is None
         app.select_date(TODAY)
         await enter()
-        app.set_view("day")
+        app.set_view("month")
         assert app.state.resize is None
         app.set_view("week")
         await enter()
-        await pilot.click(WeekView, offset=(20, 12))  # another slot
+        await pilot.click(TimeGrid, offset=(20, 12))  # another slot
         assert app.state.resize is None
         app.select_date(TODAY)
         await enter()
@@ -296,7 +294,7 @@ async def test_the_mode_ends_with_its_selection(make_app) -> None:
 async def test_the_active_edge_is_shown(make_app) -> None:
     app = make_app()
     async with app.run_test(size=SIZE) as pilot:
-        bar, grid = app.query_one(StatusBar), app.query_one(WeekView)
+        bar, grid = app.query_one(StatusBar), app.query_one(TimeGrid)
         await pilot.press("plus", "plus")
         grid.select(find(app, "Dentist"))
 

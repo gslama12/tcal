@@ -13,7 +13,7 @@ Part = tuple[str, Style, Callable[[], None] | None]
 
 
 class ViewSwitcher(TcalWidget):
-    """Top bar: [Today] ‹ › range title on the left, Day | Week | Month | Year | Schedule on the right.
+    """Top bar: [Today] ‹ › range title on the left, Week | Month | Year | Schedule on the right.
 
     Every button is clickable: Today, prev/next period and the view tabs (the
     active one highlighted) call the app's actions.

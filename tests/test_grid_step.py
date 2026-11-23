@@ -9,7 +9,7 @@ from tcal.config import load_config
 from tcal.store import Store
 from tcal.ui import messages
 from tcal.ui.widgets import timegrid
-from tcal.ui.widgets.timegrid import TimeGrid, WeekView
+from tcal.ui.widgets.timegrid import TimeGrid
 
 NOW = datetime.combine(TODAY, time(10, 50)).astimezone()
 SIZES = [(140, 45), (140, 40), (140, 24), (140, 53)]  # 2, 1.7 (uneven), 1 and 2.5 rows/hour
@@ -35,7 +35,7 @@ async def test_the_cursor_is_a_full_hour(
     app: RecordingApp, size: tuple[int, int], zooms: int
 ) -> None:
     async with app.run_test(size=size) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press(*["plus"] * zooms, "v")
         assert grid.cursor_time == at("10:00")  # 10:50 snapped
         for hour in (11, 12, 13):
@@ -56,7 +56,7 @@ async def test_the_cursor_is_a_full_hour(
 
 async def test_entering_grid_mode_shows_the_whole_slot(app: RecordingApp) -> None:
     async with app.run_test(size=(140, 24)) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press(*["plus"] * 7)
         grid._scroll(grid.scale.row_of(10 * 60 + 45) - grid._top_row())  # 10:00 is above
         await pilot.press("v")
@@ -65,10 +65,10 @@ async def test_entering_grid_mode_shows_the_whole_slot(app: RecordingApp) -> Non
 
 async def test_new_events_and_clicks_use_the_hour(app: RecordingApp) -> None:
     async with app.run_test(size=SIZES[0]) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("v", "k", "k", "a")
         x, y = grid._columns()[2] + 3, 1 + grid._header_height()
-        await pilot.click(WeekView, offset=(x, y + 2 * 8 + 2), times=2)  # 15:30
+        await pilot.click(TimeGrid, offset=(x, y + 2 * 8 + 2), times=2)  # 15:30
         await pilot.pause()
         starts = [m.start for m in app.posted if isinstance(m, messages.NewEventRequested)]
         assert starts == [at("08:00"), at("15:00")]
@@ -77,7 +77,7 @@ async def test_new_events_and_clicks_use_the_hour(app: RecordingApp) -> None:
 
 async def test_a_pick_keeps_its_place(app: RecordingApp) -> None:
     async with app.run_test(size=SIZES[0]) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         timed = sorted((o for o in grid._occurrences() if not o.all_day), key=lambda o: o.start)
         await pilot.press("v")
         for occ in grid._occurrences():
@@ -91,7 +91,7 @@ async def test_half_hour_step(store: Store, write_config) -> None:
     write_config("[view]\ngrid_step = 30\n")
     app = RecordingApp(store, load_config())
     async with app.run_test(size=SIZES[0]) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("plus", "v")  # 3 rows/hour: 10:30 starts on the 10:20 row
         assert grid.cursor_time == at("10:30") and label(grid) == "10:30"
         await pilot.press("j", "j")

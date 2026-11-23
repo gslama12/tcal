@@ -1,4 +1,4 @@
-"""Flash jump for the Day/Week grid (``f``), after todooit's flash mode.
+"""Flash jump for the Week grid (``f``), after todooit's flash mode.
 
 Every event on screen and every visible grid-mode slot (config ``grid_step``, an hour
 by default) of each day column gets a red label; typing a label moves the cursor there.

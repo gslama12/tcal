@@ -4,8 +4,8 @@ Layout::
 
     ┌ sidebar ─┐┌ main ───────────────────────────┐
     │ MiniCal  ││ ViewSwitcher (tabs + title)     │
-    │          ││ ContentSwitcher: Day/Week/      │
-    │ Calendar ││   Month/Year/ScheduleView       │
+    │          ││ ContentSwitcher: Week/Month/    │
+    │ Calendar ││   Year/ScheduleView             │
     │ List     ││   (id = mode)                   │
     └──────────┘└─────────────────────────────────┘
      StatusBar
@@ -65,7 +65,7 @@ from tcal.ui.widgets.minical import MiniCal
 from tcal.ui.widgets.month_view import MonthView
 from tcal.ui.widgets.schedule_view import ScheduleView
 from tcal.ui.widgets.statusbar import StatusBar
-from tcal.ui.widgets.timegrid import DayView, TimeGrid, WeekView
+from tcal.ui.widgets.timegrid import TimeGrid
 from tcal.ui.widgets.view_switcher import ViewSwitcher
 from tcal.ui.widgets.year_view import YearView
 
@@ -87,7 +87,6 @@ class TcalApp(App[None]):
         binding("prev_period", "Previous"),
         binding("next_period", "Next"),
         binding("today", "Today"),
-        binding("view_day", "Day", action="set_view('day')"),
         binding("view_week", "Week", action="set_view('week')"),
         binding("view_month", "Month", action="set_view('month')"),
         binding("view_year", "Year", action="set_view('year')"),
@@ -419,7 +418,7 @@ class TcalApp(App[None]):
         )
 
     def set_grid_mode(self, on: bool) -> None:
-        """Day/week: the cursor keys move the slot cursor (on) or between events (off)."""
+        """Week view: the cursor keys move the slot cursor (on) or between events (off)."""
         if self.state.grid != on:
             self.state = replace(self.state, grid=on)
 
@@ -476,8 +475,7 @@ class TcalApp(App[None]):
             with Vertical(id="main"):
                 yield ViewSwitcher()
                 with ContentSwitcher(id="views", initial=self.state.view.value):
-                    yield DayView(id=ViewMode.DAY.value)
-                    yield WeekView(id=ViewMode.WEEK.value)
+                    yield TimeGrid(id=ViewMode.WEEK.value)
                     yield MonthView(id=ViewMode.MONTH.value)
                     yield YearView(id=ViewMode.YEAR.value)
                     yield ScheduleView(id=ViewMode.SCHEDULE.value)
@@ -562,13 +560,13 @@ class TcalApp(App[None]):
         self.query_one(MiniCal).focus()
 
     def action_new_event(self) -> None:
-        """A timed event at the next round hour on the selected day (day/week views
-        post their own ``NewEventRequested`` for the selected slot)."""
+        """A timed event at the next round hour on the selected day (the week view
+        posts its own ``NewEventRequested`` for the selected slot)."""
         hour = min(datetime.now().hour + 1, 23)
         self.new_event(datetime.combine(self.state.day, time(hour), local_zone()))
 
     def selected_occurrence(self) -> Occurrence | None:
-        """The event selected in the focused day/week/month/schedule view, if any."""
+        """The event selected in the focused week/month/schedule view, if any."""
         focused = self.focused
         return focused.selected if isinstance(focused, SELECTING_VIEWS) else None
 
@@ -586,7 +584,7 @@ class TcalApp(App[None]):
             view.select(occ)
 
     def action_edit_event(self) -> None:
-        """Edit the event selected in the focused day/week/month/schedule view."""
+        """Edit the event selected in the focused week/month/schedule view."""
         if occ := self._selected():
             self.edit_occurrence(occ)
 
@@ -628,7 +626,7 @@ class TcalApp(App[None]):
         if occ is None:
             return
         if minutes and (occ.all_day or not isinstance(self.focused, TimeGrid)):
-            self.notify("Moving by time works for timed events in the day/week view")
+            self.notify("Moving by time works for timed events in the week view")
             return
         self.editor.move(occ, timedelta(days=days, minutes=minutes))
 
@@ -641,7 +639,7 @@ class TcalApp(App[None]):
         if occ.all_day:
             self.notify("All-day event: only timed events can be resized")
         elif not isinstance(self.focused, TimeGrid):
-            self.notify("Resizing works in the day/week view")
+            self.notify("Resizing works in the week view")
         elif self.state.resize is not None:
             self.set_resize(self.state.resize.toggled())
         elif self.check_writable(occ.calendar_id):

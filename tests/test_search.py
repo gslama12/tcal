@@ -10,7 +10,7 @@ from tcal.ui.screens.event_detail import EventDetail
 from tcal.ui.screens.search import ResultList, SearchScreen, search
 from tcal.ui.state import ViewMode
 from tcal.ui.widgets.month_view import MonthView
-from tcal.ui.widgets.timegrid import WeekView
+from tcal.ui.widgets.timegrid import TimeGrid
 
 NOW = datetime.combine(TODAY, time(12, 0)).astimezone()
 
@@ -70,7 +70,7 @@ async def test_search_keeps_the_view_selects_and_opens(app: TcalApp) -> None:
         await pilot.press("escape")
         assert app.state.view is ViewMode.WEEK
         assert app.state.day == TODAY - timedelta(days=5)
-        view = app.query_one(WeekView)
+        view = app.query_one(TimeGrid)
         assert app.focused is view
         assert view.selected is not None and view.selected.summary == "Kids' play"
 

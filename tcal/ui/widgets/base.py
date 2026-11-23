@@ -45,7 +45,7 @@ class SidebarWidget(TcalWidget, can_focus=True):
 
 
 class CalendarView(TcalWidget, can_focus=True):
-    """Base of the main-panel views (Day/Week/Month/Year/Schedule).
+    """Base of the main-panel views (Week/Month/Year/Schedule).
 
     Declares the configurable cursor/zoom/open bindings (``VIEW_BINDINGS``);
     subclasses implement the matching ``action_cursor_left/down/up/right``,
@@ -57,7 +57,7 @@ class CalendarView(TcalWidget, can_focus=True):
     BINDINGS = VIEW_BINDINGS
 
     def action_zoom_in(self) -> None:
-        self.tcal.notify("Zoom works in the day/week view")
+        self.tcal.notify("Zoom works in the week view")
 
     def action_zoom_out(self) -> None:
         self.action_zoom_in()

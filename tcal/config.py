@@ -17,7 +17,7 @@ from tcal.colors import APPLE_COLORS
 from tcal.dates import WEEKDAYS
 
 GRID_STEPS = (15, 30, 60)
-VIEWS = ("day", "week", "month", "year", "schedule")
+VIEWS = ("week", "month", "year", "schedule")
 SUBSCRIPTION = "subscription"  # [[subscription]]: a list of tables, not a section
 
 

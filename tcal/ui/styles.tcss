@@ -28,9 +28,9 @@ MiniCal, CalendarList, ViewSwitcher, #views > * {
     }
 }
 
-/* Month: week separators run into the border; Day/Week (timegrid.py): the grid
+/* Month: week separators run into the border; Week (timegrid.py): the grid
    paints every cell itself from app.palette, the axis is its left margin. */
-#views > MonthView, #views > DayView, #views > WeekView {
+#views > MonthView, #views > TimeGrid {
     padding: 0;
 }
 

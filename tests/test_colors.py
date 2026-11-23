@@ -17,7 +17,7 @@ from tcal.ui.theme import (
     luma,
     tint,
 )
-from tcal.ui.widgets.timegrid import WeekView
+from tcal.ui.widgets.timegrid import TimeGrid
 
 
 async def test_calendar_colours_are_exact(make_app, write_config) -> None:
@@ -58,7 +58,7 @@ async def test_wrapped_titles_are_bold(make_app) -> None:
     app = make_app()
     async with app.run_test(size=(150, 46)) as pilot:
         await pilot.pause()
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         segments = [seg for y in range(grid.size.height) for seg in grid.render_line(y)]
         for word in ("Sprint", "planning"):  # one title on two lines
             assert any(word in s.text and s.style and s.style.bold for s in segments)
@@ -69,7 +69,7 @@ async def test_wrapped_titles_are_bold(make_app) -> None:
 async def test_selected_block_is_filled_with_the_calendar_colour(make_app) -> None:
     app = make_app()
     async with app.run_test(size=(140, 45)) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("j")
         assert grid.selected is not None
         color = app.calendar_color(grid.selected.calendar_id)

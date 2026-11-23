@@ -29,6 +29,7 @@ def test_user_file_merges_over_defaults(write_config) -> None:
     "text",
     [
         "[nope]\nx = 1\n",
+        "[view]\ndefault_view = 'day'\n",
         "[view]\nday_strat = '08:00'\n",
         "[keys]\nfly = ['f']\n",
         "[keys]\nnext_event = ['n']\n",  # removed

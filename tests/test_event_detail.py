@@ -59,13 +59,13 @@ async def test_delete_single_event_from_detail(make_app) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.post_message(EventSelected(find(app, "Dentist")[0]))
         await pilot.pause()
-        await pilot.press("x")
+        await pilot.press("d")
         assert isinstance(app.screen, Prompt)
         await pilot.press("n")  # cancel keeps it
         assert find(app, "Dentist")
         app.post_message(EventSelected(find(app, "Dentist")[0]))
         await pilot.pause()
-        await pilot.press("x", "y")
+        await pilot.press("d", "y")
         assert not find(app, "Dentist")
         assert not isinstance(app.screen, (Prompt, EventDetail))
         assert any(str(n.message) == "Deleted “Dentist” · u undo" for n in app._notifications)
@@ -75,7 +75,7 @@ async def test_delete_single_event_from_detail(make_app) -> None:
         assert any(str(n.message) == "Nothing to undo" for n in app._notifications)
 
 
-async def test_delete_one_occurrence_with_x_in_view(make_app) -> None:
+async def test_delete_one_occurrence_with_d_in_view(make_app) -> None:
     app = make_app()
     async with app.run_test(size=SIZE) as pilot:
         grid = app.query_one("#week", TimeGrid)
@@ -84,7 +84,7 @@ async def test_delete_one_occurrence_with_x_in_view(make_app) -> None:
         picked = grid.selected
         monday = TODAY - timedelta(days=TODAY.weekday())
         week = find(app, "Standup", days=7, start=monday)
-        await pilot.press("x")
+        await pilot.press("d")
         assert isinstance(app.screen, Prompt)
         await pilot.press("o")
         left = find(app, "Standup", days=7, start=monday)
@@ -100,7 +100,7 @@ async def test_delete_whole_series(make_app) -> None:
         app.post_message(EventSelected(find(app, "Standup")[0]))
         await pilot.pause()
         before = len(find(app, "Standup", days=30))
-        await pilot.press("x", "s")
+        await pilot.press("d", "s")
         assert not find(app, "Standup", days=30)
         await pilot.press("u")
         assert len(find(app, "Standup", days=30)) == before
@@ -117,7 +117,7 @@ async def test_readonly_calendar_cannot_delete(make_app) -> None:
         await pilot.pause()
         assert "(read-only)" in text(app, "calendar")
         assert text(app, "hints") == "y copy  esc close"
-        await pilot.press("x")
+        await pilot.press("d")
         assert not isinstance(app.screen, Prompt)
         assert find(app, "Public holiday", days=30)
         assert any("read-only" in str(n.message) for n in app._notifications)
@@ -218,7 +218,7 @@ async def test_edit_and_delete_keep_a_read_only_detail_open(store, make_app) -> 
     async with app.run_test(size=SIZE) as pilot:
         app.post_message(EventSelected(occ))
         await pilot.pause()
-        await pilot.press("e", "x")
+        await pilot.press("e", "d")
         assert isinstance(app.screen, EventDetail)
         assert text(app, "hints") == "y copy  esc close"
         assert [str(n.message) for n in app._notifications] == ["Feed is read-only"] * 2
@@ -238,7 +238,7 @@ async def test_scope_prompts_name_the_instance(make_app) -> None:
         app.query_one("#week", TimeGrid).select(find(app, "Standup")[0])
         for key, question in (
             ("e", "Edit “Standup” on Wed 18 Nov?"),
-            ("x", "Delete “Standup” on Wed 18 Nov?"),
+            ("d", "Delete “Standup” on Wed 18 Nov?"),
         ):
             await pilot.press(key)
             await pilot.pause()

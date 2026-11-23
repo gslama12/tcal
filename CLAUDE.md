@@ -41,7 +41,7 @@ uv run ruff check && uv run ruff format --check && uv run mypy
   (`$background1..3`, `$foreground1..3`, `$red`… plus `$primary`/`$secondary`).
   Event colours: `event_colors`/`tint`; Apple's palette is `tcal/colors.py`.
 - `tcal/ui/timelayout.py` — time-grid geometry (`TimeScale`, blocks, bars, `sub_columns`);
-  `tcal/ui/timepaint.py` — pure `paint(GridFrame, w, h)` for Day/Week, on `canvas.Canvas`.
+  `tcal/ui/timepaint.py` — pure `paint(GridFrame, w, h)` for the week, on `canvas.Canvas`.
   `tcal/ui/flash.py` — flash jump (`f`): targets, labels, overlay over painted lines.
   `widgets/timegrid.py` keeps cursor/scroll/zoom/selection/mouse/flash keys only
   (event mode by default; grid mode = `state.grid`, `app.set_grid_mode`; resize mode =

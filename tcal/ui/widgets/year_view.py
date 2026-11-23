@@ -108,7 +108,7 @@ class YearView(DayCursorView):
     scrolled to the selected month with ▲/▼ hints if even the smallest is too tall).
 
     Today accented, days with events bright (others dimmed), the selected day highlighted;
-    h/j/k/l move it, enter opens the Day view. Clicking a day selects it
+    h/j/k/l move it, enter opens its week. Clicking a day selects it
     (clicking the selected day opens it), clicking a month name opens the Month view.
     """
 

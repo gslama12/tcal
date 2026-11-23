@@ -82,7 +82,7 @@ async def test_year_view(app: RecordingApp) -> None:
         await pilot.click(YearView, offset=content(view, x + 1, y))
         assert app.state.view is ViewMode.MONTH and app.state.day == date(2026, 3, 26)
         await pilot.press("Y", "enter")
-        assert app.state.view is ViewMode.DAY and app.state.day == date(2026, 3, 26)
+        assert app.state.view is ViewMode.WEEK and app.state.day == date(2026, 3, 26)
 
 
 async def test_screenshot_sanity(app: RecordingApp) -> None:
@@ -154,10 +154,10 @@ async def test_narrow_sidebar_auto_hides_when_focus_leaves(app: RecordingApp) ->
 
 
 async def test_view_switcher_shortens_title_not_tabs(app: RecordingApp) -> None:
-    async with app.run_test(size=(70, 24)) as pilot:
-        await pilot.press("d")
+    async with app.run_test(size=(70, 24)):
         text = str(app.query_one(ViewSwitcher).render())
-        assert "Day│Week│Month│Year│Schedule" in text and "Wed 18 Nov 2026" in text
+        assert "Week│Month│Year│Schedule" in text and "Day" not in text
+        assert "16 – 22 Nov 2026" in text
 
 
 async def test_year_view_scrolls_to_the_selected_month(app: RecordingApp) -> None:
@@ -197,7 +197,7 @@ async def test_zoom_outside_the_time_grid_says_where_it_works(app: RecordingApp)
             app.clear_notifications()
             await pilot.press("plus", "minus")
             assert [str(n.message) for n in app._notifications] == [
-                "Zoom works in the day/week view"
+                "Zoom works in the week view"
             ] * 2
 
 
