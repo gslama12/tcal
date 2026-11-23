@@ -28,8 +28,6 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("today", "Jump to today"),
         ("goto_date", "Go to date"),
         ("flash", "Flash jump: type a label to jump to an event or slot (time grid)"),
-        ("next_event", "Next event in view"),
-        ("prev_event", "Previous event in view"),
     ],
     "Views": [
         ("view_day", "Day view"),

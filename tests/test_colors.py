@@ -70,7 +70,7 @@ async def test_selected_block_is_filled_with_the_calendar_colour(make_app) -> No
     app = make_app()
     async with app.run_test(size=(140, 45)) as pilot:
         grid = app.query_one(WeekView)
-        await pilot.press("n")
+        await pilot.press("j")
         assert grid.selected is not None
         color = app.calendar_color(grid.selected.calendar_id)
         filled: list[Style] = [

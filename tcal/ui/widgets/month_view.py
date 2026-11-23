@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -83,11 +84,11 @@ def layout_week(week: list[date], occurrences: list[Occurrence], slots: int) -> 
 class MonthView(DayCursorView):
     """Grid of the weeks of ``state.day``'s month with event chips per day.
 
-    h/j/k/l move the selected day, n/p select the shown events (``selected``),
-    enter opens the selected event (``EventSelected``) or else the day in the
-    Day view; a click on the day number or "+N more" opens the day, on an event
-    selects and opens it; a double-click on a cell's empty space requests a new
-    all-day event on that day (``NewEventRequested``).
+    h/j/k/l move the selected day, enter opens the selected event
+    (``EventSelected``) or else the day in the Day view; a click on the day number
+    or "+N more" opens the day, on an event selects and opens it; a double-click on
+    a cell's empty space requests a new all-day event on that day
+    (``NewEventRequested``).
     """
 
     BINDINGS = EVENT_BINDINGS
@@ -106,27 +107,21 @@ class MonthView(DayCursorView):
         occurrences = self.tcal.occurrences(start, end)
         return [layout_week(week, occurrences, grid.slots(w)) for w, week in enumerate(grid.weeks)]
 
-    def _stops(self) -> list[tuple[Occurrence, date]]:
-        """Events shown in this month's days in n/p order, each with its first such day.
-
-        Days of the adjacent months are skipped: selecting one would switch the month.
-        """
+    def _shown(self) -> Iterator[Occurrence]:
+        """The event chips in this month's days (not the adjacent months')."""
         grid, month = self.grid(), self.tcal.state.day.month
-        stops: list[tuple[Occurrence, date]] = []
         for week, cells in zip(grid.weeks, self.week_cells(grid), strict=True):
             for day, lines in zip(week, cells, strict=True):
-                for chip in lines if day.month == month else []:
-                    if isinstance(chip, Occurrence) and all(chip != occ for occ, _ in stops):
-                        stops.append((chip, day))
-        return stops
+                if day.month == month:
+                    yield from (chip for chip in lines if isinstance(chip, Occurrence))
 
     @property
     def selected(self) -> Occurrence | None:
-        """The event picked with n/p or a click, while it is shown on the selected day."""
+        """The picked event (click, ``select``), while it is shown on the selected day."""
         picked = self._picked
         if picked is None or self.tcal.state.day not in occurrence_days(picked):
             return None
-        return next((occ for occ, _ in self._stops() if occ.key == picked.key), None)
+        return next((occ for occ in self._shown() if occ.key == picked.key), None)
 
     def _pick(self, occ: Occurrence, day: date) -> None:
         self._picked = occ
@@ -136,22 +131,6 @@ class MonthView(DayCursorView):
     def select(self, occ: Occurrence) -> None:
         """Select ``occ`` on its first day (switching the month if needed)."""
         self._pick(occ, occ.start.date())
-
-    def action_cycle(self, step: int) -> None:
-        """Select the next (``step`` 1) / previous (-1) event: from the selected one, else
-        the first shown on or after (last starting on or before) the selected day; wraps."""
-        stops = self._stops()
-        if not stops:
-            return
-        occs = [occ for occ, _ in stops]
-        current, day = self.selected, self.tcal.state.day
-        if current in occs:
-            index = occs.index(current) + step
-        elif step > 0:
-            index = next((i for i, occ in enumerate(occs) if max(occurrence_days(occ)) >= day), 0)
-        else:
-            index = next((i for i in reversed(range(len(stops))) if stops[i][1] <= day), -1)
-        self._pick(*stops[index % len(stops)])
 
     def move(self, days: int) -> None:
         self._picked = None

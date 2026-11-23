@@ -75,15 +75,14 @@ async def test_new_events_and_clicks_use_the_hour(app: RecordingApp) -> None:
         assert grid.paste_at == at("15:00")
 
 
-async def test_all_events_of_the_hour_are_reached(app: RecordingApp) -> None:
+async def test_a_pick_keeps_its_place(app: RecordingApp) -> None:
     async with app.run_test(size=SIZES[0]) as pilot:
         grid = app.query_one(WeekView)
         timed = sorted((o for o in grid._occurrences() if not o.all_day), key=lambda o: o.start)
         await pilot.press("v")
-        for _ in grid._occurrences():
-            await pilot.press("n")  # a pick keeps its place, also if it starts mid-slot
-            occ = grid.selected
-            assert occ is not None
+        for occ in grid._occurrences():
+            grid.select(occ)  # also if it starts mid-slot
+            assert grid.selected == occ
             if occ in timed and not timegrid.is_bar(occ) and occ.start.date() >= grid.days()[0]:
                 assert grid.cursor_time <= occ.start < grid.cursor_time + timedelta(hours=1)
 

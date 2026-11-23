@@ -146,23 +146,16 @@ async def test_cursor_slot_has_accent_background(app: RecordingApp) -> None:
 
 
 @pytest.mark.usefixtures("quarter_steps")
-async def test_cycle_events_and_open(app: RecordingApp) -> None:
+async def test_cursor_selects_and_opens(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
         grid = app.query_one(WeekView)
         await pilot.press("j", "j", "j")  # 11:30 on today: inside "Dentist"
         assert grid.selected is not None and grid.selected.summary == "Dentist"
-        await pilot.press("n")
-        assert grid.selected is not None and grid.selected.summary == "Dinner"
-        await pilot.press("n", "n")  # Late movie, then the next day's all-day event
-        assert grid.selected is not None and grid.selected.summary == "Deadline: taxes"
-        assert app.state.day == TODAY + timedelta(days=1)
-        await pilot.press("N", "N", "N", "N")  # back over Late movie, Dinner, Dentist
-        assert grid.selected is not None and grid.selected.summary == "1:1 with Alex"
         await pilot.press("enter")
         await pilot.pause()
         assert isinstance(app.posted[-1], messages.EventSelected)
-        assert app.posted[-1].occurrence.summary == "1:1 with Alex"
+        assert app.posted[-1].occurrence.summary == "Dentist"
 
 
 @pytest.mark.usefixtures("quarter_steps")
@@ -310,12 +303,13 @@ async def test_narrow_columns_collapse_cluster(app: RecordingApp) -> None:
         group = next(b for b in grid._block_list() if b.group)
         assert [o.summary for o in group.occs] == ["Design review", "1:1 with Alex", "Dentist"]
         assert any("Des… +2" in line for line in text(grid))  # first title + count
-        await pilot.press("n")  # cycling reaches the events of the collapsed block
-        while grid.selected not in group.occs:
-            await pilot.press("n")
-        first = grid.selected
-        await pilot.press("n")
-        assert grid.selected in group.occs and grid.selected != first
+        for _ in grid._day_events():  # event mode reaches the events of the collapsed block
+            await pilot.press("j")
+            if grid.selected in group.occs:
+                break
+        assert grid.selected == group.occs[0]
+        await pilot.press("j")
+        assert grid.selected == group.occs[1]
         await pilot.press("enter")
         opened = app.posted[-1]
         assert isinstance(opened, messages.EventSelected) and opened.occurrence == grid.selected
@@ -333,22 +327,6 @@ async def test_now_line_keeps_event_text(app: RecordingApp) -> None:
         event = row[AXIS + 1 : row.index("Design review") + len("Design review")]
         assert event == " 10:00 Design review"  # text not covered (one free row: time + title)
         assert "─" in row[row.index("Design review") :]  # the line goes on beside the event
-
-
-@pytest.mark.usefixtures("quarter_steps")
-async def test_cycle_starts_at_the_cursor(app: RecordingApp) -> None:
-    async with app.run_test(size=SIZE) as pilot:
-        app.set_grid_mode(True)  # the slot cursor
-        grid = app.query_one(WeekView)
-        tue, mon = TODAY - timedelta(days=1), TODAY - timedelta(days=2)
-        await pilot.press("h", "k", "k", "k")  # Tue 08:30, free
-        assert grid.selected is None
-        await pilot.press("n")
-        assert grid.selected is not None and grid.selected.start == at("09:00", tue)
-        await pilot.press("k", "N")  # Tue 08:30 again: the event before is on Monday
-        assert grid.selected is not None and grid.selected.start.date() == mon
-        await pilot.press("h", *["k"] * 30, "N")  # nothing before Mon 00:00: wraps to the end
-        assert grid.selected == sorted(grid._occurrences(), key=grid._stop_key)[-1]
 
 
 async def test_double_click_empty_slot_requests_new_event(app: RecordingApp) -> None:

@@ -161,7 +161,6 @@ name = "tokyo-night"
 [keys]                     # action = list of keys; replaces that action's defaults
 quit = ["q", "ctrl+q"]
 new_event = ["n"]
-next_event = ["ctrl+n"]
 ```
 
 **Themes:** `tokyo-night` (default, same palette as todooit), `nord`, `gruvbox`,
@@ -192,8 +191,6 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `t` | Jump to today |
 | `g` | Go to date |
 | `f` | Flash jump: type a label to jump to an event or slot (time grid) |
-| `n` | Next event in view |
-| `N` | Previous event in view |
 | **Views** | |
 | `d` | Day view |
 | `w` | Week view |

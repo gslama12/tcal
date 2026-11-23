@@ -56,43 +56,30 @@ async def test_multi_day_bar_title_once(app: RecordingApp) -> None:
         assert "more" in rendered and "Nov 1" in rendered
 
 
-async def test_month_event_cursor(app: RecordingApp) -> None:
+async def test_month_selected_event(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         await pilot.press("m")
         view = app.query_one(MonthView)
         assert view.selected is None and app.selected_occurrence() is None
-        today = app.state.day
-        await pilot.press("n")  # the first event on or after the selected day
-        first = view.selected
-        assert first is not None and app.selected_occurrence() == first
-        assert max(occurrence_days(first)) >= today and app.state.day >= today
-        stops = [occ for occ, _ in view._stops()]
-        before = stops[: stops.index(first)]
-        assert before and all(max(occurrence_days(occ)) < today for occ in before)
-        await pilot.press("n", "N")
-        assert view.selected == first
-        await pilot.press("N")
-        assert view.selected == before[-1]
+        picked = next(o for o in view._shown() if o.summary == "Conference")
+        view.select(picked)
+        assert view.selected == picked and app.selected_occurrence() == picked
+        assert app.state.day == picked.start.date()
         await pilot.press("enter")
         assert isinstance(app.posted[-1], EventSelected)
-        assert app.posted[-1].occurrence == view.selected
-        await pilot.press("l")  # moving the day drops the event cursor
+        assert app.posted[-1].occurrence == picked
+        await pilot.press("l")  # moving the day drops the selection
         assert view.selected is None
         await pilot.press("enter")
         assert app.state.view.value == "day"
 
 
-async def test_month_cursor_reaches_todays_events(app: RecordingApp) -> None:
+async def test_month_shows_only_its_own_days_events(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         await pilot.press("m")
-        view = app.query_one(MonthView)
-        seen = set()
-        for _ in range(60):
-            await pilot.press("n")
-            assert view.selected is not None
-            seen.add((view.selected.summary, app.state.day))
-        assert ("Conference", TODAY) in seen
-        assert all(d.month == TODAY.month for _, d in seen)  # stays in the shown month
+        shown = list(app.query_one(MonthView)._shown())
+        assert "Conference" in {o.summary for o in shown}
+        assert all(any(d.month == TODAY.month for d in occurrence_days(o)) for o in shown)
 
 
 async def test_month_double_click_requests_all_day_event(app: RecordingApp) -> None:
