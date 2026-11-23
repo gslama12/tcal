@@ -12,19 +12,29 @@ Rules (case-insensitive; the pieces may come in any order):
   whose name starts with ``cal``.
 - ``for 2h`` / ``for 90m`` / ``for 1h30`` / ``for 1.5h``: the duration, also without "for"
   (a bare ``7h`` or more is a time unless another time is given).
-- times: a range ``12:30-13:30`` / ``12-13`` / ``9-11am``, or one time ``12:30`` / ``9am`` /
-  ``18h`` / ``14.30`` / ``noon`` / ``midnight`` (optionally after ``at`` / ``from``); an end
-  before the start is on the next day. Right after a date or repeat a bare hour is a time
-  (``tomorrow 9``); ``12.11`` is a date unless a date is given elsewhere. Or ``all day``.
+- times: a range ``12:30-13:30`` / ``12-13`` / ``9-11am`` / ``1pm-3`` / ``9.30-11``, or one time
+  ``12:30`` / ``9am`` / ``1:30p`` / ``18h`` / ``14.30`` / ``noon`` / ``midnight`` (optionally
+  after ``at`` / ``from``); an end before the start is on the next day. Right after a date or
+  repeat also a bare hour ``9``, ``1330`` or ``9a`` (``tomorrow 9``); a number after ``at`` and
+  ``1p`` only where the title ends (``1p`` also starting the line, ``at 9a`` anywhere).
+  ``12.11`` is a date unless a date is given elsewhere. Or ``all day``.
 - repeats: ``daily`` / ``weekly`` / ``monthly`` / ``yearly``, ``every day|week|month|year``,
   ``every 2 weeks`` (also ``every other week``; ``on mon, wed``), ``every weekday`` /
   ``weekdays`` (Mon–Fri) and ``every <weekday>`` (also a list: ``every mon and wed``, ``every
-  tue, thu``); the first one is on or after the date. A repeat word that starts the line is
-  part of the title ("Weekly review fri"). Ends: ``until 24.12.`` / ``until dec`` (through
-  that month), ``10 times``. ``no repeat``: none.
+  tue, thu``, ``every mo, we``); the first one is on or after the date. A repeat word that
+  starts the line is part of the title ("Weekly review fri"). Ends: ``until 24.12.`` /
+  ``until dec`` (through that month), ``10 times``. ``no repeat``: none.
 - a date in any of goto's forms (``fri``, ``next fri``, ``in 2 days``, ``24.12.``, ``dec 24``,
-  ``+2w``, ``tonight``), optionally after ``on``. A range ``dec 3 - dec 5`` / ``dec 3-5`` /
-  ``1.12.-3.12.`` / ``mon-fri`` spans several days (with a time: from the first day to the last).
+  ``+2w``, ``in 3d``, ``1.1.27``, ``tonight``, ``tmr``), optionally after ``on``. A range
+  ``dec 3 - dec 5`` / ``dec 3-5`` / ``1.12.-3.12.`` / ``mon-fri`` spans several days (with a
+  time: from the first day to the last).
+- short dates that are words, names or fractions too (``tom``, ``tod``, ``mo`` .. ``su``,
+  ``24/12``) count only if the line has no other date, a title remains without them and they
+  are in a date position: after ``on``; before a time; or where the title ends (before the end
+  of the line, a repeat, ``#`` or ``@``) or goes on with "with". ``we`` must be before a time or
+  repeat or after ``on``; a slash date may also start the line. A short word is no date after
+  one that takes a name ("with Tom", "call Tom", "Anna, Tom"; ``_BEFORE_NAME``), and in the
+  location only before a time; a slash date never is one there ("Main St 14/3").
 - `` @``: everything after it (at a word start) (once the pieces above are taken out) is the location.
 
 What the line leaves out comes from ``draft`` (a new event's slot, an edited event): the date,
@@ -44,14 +54,19 @@ from tcal.tz import local_midnight, local_zone
 
 DEFAULT_DURATION = timedelta(hours=1)
 _GAP = "\0"  # stands for a removed piece, so a date is never read across it
+_MARK = "\1"  # stands for a removed date or repeat: a bare hour may follow it
+_TIME_GAP = "\2"  # stands for a removed time
+_GAPS = (_GAP, _MARK, _TIME_GAP)
 
-_TIME = r"(\d{1,2})(?::(\d{2}))?\s*(am|pm|h)?"
+_SUFFIX = r"(\s*(?:am|pm|h)|[ap])"  # no space before "a" / "p": "10-11 a walk"
+_TIME = rf"(\d{{1,2}})(?:([:.])(\d{{2}}))?{_SUFFIX}?"
 _RANGE = re.compile(
-    rf"(?:\bfrom\s+)?(?<![\d.:/-]){_TIME}\s*[-–]\s*{_TIME}(?![\d.:/-])\b",
+    rf"(?:\b(?:from|at)\s+)?(?<![\d.:/-]){_TIME}\s*[-–]\s*{_TIME}(?![\d.:/-])\b",
     re.IGNORECASE,
 )
 _SINGLE = re.compile(
-    r"(?:\bat\s+)?(?<![\d.:/-])(\d{1,2})(?:(?::(\d{2}))\s*(am|pm)?|\s*(am|pm|h))(?![\d.:/-])\b",
+    rf"(?:\bat\s+)?(?<![\d.:/-])(\d{{1,2}})"
+    rf"(?::(\d{{2}}){_SUFFIX}?|\.(\d{{2}}){_SUFFIX}|\s*(am|pm|h))(?![\d.:/-])\b",
     re.IGNORECASE,
 )
 _MINUTES = r"(\d{1,4})\s*(?:m|mins?|minutes?)"
@@ -64,12 +79,15 @@ _DASH = re.compile(r"\s*[-–]\s*")
 _DOT_TIME = re.compile(r"(?:\bat\s+)?(?<![\d.:/-])(\d{1,2})\.(\d{2})(?![\d.:/-])", re.IGNORECASE)
 _NAMED_TIME = re.compile(r"(?:\bat\s+)?\b(noon|midday|midnight)\b", re.IGNORECASE)
 _NAMED_TIMES = {"noon": time(12), "midday": time(12), "midnight": time(0)}
-_MARK = "\1"  # stands for a removed date or repeat: a bare hour may follow it
-_BARE_HOUR = re.compile(rf"{_MARK}\s+(?:at\s+)?(\d{{1,2}})(?![\d.:/-])\b", re.IGNORECASE)
+# "9", "9a" or "1330" after a date or "at", or "1p"
+_SHORT_TIME = re.compile(
+    rf"(?:({_MARK})\s+)?(?:\b(at)\s+)?(?<!\S)(?:(\d{{1,2}})([ap])?|(\d{{2}})(\d{{2}}))(?![\w.:/-])",
+    re.IGNORECASE,
+)
 _LOCATION = re.compile(r"(?:^|\s)@")
 _CALENDAR = re.compile(r"(?<!\S)#(\S+)")
 _DAY_NAME = "|".join(
-    sorted({d[:n] for d in WEEKDAYS for n in range(3, len(d) + 1)}, key=len, reverse=True)
+    sorted({d[:n] for d in WEEKDAYS for n in range(2, len(d) + 1)}, key=len, reverse=True)
 )
 _DAY_LIST = rf"(?:{_DAY_NAME})s?(?:(?:\s*[,&]\s*|\s+and\s+)(?:{_DAY_NAME})s?)*"
 _REPEAT = re.compile(
@@ -86,6 +104,21 @@ _LIST_SEP = re.compile(r"\s*[,&]\s*|\s+and\s+", re.IGNORECASE)
 # "dec 3-5" / "3-5 dec": a day range, not hours
 _MONTH_DAYS = re.compile(r"\b([a-z]{3,})\.?\s+(\d{1,2})\s*[-–]\s*(\d{1,2})(?![\d.:])\b", re.I)
 _DAYS_MONTH = re.compile(r"(?<![\d.:])\b(\d{1,2})\s*[-–]\s*(\d{1,2})\s+([a-z]{3,})\b", re.I)
+# Dates that are something else too: they need a date position.
+_SHORT_DATE = re.compile(r"tom|tod|mo|tu|th|fr|sa|su|(?:(?:next|last) )?we|\d+/[\d/]+", re.I)
+_IN_3D = re.compile(r"in \d+D")  # "a movie in 3D"
+_BEFORE_NAME = re.compile(  # "lunch with Tom", "Anna, Tom": a name follows
+    r"@|@?(?:with|and|or|for|to|from|by|of|about|without|vs|the|an?|my|uncle|aunt|mr|dr"
+    r"|call|phone|ring|meet|see|visit|ask|tell|text|e?mail|help|remind"
+    r"|mit|und|oder|für|von|vom|zu|zum|bei|an|über|ohne|der|die|das|den|dem|ein|onkel|tante)"
+    r"|.*[,&+]",
+    re.IGNORECASE,
+)
+_HOUR = r"(?:[01]?\d|2[0-3])"
+_HOUR_NEXT = re.compile(
+    rf"(?:at (?:{_HOUR}[ap]?|\d{{4}})|{_HOUR}(?:[ap]|\.[0-5]\d)|({_HOUR}|\d{{4}}))(?!\S)",
+    re.IGNORECASE,
+)
 _FREQS = {"day": "DAILY", "month": "MONTHLY", "year": "YEARLY"}
 _MON_FRI = frozenset(range(5))
 
@@ -96,7 +129,8 @@ _LITERALS = [chr(c) for c in range(0xFDD0, 0xFDF0)]  # noncharacters: stand for 
 _LITERAL_LOCATION = re.compile(r"(?:^|\s)@([\ufdd0-\ufdef])")
 # What looks like a time, date or repeat but wasn't taken as one.
 _LEFTOVER = re.compile(
-    r"(?<!\S)(?:\d{1,2}:\d{2}\S*|\d{1,2}\.\d{1,2}\.\S*|\d{4}-\d{1,2}-\d{1,2}|until\s+\S+)"
+    r"(?<!\S)(?:\d{1,2}:\d{2}\S*|\d{1,2}\.\d{1,2}\.\S*|\d{4}-\d{1,2}-\d{1,2}"
+    r"|\d{1,2}/\d{1,2}/\d{2,4}|until\s+\S+)"
     r"|(?<=\S )every\s+\S+",
     re.IGNORECASE,
 )
@@ -144,38 +178,51 @@ def _quote(text: str) -> str:
     return '"' + re.sub(r'(["\\])', r"\\\1", text) + '"'
 
 
+def _half(suffix: str | None) -> str:
+    """The half of the day a time's suffix stands for: "a", "p" or "" (none, "h")."""
+    letter = (suffix or "").strip().lower()[:1]
+    return letter if letter in ("a", "p") else ""
+
+
 def _hour(h: str, m: str | None, suffix: str | None) -> time | None:
     hour, minute = int(h), int(m or 0)
-    suffix = (suffix or "").lower()
-    if suffix in ("am", "pm"):
+    if half := _half(suffix):
         if not 1 <= hour <= 12:
             return None
-        hour = hour % 12 + (12 if suffix == "pm" else 0)
+        hour = hour % 12 + (12 if half == "p" else 0)
     if hour > 23 or minute > 59:
         return None
     return time(hour, minute)
 
 
 def _range(m: re.Match[str]) -> tuple[time, time] | None:
-    h1, m1, s1, h2, m2, s2 = m.groups()
-    end = _hour(h2, m2, s2)
-    start = None
-    if not s1 and s2 and s2.lower() in ("am", "pm"):  # "9-11am": the start shares the suffix
-        start = _hour(h1, m1, s2)
-        if start is not None and end is not None and start > end:  # "11-1pm"
-            start = None
-    start = start or _hour(h1, m1, s1)
-    return (start, end) if start is not None and end is not None else None
+    h1, dot1, m1, s1, h2, dot2, m2, s2 = m.groups()
+    dotted = [minute for dot, minute in ((dot1, m1), (dot2, m2)) if dot == "."]
+    if dotted and not s1 and not s2 and all(1 <= int(minute) <= 12 for minute in dotted):
+        return None  # dates: "1.12-3.12"
+    start, end = _hour(h1, m1, s1), _hour(h2, m2, s2)
+    if start is None or end is None:
+        return None
+    if not s1 and _half(s2):  # "9-11am": the start shares the suffix, not in "11-1pm"
+        shared = _hour(h1, m1, s2)
+        if shared is not None and shared <= end:
+            start = shared
+    elif _half(s1) and not s2 and 1 <= int(h2) <= 12:  # "1pm-3", "11am-1": the next 3, 1 o'clock
+        early = time(int(h2) % 12, end.minute)
+        late = early.replace(hour=early.hour + 12)
+        end = late if early <= start < late else early
+    return start, end
 
 
-def _take(
-    pattern: re.Pattern[str], text: str, mark: str = _GAP
-) -> tuple[re.Match[str] | None, str]:
+def _cut(text: str, m: re.Match[str], mark: str = _GAP) -> str:
+    """``text`` with ``mark`` for the match ``m``."""
+    return f"{text[: m.start()]} {mark} {text[m.end() :]}"
+
+
+def _take(pattern: re.Pattern[str], text: str) -> tuple[re.Match[str] | None, str]:
     """The first match of ``pattern`` in ``text`` and ``text`` with it cut out."""
     m = pattern.search(text)
-    if m is None:
-        return None, text
-    return m, f"{text[: m.start()]} {mark} {text[m.end() :]}"
+    return (None, text) if m is None else (m, _cut(text, m))
 
 
 def _byday(days: frozenset[int], interval: str = "") -> str:
@@ -208,7 +255,7 @@ def _take_repeat(text: str) -> tuple[tuple[str, frozenset[int] | None] | None, s
     """The first repeat phrase that doesn't start the title ("Weekly review" is a name)."""
     for m in _REPEAT.finditer(text):
         if _clean(text[: m.start()]):
-            return _repeat(m), f"{text[: m.start()]} {_MARK} {text[m.end() :]}"
+            return _repeat(m), _cut(text, m, _MARK)
     return None, text
 
 
@@ -280,40 +327,100 @@ def _next_year(day: date) -> date | None:
         return None
 
 
-def _take_date(text: str, today: date) -> tuple[tuple[date, date] | None, str]:
-    """The longest run of words (≤ 9) that is a date or a date range, and the rest."""
+def _title(text: str) -> str:
+    """What is left of ``text`` before the location."""
+    return _LOCATION.split(_clean(text), maxsplit=1)[0].strip()
+
+
+def _ends_title(words: list[str]) -> bool:
+    """``words`` start with a removed piece or the location, or there are none."""
+    return not words or words[0] in _GAPS or words[0].startswith("@")
+
+
+def _in_date_position(words: list[str], i: int, end: int, has_time: bool) -> bool:
+    """Whether the short date ``words[i:end]`` is where a date is expected (see the module
+    docstring)."""
+    run, previous = " ".join(words[i:end]).lower(), words[i - 1].lower() if i else ""
+    if previous == "on":
+        return True
+    after = words[end:]
+    starts_line = not _clean(" ".join(words[:i]))
+    in_location = any(w.startswith("@") for w in words[:i])
+    hour = None if has_time else _HOUR_NEXT.match(" ".join(after[:2]))
+    before_time = after[:1] in ([_TIME_GAP], [_MARK])
+    if hour:  # "tom at 9 lunch", "tom 9 lunch"; not "give Tom 3 books"
+        bare = hour[1] is not None
+        before_time = not bare or (starts_line and run != "we") or _ends_title(after[1:])
+    goes_on = after[:1] in (["with"], ["mit"]) and not starts_line
+    ends = not in_location and (_ends_title(after) or goes_on)
+    if "/" in run:
+        return not in_location and (starts_line or before_time or ends)
+    if _BEFORE_NAME.fullmatch(previous):
+        return False
+    return before_time or (ends and not run.endswith("we"))
+
+
+def _take_date(text: str, today: date, has_time: bool) -> tuple[tuple[date, date] | None, str]:
+    """The longest run of words (≤ 9) that is a date or a date range, and the rest. Short dates
+    (``_SHORT_DATE``) come after the others, what may be a time (``12.11``) last."""
     words = text.split()
+    found: list[tuple[int, int, int, tuple[date, date], str]] = []
     for size in range(min(9, len(words)), 0, -1):
         for i in range(len(words) - size + 1):
-            run = words[i : i + size]
-            if _GAP in run or _MARK in run or (days := _dates(" ".join(run), today)) is None:
+            run, end = " ".join(words[i : i + size]), i + size
+            if any(w in _GAPS for w in words[i:end]) or _IN_3D.fullmatch(run):
                 continue
-            if i and words[i - 1].lower() == "on":
-                i, size = i - 1, size + 1
-            return days, " ".join(words[:i] + [_MARK] + words[i + size :])
-    return None, text
+            if (days := _dates(run, today)) is None:
+                continue
+            first = i - 1 if i and words[i - 1].lower() == "on" else i
+            rest = " ".join(words[:first] + [_MARK] + words[end:])
+            rank = 0
+            if _SHORT_DATE.fullmatch(run):
+                if not _title(rest) or not _in_date_position(words, i, end, has_time):
+                    continue
+                rank = 1
+            elif (m := _DOT_TIME.fullmatch(run)) and _hour(m[1], m[2], None):
+                rank = 2
+            found.append((rank, -size, i, days, rest))
+    if not found:
+        return None, text
+    *_, days, rest = min(found)
+    return days, rest
 
 
 def _clean(text: str) -> str:
-    return " ".join(w for w in text.split() if w not in (_GAP, _MARK))
+    return " ".join(w for w in text.split() if w not in _GAPS)
+
+
+def _short_time(text: str) -> tuple[str, time | None]:
+    """A time like ``9``, ``1330`` or ``1p`` in a time position taken out of ``text``."""
+    for m in _SHORT_TIME.finditer(text):
+        mark, at, hour, half, hh, mm = m.groups()
+        ends = _ends_title(text[m.end() :].split())
+        starts_line = not _clean(text[: m.start()])
+        shortly = _half(half) == "p" and (ends or starts_line)  # "1p", but not "Room 5a"
+        placed = bool(half) or ends if at else shortly  # "at 9a", "at 13"
+        start = _hour(hour or hh, mm, half)
+        if (mark or placed) and start is not None:
+            return _cut(text, m, _TIME_GAP), start
+    return text, None
 
 
 def _take_time(text: str, after_date: bool = False) -> tuple[str, time | None]:
-    """One time of day taken out of ``text``. ``after_date``: also a bare hour right after
-    a date or repeat, and any ``H.MM`` (else only one that can't be a date, ``14.30``)."""
-    m, rest = _take(_SINGLE, text)
-    if m and (start := _hour(m[1], m[2], m[3] or m[4])) is not None:
-        return rest, start
-    m, rest = _take(_DOT_TIME, text)
-    if m and (after_date or int(m[2]) > 12) and (start := _hour(m[1], m[2], None)) is not None:
-        return rest, start
-    m, rest = _take(_NAMED_TIME, text)
-    if m:
-        return rest, _NAMED_TIMES[m[1].lower()]
-    m, rest = _take(_BARE_HOUR, text, _MARK)
-    if after_date and m and (start := _hour(m[1], None, None)) is not None:
-        return rest, start
-    return text, None
+    """One time of day taken out of ``text``. ``after_date`` (dates are taken out): also a
+    short one in a time position, and any ``H.MM`` (else only one that can't be a date,
+    ``14.30``)."""
+    for m in _SINGLE.finditer(text):
+        start = _hour(m[1], m[2] or m[4], m[3] or m[5] or m[6])
+        if start is not None:
+            return _cut(text, m, _TIME_GAP), start
+    for m in _DOT_TIME.finditer(text):
+        start = _hour(m[1], m[2], None)
+        if start is not None and (after_date or not 1 <= int(m[2]) <= 12):
+            return _cut(text, m, _TIME_GAP), start
+    if named := _NAMED_TIME.search(text):
+        return _cut(text, named, _TIME_GAP), _NAMED_TIMES[named[1].lower()]
+    return _short_time(text) if after_date else (text, None)
 
 
 def _take_calendar(text: str, calendars: list[str]) -> tuple[str | None, str, str]:
@@ -346,7 +453,7 @@ def _take_duration(text: str) -> tuple[timedelta | None, str]:
         return length, rest
     matches = sorted(_BARE_DURATION.finditer(text), key=lambda m: int(m[1] or 0))
     for m in matches:
-        rest = f"{text[: m.start()]} {_GAP} {text[m.end() :]}"
+        rest = _cut(text, m)
         if (length := _length(m)) and (
             int(m[1] or 0) <= _MAX_BARE_HOURS or _take_time(rest)[1] is not None
         ):
@@ -382,14 +489,15 @@ def parse(text: str, today: date, calendars: list[str], draft: Event | None = No
     all_day, rest = _take(_ALL_DAY, rest)
 
     times: tuple[time, time | None] | None = None
-    m, cut = _take(_RANGE, rest)
-    if m and (span := _range(m)):
-        times, rest = span, cut
+    for m in _RANGE.finditer(rest):
+        if span := _range(m):
+            times, rest = span, _cut(rest, m, _TIME_GAP)
+            break
     duration, rest = _take_duration(rest)
     if times is None:
         rest, start = _take_time(rest)
         times = None if start is None else (start, None)
-    days, rest = _take_date(rest, today)
+    days, rest = _take_date(rest, today, times is not None)
     if times is None:  # "tomorrow 9", "tomorrow 12.11"
         rest, start = _take_time(rest, after_date=True)
         times = None if start is None else (start, None)

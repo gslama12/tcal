@@ -786,3 +786,23 @@ Supersedes the event form (E3 ff.) and the quick-add screen (QA1, QA3): both are
   no selection: at the cursor as before. Flash to a slot still goes to that slot.
 - **GV3:** in resize mode no slot cursor is drawn (the keys move the edge, whose highlight it
   would cover).
+
+### Short dates and times (nl-parse)
+
+- **NP1 Forms:** `parse_date` (so goto too) also takes `tom`/`tmr`/`tmrw`, `tod`, `yest`, 2-letter
+  weekdays (`mo`..`su`, also `next fr`, `mo-fr`, `every mo, we`), `in 3d|3w|3y`, `1.1.27`, and
+  `24/12[/26]` as day/month only when the day is above 12 (`5/12` and `12/24` are ambiguous or
+  fractions: text in the prompt, with a warning if a year follows; goto's `parse_jump` still reads them month first) and never
+  "24/7". `in 3m` is left out (minutes or months?), `12-24` is hours.
+  Times: `1p`, `1:30p`, `1.30pm`, `9.00`, dotted ranges (`9.30-11`), `1pm-3` (the end is the next
+  such o'clock, also `11am-1`), `at 13`, `at 1330`, `tom 1330`, `tom 9a`. Bare numbers: as before.
+- **NP2 Date position:** forms that are something else too (`_SHORT_DATE`: `tom`, `tod`, 2-letter
+  weekdays, slashes) count only if the line has no other date, a title remains, and they stand
+  after `on`, before a time, or where the title ends / goes on with "with". Not after a
+  word that takes a name (`_BEFORE_NAME`: with, and, call, mit …, or a comma). In the location
+  only before a time (slashes never: "Main St 14/3"); `we` never just at the end. Removed times
+  leave their own mark (`_TIME_GAP`) so this can be told. A dotted date that may be a time
+  (`12.11`) now gives way to any other date in the line, wherever it is.
+- **NP3:** "tom at 1pm" alone is an event called "tom" (a title must remain); it becomes
+  tomorrow once a title follows. `at 9a` is a time anywhere, `9a` only right after a date ("Room
+  5a"); `1p` also starting the line or where the title ends.

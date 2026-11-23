@@ -279,9 +279,9 @@ def test_calendar_names_with_spaces_and_exact_before_prefix() -> None:
 
 
 def test_what_looks_like_a_time_is_reported() -> None:
-    q = parse("x 25:00 30.2.", TODAY, NAMES)
-    assert q.summary == "x 25:00 30.2."
-    assert [w.split("”")[0] for w in q.warnings] == ["“25:00", "“30.2."]
+    q = parse("x 25:00 30.2. 5/12/26", TODAY, NAMES)
+    assert q.summary == "x 25:00 30.2. 5/12/26"
+    assert [w.split("”")[0] for w in q.warnings] == ["“25:00", "“30.2.", "“5/12/26"]
 
 
 def event(**changes) -> Event:
@@ -405,3 +405,179 @@ def test_an_instance_keeps_its_calendar_and_has_no_rule() -> None:
 def test_nonsense_never_crashes(text: str, draft: Event | None) -> None:
     q = parse(text, TODAY, NAMES, draft)
     assert q.summary.startswith("x") and q.start.year in (2026, 2027)
+
+
+TOMORROW, FRIDAY, MONDAY = TODAY + timedelta(1), date(2026, 11, 20), date(2026, 11, 23)
+XMAS, NEW_YEAR = date(2026, 12, 24), date(2027, 1, 1)
+
+
+@pytest.mark.parametrize(
+    ("text", "day", "start"),
+    [
+        ("Lunch tom at 1pm", TOMORROW, time(13)),
+        ("tom at 1pm Lunch", TOMORROW, time(13)),
+        ("Lunch TOM AT 1PM", TOMORROW, time(13)),
+        ("Lunch 1pm tom", TOMORROW, time(13)),
+        ("tom 9 Lunch", TOMORROW, time(9)),
+        ("Lunch tom at 13", TOMORROW, time(13)),
+        ("Lunch tom 1330", TOMORROW, time(13, 30)),
+        ("Lunch tom 2030", TOMORROW, time(20, 30)),
+        ("Lunch tom 12.11", TOMORROW, time(12, 11)),
+        ("Lunch 12.11 tom", TOMORROW, time(12, 11)),
+        ("12.11 Lunch fri", FRIDAY, time(12, 11)),
+        ("Lunch tmr 1p", TOMORROW, time(13)),
+        ("tmrw 1p Lunch", TOMORROW, time(13)),
+        ("Lunch tod at noon", TODAY, time(12)),
+        ("Lunch on tom 1pm", TOMORROW, time(13)),
+        ("Lunch tom", TOMORROW, None),
+        ("Lunch tom #work", TOMORROW, None),
+        ("Lunch tom @Cafe", TOMORROW, None),
+        ("Lunch yest", TODAY - timedelta(1), None),
+        ("Lunch Fr", FRIDAY, None),
+        ("Lunch fr 14:30", FRIDAY, time(14, 30)),
+        ("mo 9 Lunch", MONDAY, time(9)),
+        ("Lunch on mo", MONDAY, None),
+        ("Lunch we 13h", date(2026, 11, 25), time(13)),
+        ("Lunch next fr 8a", date(2026, 11, 27), time(8)),
+        ("Lunch mo 23.11. 9", MONDAY, time(9)),
+        ("Lunch in 3d", date(2026, 11, 21), None),
+        ("in 3d Lunch 13.30", date(2026, 11, 21), time(13, 30)),
+        ("Lunch +3d", date(2026, 11, 21), None),
+        ("Lunch 24.12 13.30", XMAS, time(13, 30)),
+        ("Lunch 24/12", XMAS, None),
+        ("24/12 Lunch 1pm", XMAS, time(13)),
+        ("Lunch 24/12/26 18h", XMAS, time(18)),
+        ("Lunch dec 24 1330", XMAS, time(13, 30)),
+        ("Lunch 24 dec at 7pm", XMAS, time(19)),
+        ("1.1.27 Lunch", NEW_YEAR, None),
+        ("fri 1.1.27 Lunch midnight", NEW_YEAR, time(0)),
+    ],
+)
+def test_short_dates(text: str, day: date, start: time | None) -> None:
+    q = parse(text, TODAY, NAMES)
+    expected = datetime.combine(day, start or time(0), local_zone())
+    assert (q.summary, q.start, q.all_day) == ("Lunch", expected, start is None)
+    assert q.warnings == ()
+
+
+def test_a_short_date_before_with_and_before_a_time_in_the_location() -> None:
+    q = parse("Lunch tom with Anna 1pm", TODAY, NAMES)
+    assert (q.summary, q.start) == ("Lunch with Anna", at(TOMORROW, 13))
+    q = parse("Lunch @Cafe tom 1pm", TODAY, NAMES)
+    assert (q.summary, q.location, q.start) == ("Lunch", "Cafe", at(TOMORROW, 13))
+
+
+def test_short_date_ranges_and_repeats() -> None:
+    q = parse("Trip mo-fr", TODAY, NAMES)
+    assert (q.start, q.end) == (local_midnight(MONDAY), local_midnight(date(2026, 11, 28)))
+    q = parse("Trip 24/12 - 26/12", TODAY, NAMES)
+    assert (q.start, q.end) == (local_midnight(XMAS), local_midnight(date(2026, 12, 27)))
+    q = parse("Yoga every mo, we 18h until fr", TODAY, NAMES)
+    assert (q.summary, q.start) == ("Yoga", at(TODAY, 18))
+    assert q.rrule == f"FREQ=WEEKLY;BYDAY=MO,WE;{until(FRIDAY)}"
+
+
+@pytest.mark.parametrize(
+    ("text", "start", "end"),
+    [
+        ("Call 1-2pm", (13, 0), (14, 0)),
+        ("Call 1-2p", (13, 0), (14, 0)),
+        ("Call 12-1pm", (12, 0), (13, 0)),
+        ("Call 11p-11:30p", (23, 0), (23, 30)),
+        ("Call 1pm-3", (13, 0), (15, 0)),
+        ("Call 1pm - 2:30", (13, 0), (14, 30)),
+        ("Call 11am-1", (11, 0), (13, 0)),
+        ("Call 9am-12", (9, 0), (12, 0)),
+        ("Call 9am-17", (9, 0), (17, 0)),
+        ("Call at 10-11:30", (10, 0), (11, 30)),
+        ("Call 13-14", (13, 0), (14, 0)),
+        ("Call 9.30-11", (9, 30), (11, 0)),
+        ("Call 9-10.30", (9, 0), (10, 30)),
+        ("Call 9.00-11.10", (9, 0), (11, 10)),
+        ("Call 1:30pm", (13, 30), (14, 30)),
+        ("Call 1:30p", (13, 30), (14, 30)),
+        ("Call 1.30pm", (13, 30), (14, 30)),
+        ("Call 13:30h", (13, 30), (14, 30)),
+        ("Call 13.30", (13, 30), (14, 30)),
+        ("Call 9.00", (9, 0), (10, 0)),
+        ("Call at 13", (13, 0), (14, 0)),
+        ("Call at 1330", (13, 30), (14, 30)),
+        ("Call at 13 @Cafe", (13, 0), (14, 0)),
+        ("at 9a Call", (9, 0), (10, 0)),
+        ("1p Call", (13, 0), (14, 0)),
+        ("Call 1p for 2h", (13, 0), (15, 0)),
+        ("Call 1pm 90m", (13, 0), (14, 30)),
+        ("Call noon 1h30", (12, 0), (13, 30)),
+    ],
+)
+def test_short_times(text: str, start: tuple[int, int], end: tuple[int, int]) -> None:
+    q = parse(text, TODAY, NAMES)
+    assert (q.summary, q.start, q.end) == ("Call", at(TODAY, *start), at(TODAY, *end))
+
+
+def test_a_late_range_without_a_second_suffix_ends_the_next_day() -> None:
+    q = parse("Party 10pm-2", TODAY, NAMES)
+    assert (q.start, q.end) == (at(TODAY, 22), at(TOMORROW, 2))
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Meeting with Tom",
+        "Call Tom",
+        "Lunch Anna, Tom",
+        "Lunch Anna & Tom",
+        "Essen mit Mo",
+        "Geschenk für Su",
+        "Tom",
+        "Tom visits",
+        "Read Tom Sawyer",
+        "Give Tom 3 books",
+        "Tod in Venedig",
+        "How are we",
+        "Can we talk",
+        "As we 2 go",
+        "Mo birthday",
+        "Support 24/7",
+        "Episode 12/24",
+        "Read part 3/20",
+        "Flat 14/3 viewing",
+        "Movie in 3D",
+        "Room 5a",
+        "Page 5p notes",
+        "Look at 5 houses",
+        "Party at 7 Main St",
+        "Read 3 books",
+        "Goals 2027",
+    ],
+)
+def test_titles_that_look_like_short_dates_or_times(title: str) -> None:
+    q = parse(title, TODAY, NAMES)
+    assert (q.summary, q.start) == (title, local_midnight(TODAY))
+    assert (q.has_date, q.has_time) == (False, False)
+    q = parse(f"{title} fri 10:00", TODAY, NAMES)
+    assert (q.summary, q.start) == (title, at(FRIDAY, 10))
+
+
+@pytest.mark.parametrize("title", ["Meeting with Tom", "Call Tom", "Tom", "Anna, Tom"])
+def test_a_name_before_a_time_stays_in_the_title(title: str) -> None:
+    q = parse(f"{title} at 1pm", TODAY, NAMES)
+    assert (q.summary, q.start) == (title, at(TODAY, 13))
+
+
+@pytest.mark.parametrize("place", ["Uncle Tom", "Cafe Mo", "Main St 14/3"])
+def test_short_dates_in_a_location(place: str) -> None:
+    q = parse(f"Lunch 1pm @{place}", TODAY, NAMES)
+    assert (q.location, q.start) == (place, at(TODAY, 13))
+    q = parse(f"Lunch @{place} #work", TODAY, NAMES)
+    assert (q.location, q.has_date) == (place, False)
+
+
+@pytest.mark.parametrize("title", ["Dentist tom", "Tom", "Meet at 13", "Lunch 1p", "mo-fr", "9.00"])
+@pytest.mark.parametrize("all_day", [False, True])
+def test_short_forms_in_a_title_round_trip(title: str, all_day: bool) -> None:
+    ev = event(summary=title, location="Bar Mo")
+    if all_day:
+        ev = replace(ev, start=MIDNIGHT, end=MIDNIGHT + timedelta(1), all_day=True)
+    q = parse(to_text(ev, TODAY), TODAY, NAMES, ev)
+    assert (q.summary, q.location, q.start, q.end) == (title, "Bar Mo", ev.start, ev.end)
