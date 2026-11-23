@@ -8,6 +8,7 @@ data refresh (sync) with an unchanged state, so it is the one redraw signal.
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from enum import StrEnum
+from typing import Literal
 
 from tcal.dates import add_months
 
@@ -20,7 +21,20 @@ class ViewMode(StrEnum):
     SCHEDULE = "schedule"
 
 
+Edge = Literal["start", "end"]
+
 SCHEDULE_DAYS = 14  # a schedule "period": H/L page by two weeks
+
+
+@dataclass(frozen=True)
+class Resize:
+    """Resize mode: the cursor up/down keys move this edge of event ``uid``."""
+
+    uid: str
+    edge: Edge = "end"
+
+    def toggled(self) -> "Resize":
+        return replace(self, edge="start" if self.edge == "end" else "end")
 
 
 @dataclass(frozen=True)
@@ -31,6 +45,7 @@ class AppState:
     hidden_calendars: frozenset[str] = frozenset()
     marked: frozenset[tuple[str, datetime]] = frozenset()  # tab-marked ``Occurrence.key``s
     grid: bool = False  # day/week: the cursor keys move a slot cursor, not between events
+    resize: Resize | None = None  # day/week: resize mode, and the edge it moves
 
     def period(self) -> tuple[date, date]:
         """The [start, end) day range of the current view's period."""
