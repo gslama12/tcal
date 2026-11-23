@@ -31,7 +31,7 @@ class StatusBar(TcalWidget):
     def render(self) -> RenderResult:
         p = self.tcal.palette
         state = self.tcal.state
-        mode = " · GRID" if state.grid and state.view in (ViewMode.DAY, ViewMode.WEEK) else ""
+        mode = " · GRID" if state.grid and state.view is ViewMode.WEEK else ""
         label = f" {state.view.value.upper()}{mode} "
         color = p.primary
         if state.resize is not None:

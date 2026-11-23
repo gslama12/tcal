@@ -8,12 +8,12 @@ caldav_url = "https://caldav.icloud.com"
 password_cmd = ""                      # optional shell command printing the app-specific password
 
 [view]
-day_start = "06:30"                    # first time shown in day/week view (scroll for earlier)
-day_end = "24:00"                      # last time shown in day/week view
+day_start = "06:30"                    # first time shown in week view (scroll for earlier)
+day_end = "24:00"                      # last time shown in week view
 rows_per_hour = 0                      # time-grid zoom, 1..8; 0 = fit the terminal height
 grid_step = 60                         # grid mode (v): minutes per cursor slot, 15 | 30 | 60
 week_start = "monday"                  # monday .. sunday
-default_view = "week"                  # day | week | month | year | schedule
+default_view = "week"                  # week | month | year | schedule
 
 [sync]
 interval = 300                         # seconds between background syncs
@@ -43,7 +43,6 @@ cursor_right = ["l", "right"]
 prev_period = ["H"]
 next_period = ["L"]
 today = ["t"]
-view_day = ["d"]
 view_week = ["w"]
 view_month = ["m"]
 view_year = ["Y"]
@@ -54,25 +53,25 @@ open = ["enter"]
 new_event = ["a", "i"]
 quick_add = ["A"]                      # one line: "Lunch fri 12-13 @Cafe #work"
 edit_event = ["e"]
-delete_event = ["x"]
+delete_event = ["d"]
 undo = ["u"]                           # take back the last create/edit/move/delete (repeatable)
 redo = ["ctrl+r"]                      # make the last undone change again (repeatable)
 yank = ["y"]                           # copy the selected event
-paste = ["p"]                          # a copy at the cursor slot (day/week) or selected day;
+paste = ["p"]                          # a copy at the cursor slot (week) or selected day;
                                        # several copied: the first on the selected day, the rest alongside
 toggle_mark = ["tab"]                  # mark/unmark the selected event; y copies all marked
 duplicate = ["D"]                      # a copy of the selected event on the next day
 # Moves: tmux often takes ctrl+h/j/k/l, so the first keys are plain ones.
-grid_mode = ["v"]                      # day/week: the cursor keys move a slot cursor (grid_step)
+grid_mode = ["v"]                      # week: the cursor keys move a slot cursor (grid_step)
                                        # instead of between events (again or escape: back)
-move_down = ["J", "ctrl+j"]            # selected event 15 min later (day/week)
-move_up = ["K", "ctrl+k"]              # selected event 15 min earlier (day/week)
+move_down = ["J", "ctrl+j"]            # selected event 15 min later (week)
+move_up = ["K", "ctrl+k"]              # selected event 15 min earlier (week)
 move_left = ["less_than_sign", "ctrl+h"]     # "<": selected event one day earlier
 move_right = ["greater_than_sign", "ctrl+l"] # ">": selected event one day later
-# Resize mode (day/week): cursor_up/cursor_down move the selected event's end (the key again:
+# Resize mode (week): cursor_up/cursor_down move the selected event's end (the key again:
 # its start) to the previous/next quarter hour; escape leaves.
 resize_mode = ["o"]
-flash = ["f"]                          # day/week: labels on events and slots, type one to jump there
+flash = ["f"]                          # week: labels on events and slots, type one to jump there
 goto_date = ["g"]
 search = ["slash"]
 sync = ["r"]

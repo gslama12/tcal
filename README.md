@@ -8,7 +8,7 @@ and edits made offline are queued and pushed later.
 
 ```
 ╭──────────────────────────╮╭──────────────────────────────────────────────────────────────────────────────────────────╮
-│ November 2026    ‹ ›     ││  Today    ‹  ›   16 – 22 November 2026             Day │ Week │ Month │ Year │ Schedule  │
+│ November 2026    ‹ ›     ││  Today    ‹  ›   16 – 22 November 2026                   Week │ Month │ Year │ Schedule  │
 │  M  T  W  T  F  S  S     │╰──────────────────────────────────────────────────────────────────────────────────────────╯
 │ 26 27 28 29 30 31  1     │╭──────────────────────────────────────────────────────────────────────────────────────────╮
 │  2  3  4  5  6  7  8     ││         Mon 16      Tue 17      Wed 18      Thu 19      Fri 20      Sat 21      Sun 22   │
@@ -37,7 +37,7 @@ and edits made offline are queued and pushed later.
 
 ## Features
 
-- **Views:** day and week (zoomable time grid, overlapping events stacked as translucent rounded blocks, now line), month (multi-day
+- **Views:** week (zoomable time grid, overlapping events stacked as translucent rounded blocks, now line), month (multi-day
   bars, "+N more"), year (12 mini months) and schedule (a scrolling list of upcoming events).
   Sidebar with mini month and a toggleable calendar list; mouse support.
 - **Events:** create, edit, delete, incl. recurring events ("this event" or "all events"),
@@ -46,15 +46,15 @@ and edits made offline are queued and pushed later.
 - **Quick add** (`A`): one line like `Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal`.
 - **Yank / paste / duplicate / move / resize** events with the keyboard (`y` `p` `D`, `J` `K`
   `<` `>`) and an **undo** stack (`u`, the last 20 changes; `ctrl+r` redoes).
-- **Resize mode** (`o` on a timed event, day/week; the status bar shows `RESIZE · END`): `j`/`k`
+- **Resize mode** (`o` on a timed event, week; the status bar shows `RESIZE · END`): `j`/`k`
   move its end by 15 min (to the quarter hours), `o` again switches to its start and back, esc
   leaves. The edge being moved is marked; each step can be undone.
-- **Event navigation** (day/week): the cursor keys jump between events — `j`/`k` the
+- **Event navigation** (week): the cursor keys jump between events — `j`/`k` the
   previous/next event of the day, `h`/`l` the nearest one on the previous/next day; `a` adds
   a new event right after the selected one, `p` pastes at its time. **Grid mode** (`v`, back
   with `v` or esc; the status bar shows `WEEK · GRID`) moves a 1-hour slot cursor instead
   (`[view] grid_step`: 15, 30 or 60 minutes).
-- **Flash jump** (`f`, day/week): red labels on every event and every `grid_step` slot
+- **Flash jump** (`f`, week): red labels on every event and every `grid_step` slot
   (default: each hour) on screen; type one to jump there (an event label selects it, a
   slot label enters grid mode on that slot; nearest get single keys, any other key cancels).
 
@@ -145,12 +145,12 @@ and keys bound to more than one action.
 
 ```toml
 [view]
-day_start = "08:00"        # first time shown in day/week view (scroll for earlier)
+day_start = "08:00"        # first time shown in week view (scroll for earlier)
 day_end = "20:00"          # last time shown
 rows_per_hour = 4          # zoom 1..8; 0 = fit the terminal height (default)
 grid_step = 30             # grid mode: minutes per cursor slot, 15 | 30 | 60 (default)
 week_start = "sunday"
-default_view = "schedule"  # day | week | month | year | schedule
+default_view = "schedule"  # week | month | year | schedule
 
 [sync]
 interval = 120             # seconds between background syncs
@@ -186,13 +186,12 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `k` `↑` | Up (time grid: previous event, grid mode: earlier slot) |
 | `j` `↓` | Down (time grid: next event, grid mode: later slot) |
 | `v` | Grid mode: cursor keys move a slot cursor (again / esc: back) |
-| `H` | Previous day/week/month/year (schedule: 2 weeks) |
-| `L` | Next day/week/month/year (schedule: 2 weeks) |
+| `H` | Previous week/month/year (schedule: 2 weeks) |
+| `L` | Next week/month/year (schedule: 2 weeks) |
 | `t` | Jump to today |
 | `g` | Go to date |
 | `f` | Flash jump: type a label to jump to an event or slot (time grid) |
 | **Views** | |
-| `d` | Day view |
 | `w` | Week view |
 | `m` | Month view |
 | `Y` | Year view |
@@ -208,7 +207,7 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `a` `i` | New event (time grid: after the selected event / at the grid slot) |
 | `A` | Quick add (one line) |
 | `e` | Edit event |
-| `x` | Delete event |
+| `d` | Delete event |
 | `u` | Undo the last change |
 | `ctrl+r` | Redo the last undone change |
 | `tab` | Mark / unmark event (several: y copies all, esc clears) |
@@ -233,7 +232,7 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 
 `j`/`k` scroll the event detail; in the sidebar (`c` calendar list, `M` mini month) the cursor
 keys move its own cursor, esc or a view key returns to the main view. `J`/`K` move and
-`o` resizes timed events in the day/week grid only. ctrl+h/j/k/l are extra move keys
+`o` resizes timed events in the week grid only. ctrl+h/j/k/l are extra move keys
 (tmux often takes them); ctrl with a letter like `ö` needs a terminal with the kitty keyboard
 protocol.
 The sidebar hides itself below 120 columns (`b` pins your choice).

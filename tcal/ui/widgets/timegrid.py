@@ -1,4 +1,4 @@
-"""Day and Week views: a Google-Calendar-like time grid.
+"""The Week view: a Google-Calendar-like time grid.
 
 Layout (content area of the widget)::
 
@@ -56,7 +56,6 @@ SCROLL_ROWS = 2  # rows per mouse-wheel step
 SLOT_MINUTES = 15  # event mode: the slot a click or the remembered time falls in
 # The grid's own actions that still work in resize mode.
 RESIZE_ACTIONS = {"cursor_up", "cursor_down", "cancel", "zoom_in", "zoom_out"}
-HEADER_FORMATS = ("%A, {day} %B", "%A {day}", "%a {day}", "{day}")  # widest first
 
 
 def now() -> datetime:
@@ -65,7 +64,7 @@ def now() -> datetime:
 
 
 class TimeGrid(CalendarView):
-    """Shared core of DayView / WeekView (``days()`` picks the columns).
+    """The week of ``state.day`` (starting at config ``week_start``), a column per day.
 
     Keys: in event mode j/k select the previous/next event of the day, h/l the
     nearest event on the previous/next day; in grid mode (v) j/k move the slot cursor,
@@ -82,7 +81,6 @@ class TimeGrid(CalendarView):
         binding("new_event", "New event"),
         binding("flash", "Flash"),
     ]
-    header_formats: tuple[str, ...] = HEADER_FORMATS
 
     def __init__(self, *, id: str | None = None) -> None:
         super().__init__(id=id)
@@ -98,7 +96,8 @@ class TimeGrid(CalendarView):
 
     def days(self) -> list[date]:
         """The dates of the columns, for the current state."""
-        raise NotImplementedError
+        start, _ = replace(self.tcal.state, view=ViewMode.WEEK).period()
+        return [start + timedelta(days=i) for i in range(7)]
 
     # ----- lifecycle ------------------------------------------------------
 
@@ -692,26 +691,8 @@ class TimeGrid(CalendarView):
             cursor_minute=self._cursor_slot,
             selected=self.selected,
             now=now(),
-            header_formats=self.header_formats,
             palette=self.tcal.palette,
             color=self.tcal.calendar_color,
             marked=self.tcal.state.marked,
             edge=resize.edge if resize is not None else None,
         )
-
-
-class DayView(TimeGrid):
-    """Time grid for ``state.day`` (short header: the toolbar shows the full date)."""
-
-    header_formats = ("%a {day}", "{day}")
-
-    def days(self) -> list[date]:
-        return [self.tcal.state.day]
-
-
-class WeekView(TimeGrid):
-    """Time grid for the week of ``state.day`` (starting at config ``week_start``)."""
-
-    def days(self) -> list[date]:
-        start, _ = replace(self.tcal.state, view=ViewMode.WEEK).period()
-        return [start + timedelta(days=i) for i in range(7)]

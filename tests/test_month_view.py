@@ -71,7 +71,7 @@ async def test_month_selected_event(app: RecordingApp) -> None:
         await pilot.press("l")  # moving the day drops the selection
         assert view.selected is None
         await pilot.press("enter")
-        assert app.state.view.value == "day"
+        assert app.state.view.value == "week"
 
 
 async def test_month_shows_only_its_own_days_events(app: RecordingApp) -> None:
@@ -120,7 +120,7 @@ async def test_month_view_navigation(app: RecordingApp) -> None:
         assert app.state.day == date(2026, 10, 29)  # crossed into October
         assert app.state.title() == "October 2026"
         await pilot.press("enter")
-        assert app.state.view is ViewMode.DAY
+        assert app.state.view is ViewMode.WEEK
 
 
 async def test_month_view_clicks(app: RecordingApp) -> None:
@@ -137,4 +137,4 @@ async def test_month_view_clicks(app: RecordingApp) -> None:
         assert isinstance(app.posted[-1], EventSelected)
         assert app.posted[-1].occurrence == first_chip
         await pilot.click(MonthView, offset=content(view, x, y))
-        assert app.state.view is ViewMode.DAY and app.state.day == TODAY
+        assert app.state.view is ViewMode.WEEK and app.state.day == TODAY

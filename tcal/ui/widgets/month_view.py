@@ -85,8 +85,8 @@ class MonthView(DayCursorView):
     """Grid of the weeks of ``state.day``'s month with event chips per day.
 
     h/j/k/l move the selected day, enter opens the selected event
-    (``EventSelected``) or else the day in the Day view; a click on the day number
-    or "+N more" opens the day, on an event selects and opens it; a double-click on
+    (``EventSelected``) or else the day's week; a click on the day number
+    or "+N more" opens its week, on an event selects and opens it; a double-click on
     a cell's empty space requests a new all-day event on that day
     (``NewEventRequested``).
     """

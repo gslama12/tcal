@@ -1,4 +1,4 @@
-"""Pure geometry of the Day/Week time grid (no widgets), shared with the month view.
+"""Pure geometry of the Week time grid (no widgets), shared with the month view.
 
 ``TimeScale`` maps minutes to grid rows (``fit_scale`` fits a day range to a
 height); ``layout_blocks`` stacks overlapping timed occurrences (``cascade``),

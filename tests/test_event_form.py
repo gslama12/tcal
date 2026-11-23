@@ -18,7 +18,7 @@ from tcal.ui.screens.event_form import (
     values_of,
 )
 from tcal.ui.screens.prompt import Prompt
-from tcal.ui.widgets.timegrid import WeekView
+from tcal.ui.widgets.timegrid import TimeGrid
 
 
 def at(hour: int, minute: int = 0, day=TODAY) -> datetime:
@@ -125,7 +125,7 @@ async def test_invalid_input_keeps_form_open_and_esc_cancels(make_app) -> None:
 async def test_edit_key_on_selected_event_and_readonly(make_app) -> None:
     app = make_app()
     async with app.run_test(size=(120, 50)) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("j")
         occ = grid.selected
         assert occ is not None
@@ -372,7 +372,7 @@ async def test_saved_new_event_is_selected(make_app) -> None:
         app.screen.query_one("#repeat", Select).value = "weekly"
         await pilot.press("ctrl+s")
         await pilot.pause()
-        selected = app.query_one(WeekView).selected
+        selected = app.query_one(TimeGrid).selected
         assert selected is not None and selected.summary == "QA series"
         assert selected.start == at(19, day=TODAY + timedelta(3))
 

@@ -1,4 +1,4 @@
-"""Day/Week event mode (the default: cursor keys move between events) and grid mode (v)."""
+"""Week event mode (the default: cursor keys move between events) and grid mode (v)."""
 
 from datetime import datetime, time, timedelta
 
@@ -8,7 +8,7 @@ from conftest import TODAY, RecordingApp
 from tcal.ui import messages
 from tcal.ui.widgets import timegrid
 from tcal.ui.widgets.statusbar import StatusBar
-from tcal.ui.widgets.timegrid import TimeGrid, WeekView
+from tcal.ui.widgets.timegrid import TimeGrid
 
 NOW = datetime.combine(TODAY, time(10, 15)).astimezone()
 SIZE = (140, 45)
@@ -33,7 +33,7 @@ def body(grid: TimeGrid) -> str:
 
 async def test_up_down_step_through_the_day(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         assert not app.state.grid and grid.selected is None
         await pilot.press("j")  # nothing selected: the first event, all-day ones first
         assert grid.selected is not None and grid.selected.all_day
@@ -50,7 +50,7 @@ async def test_up_with_nothing_selected_picks_the_last_and_stops_at_the_end(
     app: RecordingApp,
 ) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("k")
         assert summary(grid) == "Late movie"
         assert "Late movie" in body(grid)
@@ -62,7 +62,7 @@ async def test_up_with_nothing_selected_picks_the_last_and_stops_at_the_end(
 
 async def test_left_right_pick_the_nearest_event_and_cross_weeks(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("k", "k", "k")
         assert summary(grid) == "Dentist"  # 11:00-12:00
         await pilot.press("l")  # Thu: Standup 9:00 is nearer than Release 14:00
@@ -79,7 +79,7 @@ async def test_left_right_pick_the_nearest_event_and_cross_weeks(app: RecordingA
 
 async def test_all_day_event_goes_to_the_next_days_all_day_event(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         await pilot.press("j", "j")
         assert summary(grid) == "Conference"
         await pilot.press("l")
@@ -90,7 +90,7 @@ async def test_grid_mode_toggles_and_leaving_selects_the_event_at_the_cursor(
     app: RecordingApp,
 ) -> None:
     async with app.run_test(size=SIZE) as pilot:
-        grid = app.query_one(WeekView)
+        grid = app.query_one(TimeGrid)
         bar = app.query_one(StatusBar)
         assert "WEEK · GRID" not in str(bar.render())
         await pilot.press("v")
@@ -102,10 +102,6 @@ async def test_grid_mode_toggles_and_leaving_selects_the_event_at_the_cursor(
         assert not app.state.grid and summary(grid) == "Dentist"
         await pilot.press("v", "k", "k", "k", "v")  # 08:00: nearest Standup
         assert not app.state.grid and summary(grid) == "Standup"
-        await pilot.press("d")
-        assert " DAY " in str(bar.render())
-        await pilot.press("v")
-        assert "DAY · GRID" in str(bar.render())
 
 
 async def test_enter_and_new_event_in_event_mode(app: RecordingApp) -> None:
