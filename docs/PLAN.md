@@ -26,8 +26,9 @@ Look & feel modelled on todooit; layout modelled on the Google Calendar web app.
 tcal/
   __main__.py        click CLI: `tcal` (TUI, `--demo`), `tcal login|sync|calendars|doctor`,
                      `tcal config path|edit|check`
-  dates.py           pure date helpers: parse_date (goto, quick add, form), add_months
-  quickadd.py        quick-add one-line parser
+  dates.py           pure date helpers: parse_date (goto, event prompt), add_months
+  quickadd.py        the event prompt's language: parse, to_text, apply
+  repeat.py          RRULEs in words (display, and as the prompt takes them)
   doctor.py          `tcal doctor` checks
   ics.py             iCalendar text <-> Event (edits written into Event.raw), extras
   paths.py           XDG paths; TCAL_HOME env var relocates config/data/cache into one dir
@@ -55,7 +56,7 @@ tcal/
     app.py           TcalApp: layout, bindings from config, data seam, sync, actions
     state.py         immutable AppState (day, view, hidden calendars)
     keys.py          binding(action): Binding.id == [keys] action
-    editing.py       Editor: form, quick add, yank/paste/duplicate, moves, resizes
+    editing.py       Editor: event prompt, yank/paste/duplicate, moves, resizes
     undo.py          UndoHistory; clipboard.py: pure event transforms
     timelayout.py    time-grid geometry; timepaint.py: pure painting; canvas.py; calgrid.py
     sync_status.py   SyncStatus for the status bar
@@ -72,12 +73,12 @@ tcal/
       minimonth.py, day_cursor.py, base.py  shared view helpers
       statusbar.py   mode / sync status / hints (todooit-like bar)
     screens/
-      event_form.py  modal: create/edit (title, calendar, date, start, end, all-day, location, notes)
+      event_prompt.py  create/edit by typing one line, live preview card (NL1)
+      server_changed.py  "changed on the server: overwrite / discard?"
       event_detail.py  modal: view event, e=edit, x=delete
       help.py        keybinding list
       goto.py        jump to date prompt (parser: `tcal/dates.py`)
       search.py      search events in cache
-      quick_add.py   one-line quick add with preview
 tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
 ```
 
@@ -664,3 +665,30 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **G2** A picked event that starts in the slot stays selected even where its block rounds to
   the next row (10:50 at 2 rows/hour). Event mode keeps 15-min precision (double-click at 07:30
   still makes a 07:30 event) and zooming there no longer rounds the remembered time; moving/resizing events stays at 15 min.
+
+### Event prompt (nl-form)
+
+Supersedes the event form (E3 ff.) and the quick-add screen (QA1, QA3): both are gone.
+
+- **NL1 One screen:** `screens/event_prompt.EventPrompt(event, calendars, today, new)` for new
+  events and editing: an `Input`, a live preview card, a box with the syntax. Enter (or
+  `[keys] save`) dismisses with the `Event`; esc cancels at once (no "Discard changes?": it is
+  one line). Tab completes the calendar after `#`, again cycles. `Editor._open` /
+  `prompt_done`. `quick_add` (`A`) stays as an alias of `new_event` so configs keep loading.
+- **NL2 Language:** `quickadd.parse(text, today, names, draft=None)`: what the line leaves out
+  comes from `draft` (slot / edited event); `has_date/has_time/has_repeat` say what it gave
+  (the rest is dim). New: `"literal"`, `// notes`, `all day`, durations without "for" (a bare
+  `7h`+ stays a time unless there is another one), `every 2 weeks [on mon, wed]`, `every other
+  week`, `until <date|month>` (a month: through its end), `N times`, `no repeat`, calendar names
+  with spaces (exact beats prefix), a weekday before a date (`thu 24 dec`, also in goto).
+  A date range without a time is all day. `warnings` (time/date/repeat look-alikes that stay
+  text) don't block saving; `error` (unknown calendar, end before start) does.
+- **NL3 Editing:** `to_text(event, today, calendar)` prefills the line and checks itself by
+  parsing (else it quotes title/location). `apply(event, q, shown, calendars)`: whatever equals
+  the prefilled line's value keeps the event's own (time zone, multi-line location, exact RRULE).
+  Multi-line notes and rules without words (`BYDAY=3WE`…) are not in the text but kept; `//`
+  replaces (or empties) the notes, `until`/`N times` still set such a rule's end. Deleting the
+  date, time or `#calendar` keeps the event's; deleting the repeat, `@place` or `// notes`
+  removes it. One instance of a series refuses `#calendar` and repeats.
+- **NL4:** `describe_rrule`/`until_date` moved from `event_detail.py` to `tcal/repeat.py`;
+  `ServerChanged` to its own module.
