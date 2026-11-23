@@ -156,12 +156,12 @@ KeyTable {
 
 /* ----- go to date / search (tcal/ui/screens/goto.py, search.py) ----- */
 
-GotoScreen, SearchScreen, QuickAddScreen {
+GotoScreen, SearchScreen {
     align: center top;
     background: $background1 50%;
 }
 
-GotoScreen Input, QuickAddScreen Input, SearchScreen Input, SearchScreen OptionList {
+GotoScreen Input, SearchScreen Input, SearchScreen OptionList {
     background: $background2;
     border: $border_type $primary;
     border-title-color: $foreground1;
@@ -173,21 +173,46 @@ GotoScreen Input {
     margin-top: 3;
 }
 
-QuickAddScreen Vertical {
-    width: 80;
-    height: auto;
-    margin-top: 3;
-}
+/* ----- event prompt (tcal/ui/screens/event_prompt.py) ----- */
 
-QuickAddScreen Input {
-    border-subtitle-color: $foreground3;
-}
+EventPrompt {
+    align: center top;
+    background: $background1 50%;
 
-QuickAddScreen #preview {
-    padding: 0 2;
-    background: $background2;
-    color: $foreground2;
-    &.-error { color: $red; }
+    #event-prompt {
+        width: 84;
+        max-width: 95%;
+        height: auto;
+        max-height: 100%;
+        margin-top: 2;
+    }
+
+    Input {
+        padding: 0 1;
+        background: $background2;
+        background-tint: $background2;
+        border: $border_type $primary;
+        border-title-color: $foreground3;
+        border-title-background: $background2;
+        border-subtitle-color: $foreground1;
+        border-subtitle-background: $background2;
+    }
+
+    #card, #hints {
+        height: auto;
+        padding: 0 1;
+        background: $background2;
+        border: $border_type $background3;
+        border-title-color: $foreground1;
+        border-title-background: $background2;
+    }
+
+    #card > Static { color: $foreground1; }
+    #card > #warning {
+        color: $yellow;
+        text-style: dim;
+        &.-error { color: $red; text-style: none; }
+    }
 }
 
 #search {
@@ -208,7 +233,7 @@ SearchScreen OptionList {
 
 /* ----- modals (tcal/ui/screens/) ----- */
 
-EventDetail, EventForm, Prompt {
+EventDetail, Prompt {
     align: center middle;
     background: $background1 60%;
 }
@@ -272,39 +297,4 @@ EventDetail #dialog {
 
     #choices > Hint.-default, #choices > Hint:hover { color: $foreground3; text-style: bold; }
     #choices > .separator { color: $foreground1; }
-}
-
-/* event form (tcal/ui/screens/event_form.py) */
-
-#form {
-    width: 64;
-    height: auto;
-    max-height: 100%;
-    background: $background2;
-    border: $border_type $primary;
-    border-title-color: $foreground3;
-    border-title-background: $background2;
-    padding: 0 1;
-    scrollbar-size-vertical: 1;
-
-    Input, SelectCurrent, TextArea, Checkbox {
-        background: $background2;
-        border: $border_type $background3;
-        &:focus { border: $border_type $primary; }
-        &.-invalid { border: $border_type $red; }
-    }
-    Checkbox > .toggle--button { color: $background3; background: $background3; }
-    Checkbox.-on > .toggle--button { color: $primary; }
-    Select:focus > SelectCurrent { border: $border_type $primary; }
-    .row { height: auto; }
-    .label { width: 6; padding: 1 0 0 1; color: $foreground1; }
-    #start_date, #end_date { width: 1fr; }
-    .time { width: 12; }
-    #ends { width: 16; }
-    #ends_value { width: 1fr; }
-    #ends_unit { width: auto; padding: 1 1 0 1; color: $foreground1; }
-    #notes { height: 5; }
-    #error { color: $red; height: auto; padding: 0 1; }
-    #note { color: $foreground1; padding: 0 1; }
-    #hint { color: $foreground1; dock: bottom; background: $background2; }
 }

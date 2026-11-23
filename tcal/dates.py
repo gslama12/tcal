@@ -1,5 +1,5 @@
 """Pure date helpers: month arithmetic and ``parse_date`` for dates typed by the user
-(goto, the event form and quick add)."""
+(goto and the event prompt)."""
 
 import re
 from calendar import monthrange
@@ -21,6 +21,8 @@ MONTHS = (
     "december",
 )
 
+YEARS = range(1900, 2200)  # what a typed date may be in
+
 _RELATIVE = re.compile(r"([+-]\d+)\s*([dwmy])")
 _NEXT_LAST = re.compile(r"(next|last)\s+(week|month|year)")
 _NEXT_WEEKDAY = re.compile(r"(next|last)\s+([a-z]+)")
@@ -32,6 +34,12 @@ _MONTH_DAY = re.compile(r"([a-z]+)\.?\s+(\d{1,2})(?:,?\s+(\d{4}))?")
 _MONTH_YEAR = re.compile(r"([a-z]+)\.?(?:\s+(\d{4}))?")
 _YEAR = re.compile(r"\d{4}")
 _SLASHED = re.compile(r"(\d{1,2})/(\d{1,2})(?:/(\d{4}))?")
+
+
+# "wed 18 nov", "wed 18.11.": the weekday is ignored ("fri 10.10" may be a time, see quickadd)
+_AFTER_WEEKDAY = re.compile(
+    r"([a-z]+),?\s+(\d{4}-\d.*|\d{1,2}\.\d{1,2}\.(?:\d{4})?|\d{1,2}\s+[a-z].*|[a-z]+\.?\s+\d.*)"
+)
 
 
 def _prefix_index(word: str, names: tuple[str, ...]) -> int | None:
@@ -63,9 +71,17 @@ def parse_date(text: str, today: date) -> date | None:
     after today); next/last <weekday> (that day in the next/previous week);
     +3d / -1w / +2m / +1y; in 3 days|weeks|months|years (= +3d ...);
     next/last week|month|year (= ±1w/m/y); 2026-12-24; 24.12. / 24.12.2026;
-    dec 24 / 24 dec (optionally with a year). Dates without a year are in
-    today's year.
+    dec 24 / 24 dec (optionally with a year), also after a weekday (wed 18 nov). Dates
+    without a year are in today's year. None also outside ``YEARS``.
     """
+    try:
+        day = _parse_date(text, today)
+    except (ValueError, OverflowError):  # e.g. "+99999y"
+        return None
+    return day if day is not None and day.year in YEARS else None
+
+
+def _parse_date(text: str, today: date) -> date | None:
     s = text.strip().lower()
     if s in ("today", "now", "tonight"):
         return today
@@ -99,11 +115,21 @@ def parse_date(text: str, today: date) -> date | None:
         return _make(int(m[3] or today.year), month_number(m[2]), int(m[1]))
     if m := _MONTH_DAY.fullmatch(s):
         return _make(int(m[3] or today.year), month_number(m[1]), int(m[2]))
+    if (m := _AFTER_WEEKDAY.fullmatch(s)) and _prefix_index(m[1], WEEKDAYS) is not None:
+        return parse_date(m[2], today)
     return None
 
 
+def date_text(day: date, today: date) -> str:
+    """``day`` as ``parse_date`` reads it back: "wed 18 nov", with the year if it isn't
+    ``today``'s."""
+    month = MONTHS[day.month - 1][:3]
+    year = "" if day.year == today.year else f" {day.year}"
+    return f"{WEEKDAYS[day.weekday()][:3]} {day.day} {month}{year}"
+
+
 def parse_jump(text: str, today: date) -> date | None:
-    """``parse_date`` plus the forms only goto takes (in quick add they would eat title
+    """``parse_date`` plus the forms only goto takes (in the event prompt they would eat title
     words like "may" or "2027"): a month ``dec`` / ``jan 2027`` (its first day, in today's
     year without one), a year ``2027`` (1 Jan) and ``12/24`` / ``12/24/2026`` (month/day,
     or day/month when the first number can't be a month)."""

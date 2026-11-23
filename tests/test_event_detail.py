@@ -9,17 +9,15 @@ from conftest import TODAY
 from textual.containers import VerticalScroll
 from textual.widgets import Static
 
-from tcal import ics
+from tcal import ics, repeat
 from tcal.model import Calendar, Occurrence
+from tcal.repeat import describe_rrule, until_date
 from tcal.tz import local_zone
 from tcal.ui.app import TcalApp
 from tcal.ui.messages import EventSelected
-from tcal.ui.screens import event_detail
 from tcal.ui.screens.event_detail import (
     EventDetail,
-    describe_rrule,
     people_text,
-    until_date,
 )
 from tcal.ui.screens.prompt import Prompt
 from tcal.ui.widgets.timegrid import TimeGrid
@@ -189,7 +187,7 @@ def test_people_text_lists_an_organizer_who_is_no_guest_once() -> None:
 
 
 def test_until_is_shown_as_a_local_day(monkeypatch) -> None:
-    monkeypatch.setattr(event_detail, "local_zone", lambda: ZoneInfo("America/New_York"))
+    monkeypatch.setattr(repeat, "local_zone", lambda: ZoneInfo("America/New_York"))
     assert until_date("20270101T045959Z") == date(2026, 12, 31)
     assert until_date("20261231") == date(2026, 12, 31)
 

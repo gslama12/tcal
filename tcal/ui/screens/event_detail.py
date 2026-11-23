@@ -10,7 +10,7 @@ in the views: read-only calendars only get a notice; a recurring event asks
 moving or resizing one instance of a series.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Literal, cast
 from zoneinfo import ZoneInfo
 
@@ -24,8 +24,7 @@ from textual.widgets import Static
 
 from tcal import ics, tz
 from tcal.model import Occurrence
-from tcal.tz import local_zone
-from tcal.ui.calgrid import WEEKDAY_NAMES
+from tcal.repeat import describe_rrule
 from tcal.ui.keys import binding
 from tcal.ui.screens.prompt import Prompt
 
@@ -33,9 +32,6 @@ if TYPE_CHECKING:
     from tcal.ui.app import TcalApp
 
 Scope = Literal["occurrence", "series"]
-
-FREQS = {"DAILY": "day", "WEEKLY": "week", "MONTHLY": "month", "YEARLY": "year"}
-WEEKDAYS = dict(zip(("MO", "TU", "WE", "TH", "FR", "SA", "SU"), WEEKDAY_NAMES, strict=True))
 
 
 def is_recurring(occ: Occurrence) -> bool:
@@ -59,35 +55,6 @@ def short_when(start: datetime, all_day: bool) -> str:
     """'Mon 23 11:15' (local time), all-day: 'Mon 23'."""
     local = start.astimezone(tz.local_zone())
     return f"{local:%a %-d}" if all_day else f"{local:%a %-d %H:%M}"
-
-
-def describe_rrule(rrule: str) -> str:
-    """An RRULE in words, e.g. 'Every 2 weeks on Mon, Fri, until 31 Dec 2026'."""
-    parts = dict(p.split("=", 1) for p in rrule.upper().split(";") if "=" in p)
-    unit = FREQS.get(parts.get("FREQ", ""))
-    if unit is None:
-        return f"Repeats ({rrule})"
-    interval = int(parts.get("INTERVAL", "1"))
-    words = f"Every {interval} {unit}s" if interval > 1 else f"Every {unit}"
-    if days := parts.get("BYDAY"):
-        names = [WEEKDAYS.get(d[-2:], d) for d in days.split(",")]
-        if unit == "week" and names == list(WEEKDAYS.values())[:5]:
-            names = ["weekdays"]
-        words += " on " + ", ".join(names)
-    if count := parts.get("COUNT"):
-        words += f", {count} times"
-    elif until := parts.get("UNTIL"):
-        words += f", until {until_date(until):%-d %b %Y}"
-    return words
-
-
-def until_date(value: str) -> date:
-    """The local day of an RRULE UNTIL (a DATE, a UTC ``…Z`` or a floating date-time)."""
-    day = date(int(value[:4]), int(value[4:6]), int(value[6:8]))
-    if not value.upper().endswith("Z"):
-        return day
-    stamp = datetime.strptime(value.upper(), "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
-    return stamp.astimezone(local_zone()).date()
 
 
 PARTSTATS = {  # PARTSTAT -> reply, in the order the guest summary counts them

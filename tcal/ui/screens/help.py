@@ -45,7 +45,7 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
     "Events": [
         ("open", "Open event / else a new event"),
         ("new_event", "New event (time grid: after the selected event / at the grid slot)"),
-        ("quick_add", "Quick add (one line)"),
+        ("quick_add", "New event (same)"),
         ("edit_event", "Edit event"),
         ("delete_event", "Delete event"),
         ("undo", "Undo the last change"),
@@ -61,8 +61,8 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("resize_mode", "Resize mode: up/down move the end, again: the start (esc: back)"),
         ("search", "Search events"),
     ],
-    "Event form": [
-        ("save", "Save"),
+    "Event prompt": [
+        ("save", "Save (as enter)"),
         ("cancel", "Cancel / close dialog / leave resize, grid mode / clear marks"),
     ],
     "App": [

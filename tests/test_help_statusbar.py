@@ -42,7 +42,7 @@ async def test_help_closes_with_escape_and_q(make_app) -> None:
 
 def test_default_keys_are_all_grouped(make_app) -> None:
     titles = [title for title, _ in sections(make_app().config.keys)]
-    assert "Event form" in titles and "Other" not in titles
+    assert "Event prompt" in titles and "Other" not in titles
 
 
 async def test_help_hint_is_inside_the_titled_box(make_app) -> None:

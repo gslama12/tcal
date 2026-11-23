@@ -12,8 +12,8 @@ from textual.widgets import Input, OptionList
 from textual.widgets.option_list import Option
 
 from tcal.model import Occurrence
+from tcal.repeat import describe_rrule
 from tcal.ui.keys import binding
-from tcal.ui.screens.event_detail import describe_rrule
 
 
 def search(occurrences: Sequence[Occurrence], query: str, now: datetime) -> list[Occurrence]:

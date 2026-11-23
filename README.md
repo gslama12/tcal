@@ -43,7 +43,10 @@ and edits made offline are queued and pushed later.
 - **Events:** create, edit, delete, incl. recurring events ("this event" or "all events"),
   repeat rules with an end (on a date / after N times), alarms and invitees kept on edit.
   The detail view shows time zone, guests and their answers, alerts and URL.
-- **Quick add** (`A`): one line like `Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal`.
+- **Event prompt** (`a` new, `e` edit): type an event as one line, like
+  `Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal`, and watch it fill in below as you type
+  (what you leave out — dim — comes from the cursor slot, or the event being edited). See
+  [Typing events](#typing-events).
 - **Yank / paste / duplicate / move / resize** events with the keyboard (`y` `p` `D`, `J` `K`
   `<` `>`) and an **undo** stack (`u`, the last 20 changes; `ctrl+r` redoes).
 - **Resize mode** (`o` on a timed event, day/week; the status bar shows `RESIZE · END`): `j`/`k`
@@ -206,7 +209,7 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | **Events** | |
 | `⏎` | Open event / else a new event |
 | `a` `i` | New event (time grid: after the selected event / at the grid slot) |
-| `A` | Quick add (one line) |
+| `A` | New event (same) |
 | `e` | Edit event |
 | `x` | Delete event |
 | `u` | Undo the last change |
@@ -221,8 +224,8 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `>` `ctrl+l` | Move event one day later |
 | `o` | Resize mode: up/down move the end, again: the start (esc: back) |
 | `/` | Search events |
-| **Event form** | |
-| `ctrl+s` | Save |
+| **Event prompt** | |
+| `ctrl+s` | Save (as enter) |
 | `esc` | Cancel / close dialog / leave resize, grid mode / clear marks |
 | **App** | |
 | `r` | Sync now |
@@ -237,6 +240,24 @@ keys move its own cursor, esc or a view key returns to the main view. `J`/`K` mo
 (tmux often takes them); ctrl with a letter like `ö` needs a terminal with the kitty keyboard
 protocol.
 The sidebar hides itself below 120 columns (`b` pins your choice).
+
+## Typing events
+
+One line; the pieces may come in any order, the rest is the title. Enter saves, esc cancels.
+
+| | |
+|---|---|
+| Date | `tomorrow` `fri` `next mon` `24.12.` `dec 24` `2026-12-24` `in 2 weeks` `+3d`, ranges `dec 3-5` `mon-fri` |
+| Time | `12:30-13:30` `9-11am` `14:00` `9am` `noon`, `tomorrow 9`; length `2h` `90m` `1h30`; `all day` |
+| Repeat | `daily` `every week` `every 2 weeks on mon, wed` `every weekday` `every tue, thu`, ending `until 24.12.` / `until dec` / `10 times`; `no repeat` |
+| Place | `@Cafe Central` |
+| Calendar | `#personal` (the start of its name is enough; tab completes, again for the next) |
+| Notes | `// everything after it` |
+| As typed | `"Issue #12 at 9:00"` is not read as a calendar or time |
+
+When editing, the line is the event as text: delete the repeat, place or notes to remove them;
+a deleted date, time or calendar stays as it was. What has no words (notes of several lines,
+rules like "every third Wednesday", invitees, alarms) is kept; `//` replaces the notes.
 
 ## Files
 
@@ -300,8 +321,8 @@ account (ideally `TCAL_HOME=.tcal` first, so a fresh cache is used):
       there show up in tcal after `r`. Then edit the same event again in tcal (this relies on the
       ETag iCloud returns after a PUT).
 - [ ] Delete "this event" and "all events" of a recurring event; edit a series, incl. an end
-      date / count ("Ends") → the iPhone shows the same instances.
-- [ ] Quick add (`A`) a repeating event (`Gym every tue 18:00 for 1h #home`) → right calendar,
+      date / count (`until dec`, `10 times`) → the iPhone shows the same instances.
+- [ ] Add (`a`) a repeating event (`Gym every tue 18:00 for 1h #home`) → right calendar,
       time and repeat on the iPhone.
 - [ ] Move events with `J`/`K`/`<`/`>`: a one-off, one instance of a series ("this event") and a
       whole series ("all events", incl. a weekly one on Tue/Thu moved by one day) → same on
@@ -312,10 +333,10 @@ account (ideally `TCAL_HOME=.tcal` first, so a fresh cache is used):
 - [ ] Yank/paste (`y`, `p`) and duplicate (`D`) → plain copies on the iPhone.
 - [ ] Batch copy: mark a week's events with `tab`, `y`, go to the next week, `p` → all copies on the
   iPhone; `u` removes them all again.
-- [ ] Move an event to another calendar (edit → calendar), sync, then undo it, sync, and
-      redo it (`ctrl+r`) → one copy, in the right calendar, each time.
+- [ ] Move an event to another calendar (edit → another `#calendar`), sync, then undo it, sync,
+      and redo it (`ctrl+r`) → one copy, in the right calendar, each time.
 - [ ] Conflict: change an event on the iPhone, then change it in tcal before syncing → the
-      iPhone version wins and tcal doesn't get stuck. With the event form open while the
+      iPhone version wins and tcal doesn't get stuck. With the event prompt open while the
       iPhone change syncs in, saving asks "overwrite / discard".
 - [ ] Offline: disable Wi-Fi, create/edit an event (`↑N pending`, status *offline*), reconnect,
       `r` → pushed. Starting tcal for the first time without network explains why it's empty.
