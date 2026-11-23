@@ -574,7 +574,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   title moves below its cover (one free row: compact "HH:MM title"). Replaces `_place_time`.
 - **Look:** fills are the calendar colour at `ALPHA` over the plain grid background (the
   cursor stays hidden under events); a block fully replaces
-  a lower one, so overlapping colours never mix (nomix; it used to blend over the lower block); text colours: see "Colour polish". Hour lines (`╌`) show through faintly
+  a lower one, so overlapping colours never mix (nomix; it used to blend over the lower block); text colours: see "Colour polish". Hour lines (`▔`, see "Cell alignment") show through faintly
   (`HOUR_ALPHA`), the now line clearly (text covers them). *Superseded (ui-colors):* the
   quarter-block rounded corners looked stair-stepped; every event now has a thin accent bar `▎`
   in its calendar colour on its left edge; the left text
@@ -698,3 +698,14 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   and clickable key hints (todooit asks in its bar; a box was requested). Keys are the old ones
   (y, o/s, o/d); enter still takes the first choice (bold), esc and n cancel in all of them.
   Deleting is no longer red. Questions longer than 80 % of the screen's width wrap.
+
+### Cell alignment (align)
+
+- **AL1 Hour lines:** drawn as `▔` on the *top edge* of the hour's first row (was `╌`, mid-row, so a
+  block filling its rows stuck out half a row above the line and ended half a row before the
+  next). An hour's cell is now exactly the rows between two lines, which a 1-hour block and the
+  slot cursor fill; a block's first row shows no line (it is the block's own border).
+- **AL2 Ends of the day:** `row_of(24:00)` is always `total_rows` (with a `day_end` before 24:00 at
+  an uneven fit, late events left a gap row) and no minute before it is past the last row (a
+  23:45 event at 1 row/hour was drawn below the grid). `TimeScale.aligned` rounds ties so that
+  `row_of(0)` is 0 (was -1 for e.g. 08:00–24:00 with a tie).

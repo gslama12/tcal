@@ -234,7 +234,7 @@ class TimeGrid(CalendarView):
         scale, row, end = self.scale, self._cursor_row(), self._cursor_slot + self._step
         if self._row_slots:
             return range(row, row + 1)
-        return range(row, scale.row_of(end) if end < MINUTES else scale.total_rows)
+        return range(row, scale.row_of(end))
 
     def _columns(self) -> list[int]:
         """x of each day column's divider, plus the right edge."""

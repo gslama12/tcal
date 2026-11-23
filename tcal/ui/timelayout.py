@@ -29,8 +29,8 @@ class TimeScale:
     """Mapping between minutes after midnight and grid rows.
 
     Row ``r`` starts at minute ``offset + r * 60 / rows_per_hour``. A minute belongs to
-    the row whose start is nearest (ties: the earlier row), so event edges, hour labels
-    and the cursor all round the same way. Zoom levels are whole rows per hour aligned
+    the row whose start is nearest (ties: the earlier row), so event edges, hour lines
+    and the cursor all round the same way; 24:00 is the end of the grid. Zoom levels are whole rows per hour aligned
     to midnight; a fitted scale may be fractional, with ``offset`` (within half a row
     of 0) aligning a row start to ``day_start``.
     """
@@ -42,7 +42,7 @@ class TimeScale:
     def aligned(cls, rows_per_hour: Fraction, minute: int) -> "TimeScale":
         """The scale whose rows start exactly at ``minute``."""
         per_row = 60 / rows_per_hour
-        return cls(rows_per_hour, minute - math.ceil(minute / per_row - Fraction(1, 2)) * per_row)
+        return cls(rows_per_hour, minute - math.floor(minute / per_row + Fraction(1, 2)) * per_row)
 
     @property
     def even(self) -> bool:
@@ -58,8 +58,11 @@ class TimeScale:
         return math.ceil((MINUTES - self.offset) / self.per_row)
 
     def row_of(self, minute: int) -> int:
-        """The row whose start is nearest ``minute``."""
-        return math.ceil((minute - self.offset) / self.per_row - Fraction(1, 2))
+        """The row whose start is nearest ``minute`` (24:00: the row after the last)."""
+        if minute >= MINUTES:
+            return self.total_rows
+        row = math.ceil((minute - self.offset) / self.per_row - Fraction(1, 2))
+        return min(row, self.total_rows - 1)
 
     def minute_of(self, row: int) -> int:
         """Start minute of ``row`` as shown to the user (``row_of`` round-trips).
