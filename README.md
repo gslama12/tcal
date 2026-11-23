@@ -56,7 +56,7 @@ and edits made offline are queued and pushed later.
   previous/next event of the day, `h`/`l` the nearest one on the previous/next day; `a` adds
   a new event right after the selected one, `p` pastes at its time. **Grid mode** (`v`, back
   with `v` or esc; the status bar shows `WEEK · GRID`) moves a 1-hour slot cursor instead
-  (`[view] grid_step`: 15, 30 or 60 minutes).
+  (`[view] grid_step`: 15, 30 or 60 minutes), starting at the selected event's end.
 - **Flash jump** (`f`, week view): red labels on every event and every `grid_step` slot
   (default: each hour) on screen; type one to jump there (an event label selects it, a
   slot label enters grid mode on that slot; nearest get single keys, any other key cancels).
