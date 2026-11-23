@@ -127,9 +127,9 @@ tests/               pytest + pytest-asyncio, Textual pilot tests, fake provider
 - Flash jump (`f`, day/week): `tcal/ui/flash.py` (pure: targets from the `GridFrame`, labels,
   overlay over the painted lines; `timepaint` untouched). todooit's alphabet and red labels, but
   labels mix single keys and pairs (prefix-free) so the targets nearest the cursor get one key;
-  targets are events (incl. all-day bars) plus each column's hours, and half hours at ≥2
-  rows/hour. While labels are up the grid's `on_key` swallows every key; a non-label key
-  cancels and is used up (as in todooit).
+  targets are events (incl. all-day bars) plus each column's grid-mode slots (G3). While labels
+  are up the grid's `on_key` swallows every key; a non-label key cancels and is used up (as in
+  todooit).
 
 ## Work packages (≈ issues)
 
@@ -661,12 +661,15 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 - **G1 Slots:** grid mode's cursor is a slot of `[view] grid_step` minutes (15, 30, 60; default
   60; supersedes H2/E1's 15 min): `j`/`k` move by it, the highlight covers it, new events and
   pastes start on it. Only the display snaps (`TimeGrid._slot_of`): `_cursor_min` keeps the exact
-  time until the cursor moves, so entering grid mode floors it to the slot (10:50 → 10:00), and
-  a flash to a half-hour label lands on its hour. Rows longer than the step (15 min at 2
-  rows/hour) are the slots themselves, as before. `GridFrame.cursor_minute` is the axis label.
+  time until the cursor moves, so entering grid mode floors it to the slot (10:50 → 10:00).
+  Rows longer than the step (15 min at 2 rows/hour) are the slots themselves, as before.
+  `GridFrame.cursor_minute` is the axis label.
 - **G2** A picked event that starts in the slot stays selected even where its block rounds to
   the next row (10:50 at 2 rows/hour). Event mode keeps 15-min precision (double-click at 07:30
   still makes a 07:30 event) and zooming there no longer rounds the remembered time; moving/resizing events stays at 15 min.
+- **G3 Flash (flash-step):** slot labels are exactly grid mode's slots (`TimeGrid._grid_slots`):
+  one per `grid_step` and day, or one per row where rows are longer than the step. Jumping lands
+  on the labelled slot's start. Event labels and their precedence on a shared cell are unchanged.
 
 ### Keys & redo (zoom-keys)
 

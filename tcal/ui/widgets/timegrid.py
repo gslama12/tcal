@@ -215,6 +215,13 @@ class TimeGrid(CalendarView):
         starts = range(0, MINUTES, self._step)
         return max((m for m in starts if scale.row_of(m) <= row), default=0)
 
+    def _grid_slots(self) -> list[int]:
+        """Start minutes of grid mode's slots, whatever the mode."""
+        scale, step = self.scale, self.tcal.config.view.grid_step
+        if scale.per_row > step:
+            return [scale.minute_of(row) for row in range(scale.total_rows)]
+        return list(range(0, MINUTES, step))
+
     @property
     def _cursor_slot(self) -> int:
         return self._slot_of(self._cursor_min)
@@ -591,7 +598,7 @@ class TimeGrid(CalendarView):
 
     def action_flash(self) -> None:
         """Label the events and slots on screen; typing a label jumps there."""
-        found = targets(self._frame(), self.size.height)
+        found = targets(self._frame(), self.size.height, self._grid_slots())
         if found:
             self._flash = Flash.of(found)
             self._redraw()
@@ -615,8 +622,7 @@ class TimeGrid(CalendarView):
             self._redraw()
 
     def _jump(self, target: Target) -> None:
-        """An event label selects the event; a slot label goes to grid mode, to the slot
-        holding it."""
+        """An event label selects the event; a slot label goes to grid mode, to the slot."""
         if target.occ is not None:
             self.select(target.occ)
             return

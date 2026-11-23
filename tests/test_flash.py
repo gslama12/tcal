@@ -5,6 +5,8 @@ from datetime import datetime, time, timedelta
 import pytest
 from conftest import TODAY, RecordingApp
 
+from tcal.config import load_config
+from tcal.store import Store
 from tcal.ui.flash import ALPHABET, Flash, Target, flash_labels
 from tcal.ui.state import ViewMode
 from tcal.ui.widgets import timegrid
@@ -66,16 +68,44 @@ async def test_flash_jumps_to_a_slot_in_another_day(app: RecordingApp) -> None:
         assert grid.cursor_time == at("19:00", TODAY + timedelta(days=2))
 
 
-async def test_flash_to_a_half_hour_lands_on_its_hour(app: RecordingApp) -> None:
+@pytest.mark.parametrize("zooms", [0, 2, 5])
+@pytest.mark.parametrize("step, per_hour", [(60, [1]), (30, [1, 2]), (15, [2, 3, 4])])
+async def test_one_slot_label_per_grid_step(
+    store: Store, write_config, zooms: int, step: int, per_hour: list[int]
+) -> None:
+    write_config(f"[view]\ngrid_step = {step}\n")
+    app = RecordingApp(store, load_config())
     async with app.run_test(size=SIZE) as pilot:
         grid = app.query_one(WeekView)
-        await pilot.press("f")
-        wednesday = grid.days().index(TODAY)
-        label = label_of(
-            grid, lambda t: t.occ is None and t.day == wednesday and t.minute == 15 * 60 + 30
-        )
-        await pilot.press(*label)
-        assert app.state.grid and grid.cursor_time == at("15:00")
+        await pilot.press(*["plus"] * zooms, "f")
+        assert grid._flash is not None
+        slots = [t for t in grid._flash.labels.values() if t.occ is None]
+        for t in slots:
+            row = grid.scale.row_of(t.minute)
+            assert t.y == grid._header_height() + row - grid._top_row()
+        free = max(range(7), key=lambda day: sum(t.day == day for t in slots))
+        hours = [t.minute // 60 for t in slots if t.day == free]
+        # inner hours: the first and last may be cut off by the screen
+        assert max(hours.count(h) for h in hours[1:-1]) in per_hour
+        if step == 60:
+            assert all(t.minute % 60 == 0 for t in slots)
+
+
+@pytest.mark.parametrize("step", [15, 30, 60])
+@pytest.mark.parametrize("zooms", [0, 1, 2, 3])
+async def test_flash_lands_on_the_slot_start(
+    store: Store, write_config, step: int, zooms: int
+) -> None:
+    write_config(f"[view]\ngrid_step = {step}\n")
+    app = RecordingApp(store, load_config())
+    async with app.run_test(size=SIZE) as pilot:
+        grid = app.query_one(WeekView)
+        await pilot.press(*["plus"] * zooms, "f")
+        assert grid._flash is not None
+        for target in [t for t in grid._flash.labels.values() if t.occ is None]:
+            grid._jump(target)
+            assert grid.cursor_time.hour * 60 + grid.cursor_time.minute == target.minute
+            assert app.state.day == grid.days()[target.day]
 
 
 async def test_flash_selects_an_event(app: RecordingApp) -> None:
