@@ -59,7 +59,10 @@ async def test_delete_single_event_from_detail(make_app) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.post_message(EventSelected(find(app, "Dentist")[0]))
         await pilot.pause()
-        await pilot.press("d")
+        assert "d delete" in text(app, "hints")
+        await pilot.press("x")  # not bound
+        assert isinstance(app.screen, EventDetail)
+        await pilot.press("d", "d")  # the second one is ignored by the prompt
         assert isinstance(app.screen, Prompt)
         await pilot.press("n")  # cancel keeps it
         assert find(app, "Dentist")

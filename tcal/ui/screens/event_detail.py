@@ -1,9 +1,9 @@
 """Event detail modal (enter/click on an event) and the delete confirmation.
 
-``EventDetail(occ)``: e = edit (``app.edit_occurrence``), x = delete, y = yank,
+``EventDetail(occ)``: e = edit (``app.edit_occurrence``), d = delete, y = yank,
 D = duplicate, the cursor up/down keys scroll, esc/q = close; it follows a sync's changes to the event
 (closes if it's gone). A read-only calendar's event hints only "y copy  esc close";
-e/x give a notice and keep the detail open.
+e/d give a notice and keep the detail open.
 ``confirm_delete(app, occ)`` is the one delete flow, also used by the ``d`` key
 in the views: read-only calendars only get a notice; a recurring event asks
 "this event" vs "all events". ``scope_prompt(verb, occ)`` asks the same before editing,
@@ -181,7 +181,7 @@ class EventDetail(ModalScreen[None]):
             self.hints = (
                 "y copy  esc close"
                 if calendar and calendar.readonly
-                else "e edit  x delete  y copy  esc close"
+                else "e edit  d delete  y copy  esc close"
             )
             yield Static(Text(self.hints, style=p.foreground1), id="hints")
 
