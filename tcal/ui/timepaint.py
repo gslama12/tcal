@@ -38,7 +38,8 @@ class GridFrame:
     bars: list[Bar]
     blocks: list[Block]
     day: date  # the selected day (cursor column)
-    cursor_rows: range  # the cursor slot (two rows at 8 rows/hour); empty: no slot cursor
+    cursor_rows: range  # the cursor slot; empty: none is drawn
+    cursor_minute: int  # the slot's start, its label
     selected: Occurrence | None
     now: datetime
     header_formats: tuple[str, ...]  # widest first
@@ -184,8 +185,8 @@ def _grid(canvas: Canvas, f: GridFrame, bottom: int) -> None:
         y = f.header + row - top
         hour_start = row in hour_rows
         if f.cursor_rows and row == f.cursor_rows.start:
-            minute = scale.minute_of(row)
-            canvas.text(y, 0, AXIS, f"{minute // 60:02d}:{minute % 60:02d}", cursor_label)
+            hour, minute = divmod(f.cursor_minute, 60)
+            canvas.text(y, 0, AXIS, f"{hour:02d}:{minute:02d}", cursor_label)
         elif hour_start:
             canvas.text(y, 0, AXIS, f"{hour_rows[row]:02d}:00", label)
         for i, x in enumerate(xs[:-1]):

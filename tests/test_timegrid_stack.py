@@ -98,6 +98,7 @@ async def test_now_line_skips_the_gap_between_events(
         assert line[gap] == " "
 
 
+@pytest.mark.usefixtures("quarter_steps")
 async def test_cursor_and_clicks_pick_the_topmost_block(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
@@ -117,6 +118,7 @@ async def test_cursor_and_clicks_pick_the_topmost_block(app: RecordingApp) -> No
         assert opened == ["Coffee", "Workshop"]
 
 
+@pytest.mark.usefixtures("quarter_steps")
 async def test_cycling_visits_stacked_and_side_by_side_events(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
@@ -174,7 +176,7 @@ def test_overlapping_colours_do_not_mix(selected: bool, now: str) -> None:
     def cells(blocks: list[Block]) -> list[list[Segment]]:
         frame = GridFrame(
             days=[FRI], xs=xs, scale=scale, top=0, strip_rows=0, bars=[], blocks=blocks,
-            day=FRI, cursor_rows=range(0), selected=over if selected else None, now=at(now),
+            day=FRI, cursor_rows=range(0), cursor_minute=0, selected=over if selected else None, now=at(now),
             header_formats=("%a",), palette=TOKYO_NIGHT,
             color={"red": RED, "green": GREEN}.__getitem__,
         )  # fmt: skip

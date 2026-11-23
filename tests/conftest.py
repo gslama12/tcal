@@ -80,6 +80,12 @@ def write_config(tcal_home: Path):
 
 
 @pytest.fixture
+def quarter_steps(write_config) -> None:
+    """Grid mode in 15-min slots (before the app loads its config)."""
+    write_config("[view]\ngrid_step = 15\n")
+
+
+@pytest.fixture
 def provider() -> FakeProvider:
     return FakeProvider(today=TODAY)
 

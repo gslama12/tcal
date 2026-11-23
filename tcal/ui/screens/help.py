@@ -22,7 +22,7 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("cursor_right", "Next day (time grid: its nearest event) / move right"),
         ("cursor_up", "Up (time grid: previous event, grid mode: earlier slot)"),
         ("cursor_down", "Down (time grid: next event, grid mode: later slot)"),
-        ("grid_mode", "Grid mode: cursor keys move a 15-min slot cursor (again / esc: back)"),
+        ("grid_mode", "Grid mode: cursor keys move a slot cursor (again / esc: back)"),
         ("prev_period", "Previous day/week/month/year (schedule: 2 weeks)"),
         ("next_period", "Next day/week/month/year (schedule: 2 weeks)"),
         ("today", "Jump to today"),

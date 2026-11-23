@@ -652,3 +652,15 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   are equal. Unlike moves (a plain ±15 min) the edge snaps to the next/previous **quarter hour**
   (`quarter_step`: 23:59 → 24:00). A shrink below `STEP` (15 min) is refused; growing a shorter
   event is fine. A series' start pushed over midnight shifts its BYDAY days as a move does.
+
+### Grid step (grid-step)
+
+- **G1 Slots:** grid mode's cursor is a slot of `[view] grid_step` minutes (15, 30, 60; default
+  60; supersedes H2/E1's 15 min): `j`/`k` move by it, the highlight covers it, new events and
+  pastes start on it. Only the display snaps (`TimeGrid._slot_of`): `_cursor_min` keeps the exact
+  time until the cursor moves, so entering grid mode floors it to the slot (10:50 → 10:00), and
+  a flash to a half-hour label lands on its hour. Rows longer than the step (15 min at 2
+  rows/hour) are the slots themselves, as before. `GridFrame.cursor_minute` is the axis label.
+- **G2** A picked event that starts in the slot stays selected even where its block rounds to
+  the next row (10:50 at 2 rows/hour). Event mode keeps 15-min precision (double-click at 07:30
+  still makes a 07:30 event) and zooming there no longer rounds the remembered time; moving/resizing events stays at 15 min.

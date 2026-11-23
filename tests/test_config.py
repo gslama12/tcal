@@ -8,6 +8,7 @@ def test_defaults() -> None:
     assert config.view.day_start == 6 * 60 + 30
     assert config.view.day_end == 24 * 60
     assert config.view.week_start == 0
+    assert config.view.grid_step == 60
     assert config.view.default_view == "week"
     assert config.keys["cursor_down"] == ["j", "down"]
     assert config.theme.name == "tokyo-night"
@@ -32,6 +33,7 @@ def test_user_file_merges_over_defaults(write_config) -> None:
         "[keys]\nfly = ['f']\n",
         "[keys]\nquit = 'q'\n",
         "[view]\ndefault_view = 'decade'\n",
+        "[view]\ngrid_step = 45\n",
         "[view]\nday_start = '25:00'\n",
         "[view]\nday_start = '20:00'\nday_end = '08:00'\n",
         "not toml [",

@@ -56,6 +56,7 @@ async def test_week_renders_header_strip_events_and_now_line(app: RecordingApp) 
         assert "Standup" in screenshot and "Conference" in screenshot
 
 
+@pytest.mark.usefixtures("quarter_steps")
 async def test_cursor_moves_and_crosses_week(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
@@ -82,8 +83,10 @@ async def test_cursor_scrolls_to_early_hours(app: RecordingApp) -> None:
         assert any("Early run" in line for line in lines)
 
 
+@pytest.mark.usefixtures("quarter_steps")
 async def test_zoom(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
+        app.set_grid_mode(True)  # the slot cursor
         grid = app.query_one(WeekView)
         await pilot.press("plus")
         assert grid.rows_per_hour == 3
@@ -125,6 +128,7 @@ async def test_headers_share_one_format(store: Store) -> None:
             assert "," not in line  # "Monday, 16 November" only when every column fits it
 
 
+@pytest.mark.usefixtures("quarter_steps")
 async def test_cursor_slot_has_accent_background(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
@@ -140,6 +144,7 @@ async def test_cursor_slot_has_accent_background(app: RecordingApp) -> None:
         assert blend(p.primary, p.background1, CURSOR_ALPHA).lower() in backgrounds
 
 
+@pytest.mark.usefixtures("quarter_steps")
 async def test_cycle_events_and_open(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
@@ -159,6 +164,7 @@ async def test_cycle_events_and_open(app: RecordingApp) -> None:
         assert app.posted[-1].occurrence.summary == "1:1 with Alex"
 
 
+@pytest.mark.usefixtures("quarter_steps")
 async def test_new_event_on_empty_slot(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
@@ -222,6 +228,7 @@ async def test_day_view(app: RecordingApp) -> None:
 FITTED = (140, 40)  # 30-row grid: 06:30-24:00 at 1.71 rows/hour (35 min per row)
 
 
+@pytest.mark.usefixtures("quarter_steps")
 async def test_fitted_slots_snap_to_quarter_hours(app: RecordingApp) -> None:
     async with app.run_test(size=FITTED) as pilot:
         app.set_grid_mode(True)  # the slot cursor
@@ -313,6 +320,7 @@ async def test_narrow_columns_collapse_cluster(app: RecordingApp) -> None:
         assert isinstance(opened, messages.EventSelected) and opened.occurrence == grid.selected
 
 
+@pytest.mark.usefixtures("quarter_steps")
 async def test_now_line_keeps_event_text(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
@@ -326,6 +334,7 @@ async def test_now_line_keeps_event_text(app: RecordingApp) -> None:
         assert "─" in row[row.index("Design review") :]  # the line goes on beside the event
 
 
+@pytest.mark.usefixtures("quarter_steps")
 async def test_cycle_starts_at_the_cursor(app: RecordingApp) -> None:
     async with app.run_test(size=SIZE) as pilot:
         app.set_grid_mode(True)  # the slot cursor
@@ -392,6 +401,7 @@ async def test_tall_blocks_wrap_the_title_before_the_time(app: RecordingApp) -> 
         assert "planning" in lines[sprint + 1] and "13:00–15:00" in lines[sprint + 2]
 
 
+@pytest.mark.usefixtures("quarter_steps")
 async def test_later_marker_moves_to_the_header_off_the_cursor_row(app: RecordingApp) -> None:
     async with app.run_test(size=(100, 35)) as pilot:
         app.set_grid_mode(True)  # the slot cursor
@@ -407,6 +417,7 @@ async def test_later_marker_moves_to_the_header_off_the_cursor_row(app: Recordin
         assert "▼ 1 later" in lines[-1][xs[1] + 1 : xs[2]]  # other columns: the edge row
 
 
+@pytest.mark.usefixtures("quarter_steps")
 async def test_max_zoom_keeps_the_cursor_on_quarter_hours(app: RecordingApp) -> None:
     async with app.run_test(size=(100, 35)) as pilot:
         app.set_grid_mode(True)  # the slot cursor

@@ -96,11 +96,11 @@ async def test_grid_mode_toggles_and_leaving_selects_the_event_at_the_cursor(
         await pilot.press("v")
         assert app.state.grid and "WEEK · GRID" in str(bar.render())
         assert grid.cursor_time == at("10:00")
-        await pilot.press("j", "j", "j")
-        assert grid.cursor_time == at("11:30")
+        await pilot.press("j")
+        assert grid.cursor_time == at("11:00")
         await pilot.press("escape")  # back; the event under the cursor is selected
         assert not app.state.grid and summary(grid) == "Dentist"
-        await pilot.press("v", "k", "k", "k", "k", "k", "k", "v")  # 08:00: nearest Standup
+        await pilot.press("v", "k", "k", "k", "v")  # 08:00: nearest Standup
         assert not app.state.grid and summary(grid) == "Standup"
         await pilot.press("d")
         assert " DAY " in str(bar.render())
