@@ -6,10 +6,12 @@ D = duplicate, the cursor up/down keys scroll, esc/q = close; it follows a sync'
 e/d give a notice and keep the detail open.
 ``confirm_delete(app, occ)`` is the one delete flow, also used by the ``d`` key
 in the views: read-only calendars only get a notice; a recurring event asks
-"this event" vs "all events". ``scope_prompt(verb, occ)`` asks the same before editing,
+"this event" vs "all events". The delete key(s) pressed again confirm (``dd``; for a
+recurring event: "this event"). ``scope_prompt(verb, occ)`` asks the same before editing,
 moving or resizing one instance of a series.
 """
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Literal, cast
 from zoneinfo import ZoneInfo
@@ -112,22 +114,30 @@ def confirm_delete(app: "TcalApp", occ: Occurrence) -> None:
         elif scope == "occurrence":
             app.delete_event(occ.event.uid, occ.event.recurrence_id or occ.start)
 
-    app.push_screen(delete_prompt(occ), done)
+    app.push_screen(delete_prompt(occ, app.config.keys["delete_event"]), done)
 
 
-def scope_prompt(verb: str, occ: Occurrence) -> Prompt[Scope]:
-    """Asks whether to ``verb`` "this event" (the instance ``occ``) or "all events"."""
+def scope_prompt(verb: str, occ: Occurrence, also: Sequence[str] = ()) -> Prompt[Scope]:
+    """Asks whether to ``verb`` "this event" (the instance ``occ``; so do the keys ``also``)
+    or "all events"."""
     day = f"{occ.start.astimezone(tz.local_zone()):%a %-d %b}"
     return Prompt[Scope](
         f"{verb} “{occ.summary}” on {day}?",
         {"o": ("this event", "occurrence"), "s": ("all events", "series")},
+        also=also,
     )
 
 
-def delete_prompt(occ: Occurrence) -> Prompt[Scope]:
+def delete_prompt(occ: Occurrence, delete_keys: Sequence[str]) -> Prompt[Scope]:
+    """``delete_keys`` confirm too."""
     if is_recurring(occ):
-        return scope_prompt("Delete", occ)
-    return Prompt[Scope](f"Delete “{occ.summary}”?", {"y": ("yes", "series")}, ("n", "no"))
+        return scope_prompt("Delete", occ, also=delete_keys)
+    return Prompt[Scope](
+        f"Delete “{occ.summary}”?",
+        {"y": ("delete", "series")},
+        ("n/esc", "cancel"),
+        also=delete_keys,
+    )
 
 
 class EventDetail(ModalScreen[None]):

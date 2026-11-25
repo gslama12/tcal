@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import pytest
 from conftest import TODAY
 from textual.containers import VerticalScroll
 from textual.widgets import Static
@@ -62,13 +63,13 @@ async def test_delete_single_event_from_detail(make_app) -> None:
         assert "d delete" in text(app, "hints")
         await pilot.press("x")  # not bound
         assert isinstance(app.screen, EventDetail)
-        await pilot.press("d", "d")  # the second one is ignored by the prompt
+        await pilot.press("d", "x")  # the second one is ignored by the prompt
         assert isinstance(app.screen, Prompt)
         await pilot.press("n")  # cancel keeps it
         assert find(app, "Dentist")
         app.post_message(EventSelected(find(app, "Dentist")[0]))
         await pilot.pause()
-        await pilot.press("d", "y")
+        await pilot.press("d", "d")
         assert not find(app, "Dentist")
         assert not isinstance(app.screen, (Prompt, EventDetail))
         assert any(str(n.message) == "Deleted “Dentist” · u undo" for n in app._notifications)
@@ -76,6 +77,63 @@ async def test_delete_single_event_from_detail(make_app) -> None:
         assert find(app, "Dentist")
         await pilot.press("u")  # only once
         assert any(str(n.message) == "Nothing to undo" for n in app._notifications)
+
+
+def prompt_hints(app: TcalApp) -> str:
+    return "".join(str(w.render()) for w in app.screen.query("#choices > Static"))
+
+
+@pytest.mark.parametrize(
+    ("answer", "deleted"),
+    [("d", True), ("y", True), ("enter", True), ("n", False), ("escape", False)],
+)
+async def test_delete_in_view_asks(make_app, answer: str, deleted: bool) -> None:
+    app = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        app.query_one("#week", TimeGrid).select(find(app, "Dentist")[0])
+        await pilot.press("d")
+        assert prompt_hints(app) == "y/d delete · n/esc cancel"
+        await pilot.press(answer)
+        assert not isinstance(app.screen, Prompt)
+        assert bool(find(app, "Dentist")) != deleted
+
+
+async def test_remapped_delete_keys_confirm(make_app, write_config) -> None:
+    app = make_app(write_config('[keys]\ndelete_event = ["x", "n", "delete"]\n'))
+    async with app.run_test(size=SIZE) as pilot:
+        grid = app.query_one("#week", TimeGrid)
+        grid.select(find(app, "Dentist")[0])
+        await pilot.press("x")
+        assert prompt_hints(app) == "y/x/del delete · n/esc cancel"
+        await pilot.press("d")
+        assert isinstance(app.screen, Prompt)
+        await pilot.press("n")  # still cancels
+        assert not isinstance(app.screen, Prompt) and find(app, "Dentist")
+        await pilot.press("x", "x")
+        assert not find(app, "Dentist")
+        await pilot.press("u")
+        grid.select(find(app, "Dentist")[0])
+        await pilot.press("delete", "delete")
+        assert not find(app, "Dentist")
+
+
+async def test_dd_deletes_only_this_one_of_a_series(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        before = find(app, "Standup", days=7)
+        app.query_one("#week", TimeGrid).select(before[0])
+        await pilot.press("d", "d")
+        assert [o.start for o in find(app, "Standup", days=7)] == [o.start for o in before[1:]]
+
+
+async def test_a_delete_key_that_is_a_choice_keeps_its_meaning(make_app, write_config) -> None:
+    app = make_app(write_config('[keys]\nview_schedule = ["S"]\ndelete_event = ["s"]\n'))
+    async with app.run_test(size=SIZE) as pilot:
+        app.query_one("#week", TimeGrid).select(find(app, "Standup")[0])
+        await pilot.press("s")
+        assert prompt_hints(app) == "o this event · s all events · esc cancel"
+        await pilot.press("s")
+        assert not find(app, "Standup", days=7)
 
 
 async def test_delete_one_occurrence_with_d_in_view(make_app) -> None:
@@ -239,16 +297,15 @@ async def test_scope_prompts_name_the_instance(make_app) -> None:
     app = make_app()
     async with app.run_test(size=SIZE) as pilot:
         app.query_one("#week", TimeGrid).select(find(app, "Standup")[0])
-        for key, question in (
-            ("e", "Edit “Standup” on Wed 18 Nov?"),
-            ("d", "Delete “Standup” on Wed 18 Nov?"),
+        for key, question, first in (
+            ("e", "Edit “Standup” on Wed 18 Nov?", "o"),
+            ("d", "Delete “Standup” on Wed 18 Nov?", "o/d"),
         ):
             await pilot.press(key)
             await pilot.pause()
             assert isinstance(app.screen, Prompt)
             assert text(app, "question") == question
-            hints = "".join(str(w.render()) for w in app.screen.query("#choices > Static"))
-            assert hints == "o this event · s all events · esc cancel"
+            assert prompt_hints(app) == f"{first} this event · s all events · esc cancel"
             await pilot.press("escape")
 
 

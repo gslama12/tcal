@@ -1,33 +1,39 @@
 """Prompt: a small box asking one question, answered with a key or a click on its hint.
 
-``Prompt(question, choices, cancel)``: ``choices`` maps a key to its (label, result);
-enter takes the first one (bold), escape and n cancel (dismiss with None). ``cancel``
-is the (key, label) shown for that, e.g. ``o this event · s all events · esc cancel``.
+``Prompt(question, choices, cancel, also)``: ``choices`` maps a key to its (label, result);
+enter takes the first one (bold), and so do the keys ``also`` which mean nothing else here;
+escape and n cancel (dismiss with None). ``cancel`` is the (keys, label) shown for that,
+e.g. ``o/d this event · s all events · esc cancel``.
 """
 
+from collections.abc import Sequence
 from typing import Generic, TypeVar
 
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.keys import format_key
+from textual.markup import escape
 from textual.message import Message
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
 T = TypeVar("T")
 
+CANCEL_KEYS = ("n", "escape")
+
 
 class Hint(Static):
-    """``key label``, clickable."""
+    """``keys label``, clickable: chooses ``key``."""
 
     class Chosen(Message):
         def __init__(self, key: str) -> None:
             super().__init__()
             self.key = key
 
-    def __init__(self, key: str, label: str, default: bool = False) -> None:
+    def __init__(self, key: str, keys: str, label: str, default: bool = False) -> None:
         super().__init__(
-            f"[b $primary]{key}[/] {label}", id=key, classes="-default" if default else ""
+            f"[b $primary]{escape(keys)}[/] {label}", id=key, classes="-default" if default else ""
         )
         self.key = key
 
@@ -41,26 +47,29 @@ class Prompt(ModalScreen[T | None], Generic[T]):
         question: str,
         choices: dict[str, tuple[str, T]],
         cancel: tuple[str, str] = ("esc", "cancel"),
+        also: Sequence[str] = (),
     ) -> None:
         super().__init__()
         self.question = question
         self.choices = choices
         self.cancel = cancel
+        self.also = [k for k in also if k not in (*choices, *CANCEL_KEYS, "enter")]
 
     def compose(self) -> ComposeResult:
         with Vertical(id="prompt"):
             yield Static(self.question, id="question", markup=False)
             with Horizontal(id="choices"):
                 for i, (key, (label, _)) in enumerate(self.choices.items()):
-                    yield Hint(key, label, default=i == 0)
+                    keys = [key, *map(format_key, self.also)] if i == 0 else [key]
+                    yield Hint(key, "/".join(keys), label, default=i == 0)
                     yield Static(" · ", classes="separator")
-                yield Hint(*self.cancel)
+                yield Hint("cancel", *self.cancel)
 
     def on_key(self, event: events.Key) -> None:
         event.stop()
-        if event.key == "enter":
+        if event.key in ("enter", *self.also):
             self._choose(next(iter(self.choices)))
-        elif event.key in (*self.choices, "n", "escape"):
+        elif event.key in (*self.choices, *CANCEL_KEYS):
             self._choose(event.key)
 
     def on_hint_chosen(self, message: Hint.Chosen) -> None:
