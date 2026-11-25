@@ -1,0 +1,708 @@
+"""TcalApp: the Google-Calendar-like shell, the app state and the data seam.
+
+Layout::
+
+    ┌ sidebar ─┐┌ main ───────────────────────────┐
+    │ MiniCal  ││ ViewSwitcher (tabs + title)     │
+    │          ││ ContentSwitcher: Week/Month/    │
+    │ Calendar ││   Year/ScheduleView             │
+    │ List     ││   (id = mode)                   │
+    └──────────┘└─────────────────────────────────┘
+     StatusBar
+
+Public API for widgets/screens: ``state``, ``config``, ``palette``,
+``calendars()``, ``calendar()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
+``set_view()``, ``set_grid_mode()``, ``set_resize()``, ``toggle_calendar()``, ``refresh_data()``, ``current_occurrence()``, ``save_event()``,
+``delete_event()``, ``undo()``, ``redo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``, ``sync_log``,
+``new_event()`` (opens the event prompt), ``edit_event()``, ``edit_occurrence()`` (the form),
+``check_writable()``, ``focus_view()``, ``selected_occurrence()``, ``select_in_view()``,
+``save_events()`` (several as one undo step), ``toggle_mark()``, ``clear_marks()``,
+``marked_occurrences()`` (the tab-marked events for a batch yank).
+
+Editing flows (event prompt and form, clipboard, moving, resizing) live in ``tcal.ui.editing.Editor``
+(``app.editor``), the undo stack in ``tcal.ui.undo`` (``app.history``).
+
+The sidebar hides itself below ``SIDEBAR_MIN_WIDTH`` columns (and again when focus
+leaves it there); once the user toggles it, that choice wins over resizes.
+"""
+
+import asyncio
+import logging
+from collections import deque
+from dataclasses import replace
+from datetime import date, datetime, time, timedelta
+
+from textual import events
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal, Vertical
+from textual.keys import format_key
+from textual.reactive import reactive
+from textual.widgets import ContentSwitcher
+from textual.worker import Worker, WorkerState
+
+from tcal import paths
+from tcal.background import Job, SyncRunner
+from tcal.config import Config, default_data, describe_conflicts, key_conflicts, load_config
+from tcal.model import Calendar, Event, Occurrence
+from tcal.source import EventSource
+from tcal.sync import SyncSummary
+from tcal.synclog import LogEntry
+from tcal.tz import local_zone
+from tcal.ui.editing import Editor
+from tcal.ui.keys import binding, keymap
+from tcal.ui.messages import EventSelected, NewEventRequested
+from tcal.ui.screens.event_detail import EventDetail, confirm_delete, short_when
+from tcal.ui.screens.goto import GotoScreen
+from tcal.ui.screens.help import HelpScreen
+from tcal.ui.screens.main import MainScreen
+from tcal.ui.screens.search import SearchScreen
+from tcal.ui.screens.sync_log import SyncLogScreen
+from tcal.ui.state import AppState, Resize, ViewMode, add_months
+from tcal.ui.sync_status import SyncState, SyncStatus
+from tcal.ui.theme import PALETTES, make_theme
+from tcal.ui.undo import UndoHistory, UndoStep
+from tcal.ui.widgets.calendar_list import CalendarList
+from tcal.ui.widgets.minical import MiniCal
+from tcal.ui.widgets.month_view import MonthView
+from tcal.ui.widgets.schedule_view import ScheduleView
+from tcal.ui.widgets.statusbar import StatusBar
+from tcal.ui.widgets.timegrid import TimeGrid
+from tcal.ui.widgets.view_switcher import ViewSwitcher
+from tcal.ui.widgets.year_view import YearView
+
+SIDEBAR_MIN_WIDTH = 120  # terminal columns below which the sidebar starts hidden
+OCC_CACHE_SIZE = 32  # date ranges whose occurrences are kept until the next data refresh
+SELECTING_VIEWS = TimeGrid | MonthView | ScheduleView  # views with a selected event
+# What still works in resize mode (besides ``timegrid.RESIZE_ACTIONS``).
+RESIZE_ACTIONS = {"resize_mode", "undo", "redo", "sync", "help", "quit", "help_quit"}
+SYNC_LOG_SIZE = 200  # warnings/errors kept for the sync log screen
+
+log = logging.getLogger(__name__)
+
+
+class TcalApp(App[None]):
+    CSS_PATH = "styles.tcss"
+    TITLE = "tcal"
+
+    BINDINGS = [
+        binding("prev_period", "Previous"),
+        binding("next_period", "Next"),
+        binding("today", "Today"),
+        binding("view_week", "Week", action="set_view('week')"),
+        binding("view_month", "Month", action="set_view('month')"),
+        binding("view_year", "Year", action="set_view('year')"),
+        binding("view_schedule", "Schedule", action="set_view('schedule')"),
+        binding("new_event", "New event"),
+        binding("quick_add", "New event", action="new_event"),
+        binding("edit_event", "Edit event"),
+        binding("delete_event", "Delete event"),
+        binding("undo", "Undo"),
+        binding("redo", "Redo"),
+        binding("yank", "Yank"),
+        binding("paste", "Paste"),
+        binding("duplicate", "Duplicate"),
+        binding("move_down", "Later", action="move(15, 0)"),
+        binding("move_up", "Earlier", action="move(-15, 0)"),
+        binding("move_left", "Day earlier", action="move(0, -1)"),
+        binding("move_right", "Day later", action="move(0, 1)"),
+        binding("resize_mode", "Resize"),
+        binding("goto_date", "Go to date"),
+        binding("search", "Search"),
+        binding("sync", "Sync"),
+        binding("sync_log", "Sync log"),
+        binding("focus_calendars", "Calendars"),
+        binding("focus_minical", "Mini calendar"),
+        binding("toggle_sidebar", "Sidebar"),
+        binding("help", "Help"),
+        binding("quit", "Quit"),
+    ]
+
+    # The one redraw signal: replaced on navigation, re-assigned on data refresh.
+    state: reactive[AppState] = reactive(
+        AppState(date.today(), ViewMode.WEEK), always_update=True, init=False
+    )
+
+    def __init__(
+        self,
+        source: EventSource,
+        config: Config | None = None,
+        today: date | None = None,
+        sync: Job | None = None,
+    ) -> None:
+        """``sync`` runs one sync (in a background thread): on startup, every
+        ``[sync] interval``, on the sync key and after edits. None = no syncing."""
+        super().__init__()
+        self.source = source
+        self.sync_runner = SyncRunner(sync) if sync else None  # outlives the TUI on quit
+        self.sync_status = SyncStatus()  # shown in the status bar
+        self._sync_again = False  # asked for while a sync was running
+        self._sync_by_key = False  # the running sync was asked for with the sync key
+        self._error_shown = ""  # the sync error last toasted (not again until it changes)
+        self._warnings_shown: list[str] = []  # the last sync's warnings (toasted when new)
+        self.sync_log: deque[LogEntry] = deque(maxlen=SYNC_LOG_SIZE)  # oldest first
+        self._wide: bool | None = None  # terminal >= SIDEBAR_MIN_WIDTH, None before layout
+        self._sidebar_pinned = False  # the user toggled the sidebar: resizes leave it alone
+        self.history = UndoHistory()
+        self.editor = Editor(self)
+        self.config = config or load_config()
+        name = self.config.theme.name
+        self._theme_notice = ""
+        if name not in PALETTES:
+            fallback = default_data()["theme"]["name"]
+            self._theme_notice = (
+                f"Unknown theme {name!r}, using {fallback!r}; one of {', '.join(PALETTES)}"
+            )
+            name = fallback
+        self.palette = PALETTES[name]
+        self.register_theme(make_theme(name))
+        self.theme = f"tcal-{name}"
+        self._calendars = source.calendars()
+        self._occ_cache: dict[tuple[date, date], list[Occurrence]] = {}
+        self.set_reactive(
+            TcalApp.state,
+            AppState(
+                day=today or date.today(),
+                view=ViewMode(self.config.view.default_view),
+                week_start=self.config.view.week_start,
+                hidden_calendars=frozenset(c.id for c in self._calendars if not c.visible),
+            ),
+        )
+
+    # ----- data seam ------------------------------------------------------
+
+    def calendars(self) -> list[Calendar]:
+        return self._calendars
+
+    def calendar(self, calendar_id: str) -> Calendar | None:
+        return next((c for c in self._calendars if c.id == calendar_id), None)
+
+    def calendar_color(self, calendar_id: str) -> str:
+        """The calendar's colour, exactly as its server (or subscription) gives it."""
+        calendar = self.calendar(calendar_id)
+        return calendar.color if calendar else self.palette.foreground1
+
+    def occurrences(self, start: date, end: date) -> list[Occurrence]:
+        """Occurrences of visible calendars in the days [start, end), sorted by start."""
+        hidden = self.state.hidden_calendars
+        return [o for o in self._occurrences(start, end) if o.calendar_id not in hidden]
+
+    def _occurrences(self, start: date, end: date) -> list[Occurrence]:
+        """The source's occurrences, cached per range until ``refresh_data``
+        (every widget redraw asks again; most ask for the same few ranges)."""
+        key = (start, end)
+        if key not in self._occ_cache:
+            if len(self._occ_cache) >= OCC_CACHE_SIZE:
+                self._occ_cache.clear()
+            self._occ_cache[key] = self.source.occurrences(start, end)
+        return self._occ_cache[key]
+
+    def current_occurrence(self, occ: Occurrence) -> Occurrence | None:
+        """``occ`` as the cache has it now (e.g. after a sync); None if its event is gone
+        or, for a series, this instance no longer exists at that time."""
+        event = self.source.get_event(occ.event.uid)
+        if event is None:
+            return None
+        moved = not (event.rrule or event.recurrence_id)  # a one-off may have moved
+        for day in {occ.start.date(), event.start.astimezone(local_zone()).date()}:
+            for found in self._occurrences(day, day + timedelta(1)):
+                if found.key == occ.key or (moved and found.event.uid == occ.event.uid):
+                    return found
+        return None
+
+    def refresh_data(self) -> None:
+        """Re-read calendars from the source and redraw everything (e.g. after sync)."""
+        self._calendars = self.source.calendars()
+        self._occ_cache.clear()
+        self.state = self.state
+
+    def save_event(
+        self,
+        event: Event,
+        undo_message: str = "",
+        redo_message: str = "",
+        undo_at: datetime | None = None,
+        redo_at: datetime | None = None,
+    ) -> Event:
+        """Create/update an event in the cache, redraw, and push it in the background.
+        The undo key takes it back (and toasts ``undo_message``, default: "Undid edit of
+        “X”" / "Removed “X”"), then selects the occurrence at ``undo_at`` (default: a
+        single event's old start). ``redo_message`` and ``redo_at`` (default: a single
+        event's new start) are the redo key's."""
+        before = self.source.rows(event.uid)
+        saved = self.source.save_event(event)
+        if not undo_message:
+            undo_message = (
+                f"Undid edit of “{before[0].summary}”" if before else f"Removed “{event.summary}”"
+            )
+        if not redo_message:
+            redo_message = (
+                f"Redid edit of “{event.summary}”" if before else f"Added “{event.summary}” again"
+            )
+        if undo_at is None and len(before) == 1 and not before[0].rrule:
+            undo_at = before[0].start
+        if redo_at is None and not saved.rrule:
+            redo_at = saved.start
+        self.history.push(
+            UndoStep([(event.uid, before)], undo_message, redo_message, undo_at, redo_at)
+        )
+        self.refresh_data()
+        self.request_sync()
+        return saved
+
+    def save_events(self, events: list[Event], undo_message: str, redo_message: str) -> list[Event]:
+        """``save_event`` for several events (distinct uids) as one undo step."""
+        changes = [(e.uid, self.source.rows(e.uid)) for e in events]
+        saved = [self.source.save_event(e) for e in events]
+        self.history.push(UndoStep(changes, undo_message, redo_message, redo_at=saved[0].start))
+        self.refresh_data()
+        self.request_sync()
+        return saved
+
+    def delete_event(self, uid: str, occurrence: datetime | None = None) -> None:
+        """Delete an event, or one instance of a series: pass the instance's
+        original start (``occ.event.recurrence_id or occ.start``). The undo key restores it."""
+        rows = self.source.delete_event(uid, occurrence)
+        self.refresh_data()
+        self.request_sync()
+        if rows:
+            first = next((r for r in rows if r.recurrence_id is None), rows[0])
+            if not first.rrule:
+                what = f"“{first.summary}”"
+            elif occurrence is not None:
+                what = f"this “{first.summary}” ({short_when(occurrence, first.all_day)})"
+            else:
+                what = f"all “{first.summary}” events"
+            at = occurrence if first.rrule else first.start
+            self.history.push(
+                UndoStep([(uid, rows)], f"Restored {what}", f"Deleted {what} again", at)
+            )
+            self.notify(f"Deleted {what} · {self.undo_hint}")
+
+    @property
+    def undo_hint(self) -> str:
+        return f"{format_key(self.config.keys['undo'][0])} undo"
+
+    @property
+    def sync_hint(self) -> str:
+        """The sync key, e.g. "r"."""
+        return format_key(self.config.keys["sync"][0])
+
+    def unsynced_hint(self) -> str:
+        """While nothing is cached yet and syncing is on: "Syncing…", or after a failed
+        sync "Not synced yet · r retry" (empty panes show it); else ""."""
+        status = self.sync_status
+        if self._calendars or status.state is SyncState.OFF or status.last_sync:
+            return ""
+        if status.state is SyncState.SYNCING:
+            return "Syncing…"
+        return f"Not synced yet · {self.sync_hint} retry"
+
+    def undo(self) -> None:
+        """Take back the last create, edit, move or delete (up to ``UNDO_DEPTH`` in turn)."""
+        if step := self.history.pop():
+            self.history.push_undone(self._apply(step))
+        else:
+            self.notify("Nothing to undo")
+
+    def redo(self) -> None:
+        """Make the last undone change again (in turn, until there is a new change)."""
+        if step := self.history.pop_undone():
+            self.history.push_redone(self._apply(step))
+        else:
+            self.notify("Nothing to redo")
+
+    def _apply(self, step: UndoStep) -> UndoStep:
+        """Put back the rows of ``step``; returns the step that takes this back."""
+        inverse = step.inverse([(uid, self.source.rows(uid)) for uid, _ in step.changes])
+        for uid, rows in reversed(step.changes):
+            if rows:
+                self.source.restore(rows)
+            else:
+                self.source.delete_event(uid)
+        self.notify(step.message)
+        self.refresh_data()
+        if step.at is not None:
+            self.editor.select_event(step.uid, step.at)
+        self.request_sync()
+        return inverse
+
+    # ----- event prompt and form (``Editor``) ----------------------------
+
+    def new_event(self, start: date | datetime) -> None:
+        """Open the prompt for a new event at a time slot (1 h) or on a day (all-day)."""
+        self.editor.new_event(start)
+
+    def edit_event(self, event: Event) -> None:
+        """Open the form for an existing event (a master edits the whole series)."""
+        self.editor.edit_event(event)
+
+    def edit_occurrence(self, occurrence: Occurrence) -> None:
+        """Edit ``occurrence``; a series asks "this event" / "all events" first."""
+        self.editor.edit_occurrence(occurrence)
+
+    def check_writable(self, calendar_id: str) -> bool:
+        """True if events in ``calendar_id`` can be edited; else show "<name> is read-only"."""
+        calendar = self.calendar(calendar_id)
+        if calendar is None or not calendar.readonly:
+            return True
+        self.notify(f"{calendar.name} is read-only", severity="warning")
+        return False
+
+    # ----- sync -----------------------------------------------------------
+
+    def request_sync(self) -> None:
+        """Start a background sync; while one is running, edits are pushed by another one
+        right after it. (Nothing happens if syncing is off.)"""
+        if self.sync_runner is None:
+            return
+        if any(w.group == "sync" and not w.is_finished for w in self.workers):
+            self._sync_again = True
+            return
+        self._sync_again = False
+        self.sync_status = self.sync_status.started()
+        self.refresh_data()
+        # The worker only waits: quitting cancels it, the sync runs on (``finish_sync``).
+        future = asyncio.wrap_future(self.sync_runner.start())
+        self.run_worker(future, group="sync", exit_on_error=False)
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        worker = event.worker
+        if worker.group != "sync" or event.state not in (WorkerState.SUCCESS, WorkerState.ERROR):
+            return
+        if event.state is WorkerState.SUCCESS:
+            result = worker.result
+            summary = result if isinstance(result, SyncSummary) else SyncSummary()
+            now = datetime.now()
+            self.sync_status = self.sync_status.succeeded(now, tuple(summary.failed))
+            self.sync_log.extend(LogEntry(now, False, w) for w in summary.warnings)
+            self._toast_warnings(summary.warnings)
+            if self._sync_by_key:
+                self.notify("Synced", title="Sync")
+            self._error_shown = ""
+        else:
+            self.sync_status = self.sync_status.failed(worker.error)
+            log.error("sync failed: %s", worker.error or "unknown error")
+            self.sync_log.append(LogEntry(datetime.now(), True, self.sync_status.error))
+            self._toast_sync_error()
+        self._sync_by_key = False
+        self.refresh_data()
+        if event.state is WorkerState.SUCCESS and self._sync_again and self.source.pending_count():
+            self.request_sync()
+
+    def _toast_warnings(self, warnings: list[str]) -> None:
+        """One line: the count and the first warning; again only when they change
+        (a feed failing on every periodic sync is toasted once) or the user asked."""
+        if warnings and (self._sync_by_key or warnings != self._warnings_shown):
+            count = f"{len(warnings)} sync warning{'s' if len(warnings) > 1 else ''}"
+            log_key = format_key(self.config.keys["sync_log"][0])
+            self.notify(
+                f"{count}: {warnings[0]} · {log_key} sync log", severity="warning", timeout=10
+            )
+        self._warnings_shown = warnings
+
+    def _toast_sync_error(self) -> None:
+        """Toast why the sync failed if the user asked for it, or nothing is cached yet
+        (a first run offline); the same error only once in a row."""
+        status = self.sync_status
+        if not self._sync_by_key and (self._calendars or status.error == self._error_shown):
+            return
+        self._error_shown = status.error
+        what = "Couldn't reach iCloud" if status.state is SyncState.OFFLINE else "Sync failed"
+        self.notify(
+            f"{what}: {status.error} · {self.sync_hint} retry · `tcal doctor` checks the setup",
+            title="Sync",
+            severity="warning" if status.state is SyncState.OFFLINE else "error",
+            timeout=15,
+        )
+
+    # ----- state changes --------------------------------------------------
+
+    def select_date(self, day: date) -> None:
+        self.state = replace(self.state, day=day)
+
+    def set_view(self, mode: ViewMode | str) -> None:
+        self.state = replace(self.state, view=ViewMode(mode), resize=None)
+
+    def toggle_calendar(self, calendar_id: str) -> None:
+        self.state = replace(
+            self.state, hidden_calendars=self.state.hidden_calendars ^ {calendar_id}
+        )
+
+    def set_grid_mode(self, on: bool) -> None:
+        """Week view: the cursor keys move the slot cursor (on) or between events (off)."""
+        if self.state.grid != on:
+            self.state = replace(self.state, grid=on)
+
+    def set_resize(self, resize: Resize | None) -> None:
+        """Enter resize mode / switch its edge, or leave it (None)."""
+        if self.state.resize != resize:
+            self.state = replace(self.state, resize=resize)
+
+    def toggle_mark(self, occ: Occurrence) -> None:
+        self.state = replace(self.state, marked=self.state.marked ^ {occ.key})
+
+    def clear_marks(self) -> None:
+        if self.state.marked:
+            self.state = replace(self.state, marked=frozenset())
+
+    def marked_occurrences(self) -> list[Occurrence]:
+        """The marked events still shown (by start), wherever they are."""
+        found = []
+        for key in self.state.marked:
+            day = key[1].date()
+            occ = next((o for o in self.occurrences(day, day + timedelta(1)) if o.key == key), None)
+            if occ is not None:
+                found.append(occ)
+        return sorted(found, key=lambda o: o.start)
+
+    def focus_view(self) -> None:
+        """Focus the main view of the current mode."""
+        self.query_one(f"#{self.state.view.value}").focus()
+
+    def watch_state(self, state: AppState) -> None:
+        self.query_one("#views", ContentSwitcher).current = state.view.value
+
+    # ----- layout ---------------------------------------------------------
+
+    async def on_event(self, event: events.Event) -> None:
+        # Terminals without the kitty protocol send ctrl+h as ^H, which Textual calls
+        # backspace (that key sends DEL). In dialogs it stays backspace, for the inputs.
+        if (
+            isinstance(event, events.Key)
+            and (event.key, event.character) == ("backspace", "\x08")
+            and isinstance(self.screen, MainScreen)
+        ):
+            event = events.Key("ctrl+h", event.character)
+        await super().on_event(event)
+
+    def get_default_screen(self) -> MainScreen:
+        return MainScreen(id="_default")
+
+    def compose(self) -> ComposeResult:
+        with Horizontal(id="body"):
+            with Vertical(id="sidebar"):
+                yield MiniCal()
+                yield CalendarList()
+            with Vertical(id="main"):
+                yield ViewSwitcher()
+                with ContentSwitcher(id="views", initial=self.state.view.value):
+                    yield TimeGrid(id=ViewMode.WEEK.value)
+                    yield MonthView(id=ViewMode.MONTH.value)
+                    yield YearView(id=ViewMode.YEAR.value)
+                    yield ScheduleView(id=ViewMode.SCHEDULE.value)
+        yield StatusBar()
+
+    def on_mount(self) -> None:
+        self.set_keymap(keymap(self.config))
+        if self._theme_notice:
+            self.notify(self._theme_notice, title="Config", severity="warning", timeout=15)
+        conflicts = describe_conflicts(key_conflicts(self.config))
+        if conflicts:
+            self.notify(
+                "\n".join(conflicts) + "\n(see `tcal config check`)",
+                title="Conflicting key bindings",
+                severity="warning",
+                timeout=15,
+            )
+        self.focus_view()
+        if self.sync_runner is not None:
+            self.request_sync()
+            self.set_interval(self.config.sync.interval, self.request_sync)
+
+    def on_resize(self, event: events.Resize) -> None:
+        wide = event.size.width >= SIDEBAR_MIN_WIDTH
+        if wide != self._wide:
+            self._wide = wide
+            if not self._sidebar_pinned:
+                self._show_sidebar(wide)
+
+    def on_descendant_blur(self, event: events.DescendantBlur) -> None:
+        """Narrow terminal: a sidebar shown just to reach it (``focus_calendars``/``focus_minical``)
+        hides again once focus leaves it."""
+        sidebar = self.query_one("#sidebar")
+        if self._wide or self._sidebar_pinned or not sidebar.display:
+            return
+        self.call_after_refresh(self._hide_unfocused_sidebar)
+
+    def _hide_unfocused_sidebar(self) -> None:
+        sidebar = self.query_one("#sidebar")
+        focused = self.focused
+        if self._sidebar_pinned or focused is None or focused.screen is not sidebar.screen:
+            return  # a modal on top keeps the sidebar for when it closes
+        if sidebar not in focused.ancestors:
+            sidebar.display = False
+
+    def _show_sidebar(self, show: bool) -> None:
+        sidebar = self.query_one("#sidebar")
+        sidebar.display = show
+        if not show and self.focused is not None and sidebar in self.focused.ancestors:
+            self.focus_view()
+
+    # ----- actions --------------------------------------------------------
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if self.state.resize is not None and isinstance(self.focused, TimeGrid):
+            return action in RESIZE_ACTIONS
+        return super().check_action(action, parameters)
+
+    def action_toggle_sidebar(self) -> None:
+        self._sidebar_pinned = True
+        self._show_sidebar(not self.query_one("#sidebar").display)
+
+    def action_prev_period(self) -> None:
+        self.state = self.state.shifted(-1)
+
+    def action_next_period(self) -> None:
+        self.state = self.state.shifted(1)
+
+    def action_today(self) -> None:
+        self.select_date(date.today())
+
+    def action_set_view(self, mode: str) -> None:
+        self.set_view(mode)
+        self.focus_view()
+
+    def action_focus_calendars(self) -> None:
+        self._show_sidebar(True)
+        self.query_one(CalendarList).focus()
+
+    def action_focus_minical(self) -> None:
+        self._show_sidebar(True)
+        self.query_one(MiniCal).focus()
+
+    def action_new_event(self) -> None:
+        """A timed event at the next round hour on the selected day (the week view
+        posts its own ``NewEventRequested`` for the selected slot)."""
+        hour = min(datetime.now().hour + 1, 23)
+        self.new_event(datetime.combine(self.state.day, time(hour), local_zone()))
+
+    def selected_occurrence(self) -> Occurrence | None:
+        """The event selected in the focused week/month/schedule view, if any."""
+        focused = self.focused
+        return focused.selected if isinstance(focused, SELECTING_VIEWS) else None
+
+    def _selected(self) -> Occurrence | None:
+        """``selected_occurrence()``; None also toasts "No event selected"."""
+        occ = self.selected_occurrence()
+        if occ is None:
+            self.notify("No event selected")
+        return occ
+
+    def select_in_view(self, occ: Occurrence) -> None:
+        """Select ``occ`` (on the selected day) in the current view."""
+        view = self.query_one(f"#{self.state.view.value}")
+        if isinstance(view, SELECTING_VIEWS):
+            view.select(occ)
+
+    def action_edit_event(self) -> None:
+        """Edit the event selected in the focused week/month/schedule view."""
+        if occ := self._selected():
+            self.edit_occurrence(occ)
+
+    def action_delete_event(self) -> None:
+        if occ := self._selected():
+            confirm_delete(self, occ)
+
+    def action_undo(self) -> None:
+        self.undo()
+
+    def action_redo(self) -> None:
+        self.redo()
+
+    def action_toggle_mark(self) -> None:
+        if occ := self._selected():
+            self.toggle_mark(occ)
+
+    def action_clear_marks(self) -> None:
+        self.clear_marks()
+
+    def action_yank(self) -> None:
+        """Copy the marked events (and clear the marks), else the selected one."""
+        if self.state.marked:
+            self.editor.yank_all(self.marked_occurrences())
+            self.clear_marks()
+        elif occ := self._selected():
+            self.editor.yank(occ)
+
+    def action_paste(self) -> None:
+        self.editor.paste()
+
+    def action_duplicate(self) -> None:
+        if occ := self._selected():
+            self.editor.duplicate(occ)
+
+    def action_move(self, minutes: int, days: int) -> None:
+        """Shift the selected event by ``minutes`` (timed events in a time grid) or ``days``."""
+        occ = self._selected()
+        if occ is None:
+            return
+        if minutes and (occ.all_day or not isinstance(self.focused, TimeGrid)):
+            self.notify("Moving by time works for timed events in the week view")
+            return
+        self.editor.move(occ, timedelta(days=days, minutes=minutes))
+
+    def action_resize_mode(self) -> None:
+        """Enter resize mode on the selected event (timed, in a time grid), its end first;
+        in the mode: switch between its end and start."""
+        occ = self._selected()
+        if occ is None:
+            return
+        if occ.all_day:
+            self.notify("All-day event: only timed events can be resized")
+        elif not isinstance(self.focused, TimeGrid):
+            self.notify("Resizing works in the week view")
+        elif self.state.resize is not None:
+            self.set_resize(self.state.resize.toggled())
+        elif self.check_writable(occ.calendar_id):
+            self.set_resize(Resize(occ.event.uid))
+
+    def action_goto_date(self) -> None:
+        def jump(day: date | None) -> None:
+            if day is not None:
+                self.select_date(day)
+
+        self.push_screen(GotoScreen(date.today()), jump)
+
+    def action_search(self) -> None:
+        """Search the cached sync window; picking a result shows it (``show_occurrence``)."""
+        today, window = date.today(), self.config.sync
+
+        def occurrences() -> list[Occurrence]:
+            return self.occurrences(
+                add_months(today, -window.past_months), add_months(today, window.future_months)
+            )
+
+        screen = SearchScreen(occurrences, datetime.now().astimezone(), self.calendar_color)
+        self.push_screen(screen, self.show_occurrence)
+
+    def show_occurrence(self, occ: Occurrence | None) -> None:
+        """Go to ``occ``'s day in the current view, select it there and open its detail."""
+        if occ is None:
+            return
+        self.select_date(occ.start.date())
+        self.focus_view()
+        self.select_in_view(occ)
+        self.push_screen(EventDetail(occ))
+
+    def action_sync(self) -> None:
+        if self.sync_runner is None:
+            self.notify("Syncing is off (no account)")
+            return
+        self._sync_by_key = True
+        if self.sync_status.state is SyncState.SYNCING:
+            self.notify("Already syncing…", title="Sync")
+        self.request_sync()
+
+    def action_sync_log(self) -> None:
+        keys = self.config.keys
+        scroll = (keys["cursor_down"], keys["cursor_up"])
+        self.push_screen(SyncLogScreen(self.sync_log, paths.log_file(), keys["sync_log"], scroll))
+
+    def action_help(self) -> None:
+        self.push_screen(HelpScreen(self.config.keys))
+
+    def on_event_selected(self, message: EventSelected) -> None:
+        self.push_screen(EventDetail(message.occurrence))
+
+    def on_new_event_requested(self, message: NewEventRequested) -> None:
+        self.new_event(message.start)

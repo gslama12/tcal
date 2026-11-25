@@ -1,0 +1,343 @@
+/* todooit look: dark palette, rounded borders, accent border on focus.
+   Palette variables ($background1, $red, ...) come from tcal/ui/theme.py. */
+
+$border_type: round;
+
+Screen {
+    background: $background1;
+    color: $foreground3;
+}
+
+#sidebar {
+    width: 28;
+}
+
+#main {
+    width: 1fr;
+}
+
+MiniCal, CalendarList, ViewSwitcher, #views > * {
+    background: $background1;
+    border: $border_type $background3;
+    border-title-color: $foreground1;
+    border-title-background: $background1;
+    padding: 0 1;
+
+    &:focus {
+        border: $border_type $primary;
+    }
+}
+
+/* Month: week separators run into the border; Week (timegrid.py): the grid
+   paints every cell itself from app.palette, the axis is its left margin. */
+#views > MonthView, #views > TimeGrid {
+    padding: 0;
+}
+
+MiniCal {
+    height: 10;
+}
+
+CalendarList {
+    height: 1fr;
+}
+
+ViewSwitcher {
+    height: 3;
+}
+
+#views {
+    height: 1fr;
+}
+
+StatusBar {
+    height: 1;
+    background: $background2;
+    color: $foreground3;
+}
+
+* {
+    scrollbar-size: 0 1;
+    scrollbar-background: $background3;
+    scrollbar-color: $primary;
+    scrollbar-background-hover: $background2;
+    scrollbar-color-hover: $secondary;
+    scrollbar-background-active: $background2;
+    scrollbar-color-active: $secondary;
+}
+
+/* ----- help (tcal/ui/screens/help.py): todooit's key-bindings panel ----- */
+
+HelpScreen {
+    align: center middle;
+    background: $background1 70%;
+
+    /* HelpScreen sets the width: the longest line's. */
+    & > #help {
+        margin: 0 1;
+        max-width: 100%;
+        height: auto;
+        max-height: 90%;
+        background: $background2;
+        border: $border_type $primary;
+        border-title-color: $foreground1;
+        padding: 0 1;
+    }
+
+    #help-panel {
+        height: auto;
+        max-height: 100%;
+        scrollbar-size-vertical: 1;
+    }
+
+    #help-hint {
+        dock: bottom;
+        color: $foreground1;
+        text-align: center;
+    }
+}
+
+/* ----- sync log (tcal/ui/screens/sync_log.py) ----- */
+
+SyncLogScreen {
+    align: center middle;
+    background: $background1 70%;
+
+    & > #synclog {
+        width: 90;
+        max-width: 95%;
+        height: auto;
+        max-height: 85%;
+        background: $background2;
+        border: $border_type $primary;
+        border-title-color: $foreground1;
+        padding: 0 1;
+    }
+
+    #synclog-panel {
+        height: auto;
+        max-height: 100%;
+        scrollbar-size-vertical: 1;
+    }
+
+    #synclog-hint {
+        dock: bottom;
+        color: $foreground1;
+        text-align: center;
+    }
+}
+
+EntryList {
+    background: $background2;
+
+    & > .synclog--time { color: $foreground1; }
+    & > .synclog--warning { color: $yellow; }
+    & > .synclog--error { color: $red; text-style: bold; }
+}
+
+KeyTable {
+    background: $background2;
+    color: $foreground3;
+
+    & > .keytable--key {
+        color: $primary;
+        text-style: bold;
+    }
+
+    & > .keytable--title {
+        color: $secondary;
+        text-style: bold;
+    }
+
+    & > .keytable--separator {
+        color: $background3;
+    }
+}
+
+/* ----- go to date / search (tcal/ui/screens/goto.py, search.py) ----- */
+
+GotoScreen, SearchScreen {
+    align: center top;
+    background: $background1 50%;
+}
+
+GotoScreen Input, SearchScreen Input, SearchScreen OptionList {
+    background: $background2;
+    border: $border_type $primary;
+    border-title-color: $foreground1;
+    border-subtitle-color: $red;
+}
+
+GotoScreen Input {
+    width: 60;
+    margin-top: 3;
+}
+
+/* ----- event prompt (tcal/ui/screens/event_prompt.py) ----- */
+
+EventPrompt {
+    align: center top;
+    background: $background1 50%;
+
+    #event-prompt {
+        width: 84;
+        max-width: 95%;
+        height: auto;
+        max-height: 100%;
+        margin-top: 2;
+    }
+
+    Input {
+        padding: 0 1;
+        background: $background2;
+        background-tint: $background2;
+        border: $border_type $primary;
+        border-title-color: $foreground3;
+        border-title-background: $background2;
+        border-subtitle-color: $foreground1;
+        border-subtitle-background: $background2;
+    }
+
+    #card, #hints {
+        height: auto;
+        padding: 0 1;
+        background: $background2;
+        border: $border_type $background3;
+        border-title-color: $foreground1;
+        border-title-background: $background2;
+    }
+
+    #card > #warning {
+        color: $yellow;
+        text-style: dim;
+        &.-error { color: $red; text-style: none; }
+    }
+}
+
+#search {
+    width: 90;
+    height: 80%;
+    margin-top: 3;
+}
+
+SearchScreen OptionList {
+    height: 1fr;
+    border: $border_type $background3;
+    border-subtitle-color: $foreground2;
+
+    &:focus {
+        border: $border_type $primary;
+    }
+}
+
+/* ----- modals (tcal/ui/screens/) ----- */
+
+EventDetail, EventForm, Prompt {
+    align: center middle;
+    background: $background1 60%;
+}
+
+EventDetail #dialog {
+    width: 60;
+    height: auto;
+    max-height: 80%;
+    background: $background2;
+    border: $border_type $primary;
+    padding: 1 2;
+}
+
+EventDetail #dialog > Static {
+    margin-bottom: 1;
+}
+
+EventDetail #dialog > #title {
+    dock: top;
+    margin: 0;
+    padding-bottom: 1;
+    background: $background2;
+}
+
+EventDetail #dialog > #hints {
+    dock: bottom;
+    margin: 0;
+    padding-top: 1;
+    background: $background2;
+}
+
+EventDetail #dialog {
+    scrollbar-size-vertical: 1;
+}
+
+/* y/n and scope questions (tcal/ui/screens/prompt.py) */
+
+#prompt {
+    width: auto;
+    max-width: 80%;
+    height: auto;
+    background: $background2;
+    border: $border_type $primary;
+    padding: 0 1;
+
+    #question {
+        width: auto;
+        max-width: 100%;
+        text-style: bold;
+    }
+
+    #choices {
+        width: auto;
+        height: 1;
+    }
+
+    #choices > Static {
+        width: auto;
+        color: $foreground2;
+    }
+
+    #choices > Hint.-default, #choices > Hint:hover { color: $foreground3; text-style: bold; }
+    #choices > .separator { color: $foreground1; }
+}
+
+/* event form (tcal/ui/screens/event_form.py) */
+
+#form {
+    width: 72;
+    max-width: 95%;
+    height: auto;
+    max-height: 100%;
+    background: $background2;
+    border: $border_type $primary;
+    border-title-color: $foreground3;
+    border-title-background: $background2;
+    border-subtitle-color: $foreground1;
+    border-subtitle-background: $background2;
+    padding: 0 1;
+    scrollbar-size-vertical: 1;
+
+    Input, SelectCurrent, TextArea, Checkbox {
+        background: $background2;
+        background-tint: $background2;
+        border: $border_type $background3;
+        &:focus { border: $border_type $primary; }
+        &.-invalid { border: $border_type $red; }
+    }
+    Checkbox { width: 100%; }
+    Checkbox > .toggle--button { color: $background3; background: $background3; }
+    Checkbox.-on > .toggle--button { color: $primary; }
+    Select:focus > SelectCurrent { border: $border_type $primary; }
+    SelectOverlay, SelectOverlay:focus {
+        background: $background2;
+        border: $border_type $primary;
+        padding: 0 1;
+    }
+    .row { height: auto; }
+    .label { width: 6; padding: 1 0 0 1; color: $foreground1; }
+    #start_date, #end_date { width: 1fr; }
+    .time { width: 12; }
+    #ends { width: 16; }
+    #ends_value { width: 1fr; }
+    #ends_unit { width: auto; padding: 1 1 0 1; color: $foreground1; }
+    #notes { height: 5; }
+    #error { color: $red; height: auto; padding: 0 1; }
+    #note { color: $foreground1; padding: 0 1; }
+}

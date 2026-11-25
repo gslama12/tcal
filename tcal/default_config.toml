@@ -1,0 +1,86 @@
+# tcal default configuration.
+# Copy any part of this to ~/.config/tcal/config.toml (or $TCAL_HOME/config.toml);
+# your file is merged over these defaults, so you only need what you change.
+
+[account]
+apple_id = ""                          # your Apple ID e-mail
+caldav_url = "https://caldav.icloud.com"
+password_cmd = ""                      # optional shell command printing the app-specific password
+
+[view]
+day_start = "06:30"                    # first time shown in week view (scroll for earlier)
+day_end = "24:00"                      # last time shown in week view
+rows_per_hour = 0                      # time-grid zoom, 1..8; 0 = fit the terminal height
+grid_step = 60                         # grid mode (v): minutes per cursor slot, 15 | 30 | 60
+week_start = "monday"                  # monday .. sunday
+default_view = "week"                  # week | month | year | schedule
+
+[sync]
+interval = 300                         # seconds between background syncs
+past_months = 3                        # sync window before today
+future_months = 12                     # sync window after today
+
+[theme]
+name = "tokyo-night"                   # tokyo-night | nord | gruvbox | catppuccin-mocha | catppuccin-latte (light)
+
+# Read-only calendar subscriptions (iCalendar feeds), shown under "Other calendars".
+# Repeat the block for each feed; color is optional (default: the next of Apple's calendar
+# colors: #FF2968 red, #FF9500 orange, #FFCC00 yellow, #63DA38 green, #1BADF8 blue,
+# #CC73E1 purple, #A2845E brown).
+# [[subscription]]
+# name = "Holidays"
+# url = "webcal://calendars.icloud.com/holidays/us_en.ics"
+# color = "#FF2968"
+
+# action -> list of keys (Textual key names: "plus", "minus", "slash",
+# "question_mark", "ctrl+s", "H" for shift+h, ...). Overriding an action
+# replaces its whole key list.
+[keys]
+cursor_left = ["h", "left"]
+cursor_down = ["j", "down"]
+cursor_up = ["k", "up"]
+cursor_right = ["l", "right"]
+prev_period = ["H"]
+next_period = ["L"]
+today = ["t"]
+view_week = ["w"]
+view_month = ["m"]
+view_year = ["Y"]
+view_schedule = ["s"]                  # upcoming events as a list
+zoom_in = ["plus"]
+zoom_out = ["minus"]
+open = ["enter"]
+new_event = ["a", "i"]
+quick_add = ["A"]                      # same as new_event
+edit_event = ["e"]
+delete_event = ["d"]                   # asks; the same key (or y) confirms
+undo = ["u"]                           # take back the last create/edit/move/delete (repeatable)
+redo = ["ctrl+r"]                      # make the last undone change again (repeatable)
+yank = ["y"]                           # copy the selected event
+paste = ["p"]                          # a copy at the cursor slot (week) or selected day;
+                                       # several copied: the first on the selected day, the rest alongside
+toggle_mark = ["tab"]                  # mark/unmark the selected event; y copies all marked
+duplicate = ["D"]                      # a copy of the selected event on the next day
+# Moves: tmux often takes ctrl+h/j/k/l, so the first keys are plain ones.
+grid_mode = ["v"]                      # week: the cursor keys move a slot cursor (grid_step)
+                                       # instead of between events (again or escape: back)
+move_down = ["J", "ctrl+j"]            # selected event 15 min later (week)
+move_up = ["K", "ctrl+k"]              # selected event 15 min earlier (week)
+move_left = ["less_than_sign", "ctrl+h"]     # "<": selected event one day earlier
+move_right = ["greater_than_sign", "ctrl+l"] # ">": selected event one day later
+# Resize mode (week): cursor_up/cursor_down move the selected event's end (the key again:
+# its start) to the previous/next quarter hour; escape leaves.
+resize_mode = ["o"]
+flash = ["f"]                          # week: labels on events and slots, type one to jump there
+goto_date = ["g"]
+search = ["slash"]
+sync = ["r"]
+sync_log = ["R"]                       # recent sync warnings and errors
+focus_calendars = ["c"]
+focus_minical = ["M"]                  # the mini month: move with the cursor keys, enter jumps
+toggle_calendar = ["space"]           # in the calendar list (enter works too)
+toggle_sidebar = ["b"]
+help = ["question_mark"]
+quit = ["q"]
+save = ["ctrl+s"]                      # event prompt / form (enter saves too, except in the notes)
+cancel = ["escape"]                    # close the prompt / form / a dialog; leave resize / grid mode; clear the marks
