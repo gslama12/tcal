@@ -43,11 +43,16 @@ class SyncSummary:
         text = f"{self.calendars} calendars, {self.events} events"
         if self.pushed:
             text += f", pushed {self.pushed} change(s)"
+        return ", ".join([text, *self.problems()])
+
+    def problems(self) -> list[str]:
+        """What went wrong although the sync succeeded, in short phrases."""
+        problems = []
         if self.conflicts:
-            text += f", {len(self.conflicts)} conflict(s) (server version kept)"
+            problems.append(f"{len(self.conflicts)} conflict(s) (server version kept)")
         if self.failed:
-            text += f", could not fetch {', '.join(self.failed)}"
-        return text
+            problems.append(f"could not fetch {', '.join(self.failed)}")
+        return problems
 
 
 class SyncEngine:

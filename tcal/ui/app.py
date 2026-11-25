@@ -26,9 +26,9 @@ The sidebar hides itself below ``SIDEBAR_MIN_WIDTH`` columns (and again when foc
 leaves it there); once the user toggles it, that choice wins over resizes.
 """
 
+import asyncio
 import logging
 from collections import deque
-from collections.abc import Callable
 from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 
@@ -41,6 +41,7 @@ from textual.widgets import ContentSwitcher
 from textual.worker import Worker, WorkerState
 
 from tcal import paths
+from tcal.background import Job, SyncRunner
 from tcal.config import Config, default_data, describe_conflicts, key_conflicts, load_config
 from tcal.model import Calendar, Event, Occurrence
 from tcal.source import EventSource
@@ -126,13 +127,13 @@ class TcalApp(App[None]):
         source: EventSource,
         config: Config | None = None,
         today: date | None = None,
-        sync: Callable[[], SyncSummary] | None = None,
+        sync: Job | None = None,
     ) -> None:
-        """``sync`` runs one sync (in a worker thread): on startup, every
+        """``sync`` runs one sync (in a background thread): on startup, every
         ``[sync] interval``, on the sync key and after edits. None = no syncing."""
         super().__init__()
         self.source = source
-        self._sync = sync
+        self.sync_runner = SyncRunner(sync) if sync else None  # outlives the TUI on quit
         self.sync_status = SyncStatus()  # shown in the status bar
         self._sync_again = False  # asked for while a sync was running
         self._sync_by_key = False  # the running sync was asked for with the sync key
@@ -352,7 +353,7 @@ class TcalApp(App[None]):
     def request_sync(self) -> None:
         """Start a background sync; while one is running, edits are pushed by another one
         right after it. (Nothing happens if syncing is off.)"""
-        if self._sync is None:
+        if self.sync_runner is None:
             return
         if any(w.group == "sync" and not w.is_finished for w in self.workers):
             self._sync_again = True
@@ -360,7 +361,9 @@ class TcalApp(App[None]):
         self._sync_again = False
         self.sync_status = self.sync_status.started()
         self.refresh_data()
-        self.run_worker(self._sync, group="sync", thread=True, exit_on_error=False)
+        # The worker only waits: quitting cancels it, the sync runs on (``finish_sync``).
+        future = asyncio.wrap_future(self.sync_runner.start())
+        self.run_worker(future, group="sync", exit_on_error=False)
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         worker = event.worker
@@ -502,7 +505,7 @@ class TcalApp(App[None]):
                 timeout=15,
             )
         self.focus_view()
-        if self._sync is not None:
+        if self.sync_runner is not None:
             self.request_sync()
             self.set_interval(self.config.sync.interval, self.request_sync)
 
@@ -682,7 +685,7 @@ class TcalApp(App[None]):
         self.push_screen(EventDetail(occ))
 
     def action_sync(self) -> None:
-        if self._sync is None:
+        if self.sync_runner is None:
             self.notify("Syncing is off (no account)")
             return
         self._sync_by_key = True

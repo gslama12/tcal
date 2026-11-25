@@ -8,6 +8,7 @@ helps with the config file.
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from functools import partial
 
 import click
 
@@ -78,6 +79,7 @@ def cli(ctx: click.Context, demo: bool) -> None:
     config = _config()
     log_to_file(paths.log_file())
 
+    from tcal.background import finish_sync
     from tcal.providers.fake import FakeProvider, demo_feed
     from tcal.source import StoreSource
     from tcal.store import Store
@@ -94,7 +96,10 @@ def cli(ctx: click.Context, demo: bool) -> None:
         database = paths.database_file()
         sync = sync_job(connect(config), database, config.sync, subscriptions=_feeds(config))
     with Store(database) as store:
-        TcalApp(StoreSource(store), config, sync=sync).run()
+        app = TcalApp(StoreSource(store), config, sync=sync)
+        app.run()
+        if app.sync_runner is not None:
+            finish_sync(app.sync_runner, store.pending_count, partial(click.echo, err=True))
 
 
 @cli.command()
