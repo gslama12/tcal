@@ -7,6 +7,7 @@ from textual import events
 from textual.widgets import Input
 
 from tcal.model import Event, Occurrence
+from tcal.store import PendingOp
 from tcal.tz import local_midnight, local_zone
 from tcal.ui.clipboard import copy_at, shifted
 from tcal.ui.screens.prompt import Prompt
@@ -204,7 +205,8 @@ async def test_move_one_instance_or_the_series(make_app) -> None:
 def resynced(app, store, uid: str) -> None:
     """What a background sync does to a pushed event: a new etag, then a redraw."""
     event = store.get_event(uid)
-    store.set_remote(uid, event.href, f"{event.etag}-synced")
+    done = replace(event, etag=f"{event.etag}-synced")
+    store.record_push(PendingOp(0, "update", event), done)
     app.refresh_data()
 
 
