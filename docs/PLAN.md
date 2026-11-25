@@ -48,7 +48,8 @@ tcal/
     fake.py          in-memory provider for tests and `--demo`
     ics_url.py       read-only `[[subscription]]` feeds (webcal/https)
   sync.py            SyncEngine: push pending ops, then pull window (today -3 months .. +12 months);
-                     runs in a Textual worker, periodic (config interval)
+                     runs in the background, periodic (config interval)
+  background.py      SyncRunner: syncs in daemon threads; finish_sync: wait for one after quitting
   credentials.py     password from: keyring -> `password_cmd` in config -> TCAL_PASSWORD env
   source.py          EventSource / StoreSource: the UI's only data access
   tz.py              local zone
@@ -843,3 +844,17 @@ Supersedes the event form (E3 ff.) and the quick-add screen (QA1, QA3): both are
 - **EF4 Changes to the old form:** saving unchanged closes without saving (no override, no undo
   step); ticking "All day" rewrites a series' UNTIL as a date (or back); locations of several
   lines are shown on one and kept unless changed; an unchanged zero-length event can be saved.
+
+### Quitting during a sync (quit-sync, user request)
+
+- **QS1 Cause:** a Textual thread worker runs in asyncio's executor, which `asyncio.run` joins
+  silently after the TUI has closed. Syncs now run in daemon threads (`tcal/background.SyncRunner`,
+  `app.sync_runner`; replaces B3's thread worker); the app's worker only awaits the result.
+- **QS2 After the TUI:** `finish_sync` (called by the CLI) prints to stderr "tcal: syncing… (ctrl+c
+  to quit without waiting)", waits, pushes edits made during that sync with a second one, then
+  prints "tcal: synced" (plus conflicts/failed feeds) or the error. Nothing when idle.
+- **QS3 ctrl+c:** exits right away (code 0); the daemon thread dies with the process. Ops stay
+  queued until answered, open transactions roll back, and a PUT that had arrived is recognised
+  at the next start (FE3).
+- **QS4:** idle with edits still queued (the last sync failed, e.g. offline): no new attempt, just
+  "tcal: N changes stay queued for the next start".

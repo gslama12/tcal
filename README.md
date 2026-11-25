@@ -293,6 +293,8 @@ pending (`↑N pending` in the status bar); it is rebuilt by the next sync.
   (exit code 1). It never writes and prints no password.
 - **Status bar:** `✓ synced 14:02`, `offline` (no network; edits stay queued as `↑N pending`),
   `⚠ … failed` (a subscription feed). `r` syncs now and reports the result as a toast.
+- **Quitting during a sync:** tcal says `syncing…` in the terminal and waits for it; ctrl+c leaves
+  at once (unsynced edits stay queued for the next start).
 - **`tcal sync`** runs one sync in the terminal and prints the error, if any.
 - **Sync log:** `R` lists this session's sync warnings and errors (e.g. an unreadable event
   that was skipped, a feed that failed); warnings are also toasted once. Conflicts (the server
