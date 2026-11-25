@@ -21,7 +21,7 @@ async def test_keys(make_app, key: str, result: int | None) -> None:
         assert answers == [result] and not isinstance(app.screen, Prompt)
 
 
-@pytest.mark.parametrize(("hint", "result"), [("o", 1), ("d", 2), ("esc", None)])
+@pytest.mark.parametrize(("hint", "result"), [("o", 1), ("d", 2), ("cancel", None)])
 async def test_clicking_a_hint_chooses_it(make_app, hint: str, result: int | None) -> None:
     app = make_app()
     answers: list[int | None] = []
