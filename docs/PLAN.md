@@ -27,8 +27,8 @@ tcal/
   __main__.py        click CLI: `tcal` (TUI, `--demo`), `tcal login|sync|calendars|doctor`,
                      `tcal config path|edit|check`
   dates.py           pure date helpers: parse_date (goto, event prompt), add_months
-  quickadd.py        the event prompt's language: parse, to_text, apply
-  repeat.py          RRULEs in words (display, and as the prompt takes them)
+  quickadd.py        the event prompt's language: parse, apply
+  repeat.py          RRULEs in words, and their ends (UNTIL)
   doctor.py          `tcal doctor` checks
   ics.py             iCalendar text <-> Event (edits written into Event.raw), extras
   paths.py           XDG paths; TCAL_HOME env var relocates config/data/cache into one dir
@@ -56,7 +56,7 @@ tcal/
     app.py           TcalApp: layout, bindings from config, data seam, sync, actions
     state.py         immutable AppState (day, view, hidden calendars)
     keys.py          binding(action): Binding.id == [keys] action
-    editing.py       Editor: event prompt, yank/paste/duplicate, moves, resizes
+    editing.py       Editor: event prompt and form, yank/paste/duplicate, moves, resizes
     undo.py          UndoHistory (undo + redo); clipboard.py: pure event transforms
     timelayout.py    time-grid geometry; timepaint.py: pure painting; canvas.py; calgrid.py
     sync_status.py   SyncStatus for the status bar
@@ -74,10 +74,8 @@ tcal/
       statusbar.py   mode / sync status / hints (todooit-like bar)
     screens/
       main.py        the base screen (no tab focus cycling)
-      event_prompt.py  create/edit by typing one line, live preview card (NL1)
-      event_detail.py  modal: view event, e=edit, x=delete
-
-      event_form.py  modal: create/edit (title, calendar, date, start, end, all-day, location, notes)
+      event_prompt.py  create by typing one line, live preview card (NL1)
+      event_form.py  modal: edit an event field by field (EF1; values: `ui/formvalues.py`)
       event_detail.py  modal: view event, e=edit, d=delete
       help.py        keybinding list
       goto.py        jump to date prompt (parser: `tcal/dates.py`)
@@ -741,6 +739,7 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
 ### Event prompt (nl-form)
 
 Supersedes the event form (E3 ff.) and the quick-add screen (QA1, QA3): both are gone.
+*Editing superseded by EF1–EF4 (the form is back): NL3, `to_text`, `no repeat`.*
 
 - **NL1 One screen:** `screens/event_prompt.EventPrompt(event, calendars, today, new)` for new
   events and editing: an `Input`, a live preview card, a box with the syntax. Enter (or
@@ -827,3 +826,20 @@ Supersedes the event form (E3 ff.) and the quick-add screen (QA1, QA3): both are
   at the next interval. Weak etags lose their `W/` (If-Match never matches those).
 - **FE5 Tests:** `FakeProvider(put_etags=False)` sends no etag with a PUT, `touch(uid)` renews one
   without a change; `tests/test_rapid_edits.py`.
+
+### Event form for editing (edit-form, user request)
+
+- **EF1 Two screens:** new events are typed (`EventPrompt(draft, calendars, today)`), existing ones
+  edited in `screens/event_form.EventForm(event, calendars, today)` (F2, F7–F9, H1–H3 hold again).
+  `Editor.new_event` / `edit_event` open them, `Editor.edited` (was `prompt_done`) saves. The pure
+  part (`FormValues`, `values_of`, `build_event`) is in `ui/formvalues.py`.
+- **EF2 Prompt:** its edit path is gone: `to_text`, `title_end`, `repeat_phrase`, `end_phrase`,
+  `date_text`, `no repeat`, drafts with a repeat rule; `apply(event, q, calendars)`.
+  `discard_prompt` and `server_changed_prompt` (PR1) live in `event_form.py`.
+- **EF3 Keys:** enter saves in every field except the notes (a new line; `save` there) — so a
+  choice's list opens with space and "All day" is ticked with it. Cursor up/down go between the
+  fields, left/right change a choice; letters bound to them are typed in text fields. No buttons:
+  the box's bottom border shows the focused field's keys. Cancel asks only if something changed.
+- **EF4 Changes to the old form:** saving unchanged closes without saving (no override, no undo
+  step); ticking "All day" rewrites a series' UNTIL as a date (or back); locations of several
+  lines are shown on one and kept unless changed; an unchanged zero-length event can be saved.

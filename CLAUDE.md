@@ -21,8 +21,9 @@ uv run ruff check && uv run ruff format --check && uv run mypy
 - `tcal/model.py` — `Calendar`, `Event`, `Occurrence` (aware datetimes, end exclusive).
 - `tcal/providers/` — `Provider` protocol + errors (`base.py`), `icloud.py` CalDAV,
   `fake.py` demo/test data (goes through iCalendar text and checks etags, like a server).
-- `tcal/quickadd.py` — the event prompt's language: `parse`, `to_text`, `apply` (text <-> `Event`);
-  `tcal/repeat.py` RRULEs in words; `ui/screens/event_prompt.py` the one create/edit screen.
+- `tcal/quickadd.py` — the event prompt's language: `parse`, `apply` (text -> `Event`);
+  `tcal/repeat.py` RRULEs in words; `ui/screens/event_prompt.py` creates events.
+- `ui/screens/event_form.py` edits events; its fields as text <-> `Event`: `ui/formvalues.py`.
 - `tcal/ics.py` — iCalendar text <-> `Event` (edits are written into `Event.raw`).
 - `tcal/recurrence.py` — `expand(events, start, end)` -> `Occurrence`s; `tcal/tz.py` local zone.
 - `tcal/store.py` — SQLite cache + pending-ops queue; `tcal/sync.py` — `SyncEngine`, `sync_job`.
@@ -31,7 +32,7 @@ uv run ruff check && uv run ruff format --check && uv run mypy
   (`calendars()`, `occurrences(start_day, end_day)`, `save_event`, `delete_event`).
 - `tcal/ui/app.py` — `TcalApp`: layout, bindings, data seam (incl. `save_event`/
   `delete_event`/`undo`/`redo`), sync, state changes, thin `action_*` methods.
-- `tcal/ui/editing.py` — `Editor` (`app.editor`): event prompt, yank/paste/
+- `tcal/ui/editing.py` — `Editor` (`app.editor`): event prompt and form, yank/paste/
   duplicate, moving; `tcal/ui/undo.py` — `UndoHistory` (undo + redo, `app.history`);
   `tcal/ui/clipboard.py` — pure event transforms (`copy_at`, `shifted`, `instance_of`).
 - `tcal/ui/state.py` — immutable `AppState` (selected `day`, `view`, `hidden_calendars`).

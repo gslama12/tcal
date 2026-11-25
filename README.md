@@ -43,10 +43,10 @@ and edits made offline are queued and pushed later.
 - **Events:** create, edit, delete, incl. recurring events ("this event" or "all events"),
   repeat rules with an end (on a date / after N times), alarms and invitees kept on edit.
   The detail view shows time zone, guests and their answers, alerts and URL.
-- **Event prompt** (`a` new, `e` edit): type an event as one line, like
+- **Event prompt** (`a` / `i`): type a new event as one line, like
   `Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal`, and watch it fill in below as you type
-  (what you leave out — dim — comes from the cursor slot, or the event being edited). See
-  [Typing events](#typing-events).
+  (what you leave out — dim — comes from the cursor slot). See [Typing events](#typing-events).
+- **Event form** (`e`): edit an event field by field; see [Editing events](#editing-events).
 - **Yank / paste / duplicate / move / resize** events with the keyboard (`y` `p` `D`, `J` `K`
   `<` `>`) and an **undo** stack (`u`, the last 20 changes; `ctrl+r` redoes).
 - **Resize mode** (`o` on a timed event in the week view; the status bar shows `RESIZE · END`): `j`/`k`
@@ -223,8 +223,8 @@ key list. A key bound to two actions only triggers one of them: tcal warns at st
 | `>` `ctrl+l` | Move event one day later |
 | `o` | Resize mode: up/down move the end, again: the start (esc: back) |
 | `/` | Search events |
-| **Event prompt** | |
-| `ctrl+s` | Save (as enter) |
+| **Event prompt / form** | |
+| `ctrl+s` | Save (as enter; in the form's notes enter is a new line) |
 | `esc` | Cancel / close dialog / leave resize, grid mode / clear marks |
 | **App** | |
 | `r` | Sync now |
@@ -248,7 +248,7 @@ One line; the pieces may come in any order, the rest is the title. Enter saves, 
 |---|---|
 | Date | `today`/`tod` `tomorrow`/`tom`/`tmr` `yest` `fri`/`fr` `next mon` `in 3d` `in 2 weeks` `+3d` `24.12.` `24/12` `1.1.27` `dec 24` `24 dec` `2026-12-24`, ranges `dec 3-5` `mo-fr` |
 | Time | `at 1pm` `1p` `1:30pm` `13h` `13.30` `14:00` `noon` `midnight`, right after a date also `tom 9` `fri 1330`, ranges `12:30-13:30` `10-11:30` `1-2pm` `1pm-3`; length `for 2h` `2h` `90m` `1h30`; `all day` |
-| Repeat | `daily` `every week` `every 2 weeks on mon, wed` `every weekday` `every tue, thu`, ending `until 24.12.` / `until dec` / `10 times`; `no repeat` |
+| Repeat | `daily` `every week` `every 2 weeks on mon, wed` `every weekday` `every tue, thu`, ending `until 24.12.` / `until dec` / `10 times` |
 | Place | `@Cafe Central` |
 | Calendar | `#personal` (the start of its name is enough; tab completes, again for the next) |
 | Notes | `// everything after it` |
@@ -262,9 +262,16 @@ the line. So "Meeting with Tom", "Call Tom 1pm", "Tom 1pm" (a title must remain)
 and `24.12.` are always dates, quotes never. `1p` and a number after `at` (`at 13`) are times
 where the title ends, as in `Lunch at 13 @Cafe`; slash dates are day/month, the day above 12.
 
-When editing, the line is the event as text: delete the repeat, place or notes to remove them;
-a deleted date, time or calendar stays as it was. What has no words (notes of several lines,
-rules like "every third Wednesday", invitees, alarms) is kept; `//` replaces the notes.
+## Editing events
+
+`e` (also in the event detail) opens the form: title, calendar, from / to, all day, repeat and its
+end, location, notes. `tab` / `shift+tab` and up / down go between the fields; on a calendar or
+repeat field the cursor keys left / right (`h` / `l`) change the choice and `space` opens its list
+(`j` / `k` move, enter chooses); `space` ticks "All day". Enter saves (in the notes it is a new
+line: `ctrl+s` saves there), esc cancels and asks before it discards changes. The keys of the
+focused field are shown at the bottom. Dates are typed as for goto (`fri`, `24.12.`,
+`2026-12-24`); the end follows the start. What the form doesn't show or you don't change (time
+zone, rules like "every third Wednesday", invitees, alarms) is kept.
 
 ## Files
 
@@ -340,10 +347,10 @@ account (ideally `TCAL_HOME=.tcal` first, so a fresh cache is used):
 - [ ] Yank/paste (`y`, `p`) and duplicate (`D`) → plain copies on the iPhone.
 - [ ] Batch copy: mark a week's events with `tab`, `y`, go to the next week, `p` → all copies on the
   iPhone; `u` removes them all again.
-- [ ] Move an event to another calendar (edit → another `#calendar`), sync, then undo it, sync,
+- [ ] Move an event to another calendar (edit → another calendar), sync, then undo it, sync,
       and redo it (`ctrl+r`) → one copy, in the right calendar, each time.
 - [ ] Conflict: change an event on the iPhone, then change it in tcal before syncing → the
-      iPhone version wins and tcal doesn't get stuck. With the event prompt open while the
+      iPhone version wins and tcal doesn't get stuck. With the event form open while the
       iPhone change syncs in, saving asks "overwrite / discard".
 - [ ] Offline: disable Wi-Fi, create/edit an event (`↑N pending`, status *offline*), reconnect,
       `r` → pushed. Starting tcal for the first time without network explains why it's empty.
