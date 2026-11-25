@@ -701,6 +701,11 @@ Order: 1 → (2, 3, 4 in parallel) → 5 → 6.
   and clickable key hints (todooit asks in its bar; a box was requested). Keys are the old ones
   (y, o/s, o/d); enter still takes the first choice (bold), esc and n cancel in all of them.
   Deleting is no longer red. Questions longer than 80 % of the screen's width wrap.
+- **PR2 dd (dd-delete, user request):** the `[keys] delete_event` key(s) also confirm a delete
+  (`Prompt(also=…)`: keys that take the first choice, like enter), shown as `y/d delete · n/esc
+  cancel`. For a series they mean "this event" (`o/d`), the first and smaller choice. Keys with a
+  meaning in the prompt keep it (a delete key `n` still cancels, `s` is still all events).
+  Deleting ignores the marks (they are for copying, B1): it is always the selected event.
 
 ### Cell alignment (align)
 
@@ -845,6 +850,10 @@ Supersedes the event form (E3 ff.) and the quick-add screen (QA1, QA3): both are
 - **EF4 Changes to the old form:** saving unchanged closes without saving (no override, no undo
   step); ticking "All day" rewrites a series' UNTIL as a date (or back); locations of several
   lines are shown on one and kept unless changed; an unchanged zero-length event can be saved.
+- **EF5 shift+tab (dd-delete, user report "only moves forward"):** it went back from every field
+  (pilot, pty with the raw legacy and kitty sequences, herdr) except a choice's open list, where
+  it only closed the list; `Choice.previous_field` now goes to the field before, as tab goes to
+  the next. Tests cover all fields. The bottom hint stays `tab next` (no room at 80 columns).
 
 ### Quitting during a sync (quit-sync, user request)
 

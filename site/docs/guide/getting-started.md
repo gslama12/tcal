@@ -47,7 +47,7 @@ Then, with the event selected:
 J        15 minutes later (K: earlier)
 >        a day later (<: earlier)
 e        edit it
-d        delete it
+dd       delete it
 u        undo any of these
 ```
 

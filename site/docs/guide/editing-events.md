@@ -49,8 +49,13 @@ The same question comes up when you [move](/guide/move-copy),
 
 ## Deleting
 
-`d` deletes the selected event after a `y`; a repeating one asks this event or
-all events. [`u`](/guide/undo) brings it back.
+`d` deletes the selected event; it asks first, and `y` or `d` again confirms
+(`n` or `esc` keeps it). So `dd` deletes an event.
+
+Of a repeating event it asks for this event (`o`, or `d` again) or all events
+(`s`). [`u`](/guide/undo) brings it back.
+
+If you [gave deleting another key](/reference/configuration#keys), that key confirms.
 
 ## Read-only events
 
