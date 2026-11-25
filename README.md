@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-9ECE6A?style=flat-square)](LICENSE)
 
 A keyboard-driven calendar for the terminal that syncs with iCloud: vim-like keys, events
-typed in words and a layout like Google Calendar's. It works offline too: edits are queued and
+typed in words and a familiar layout. It works offline too: edits are queued and
 synced in the background. Built with [Textual](https://textual.textualize.io/).
 
 <p align="center">
@@ -30,7 +30,7 @@ synced in the background. Built with [Textual](https://textual.textualize.io/).
 
 ## Install
 
-Needs Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+Needs Python 3.11+, Jet Brains Mono Nerd Font and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone https://github.com/gslama12/tcal
@@ -55,6 +55,8 @@ If something doesn't work, `tcal doctor` checks the setup step by step. See
 [iCloud](https://gslama12.github.io/tcal/guide/icloud) and
 [Troubleshooting](https://gslama12.github.io/tcal/reference/troubleshooting).
 
+> [!TIP]
+> For Google Calendar support, just ask your agent to write it and open a PR. Currently only Apple Calendar is supported.
 
 ## Configuration
 
