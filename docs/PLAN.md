@@ -13,7 +13,7 @@ Look & feel modelled on todooit; layout modelled on the Google Calendar web app.
   sidebar, event CRUD (incl. recurring scopes, repeat ends), detail extras, quick add,
   yank/paste/duplicate/move, undo stack (20), goto, search, help, iCloud CalDAV sync with
   offline queue, subscriptions, `tcal login|sync|calendars|doctor|config`, five themes.
-  User docs: README.md (key table from `scripts/keys_table.py`, checked by `tests/test_readme.py`).
+  User docs: README.md and the docs site (see "Docs site").
 - **Not verified:** everything against a real iCloud account (only the fake server in
   `tests/icloud_http.py`) — see README "What I need you to test".
 - **Open:** no log file — `logging` warnings from sync (skipped resources) are not visible
@@ -858,3 +858,13 @@ Supersedes the event form (E3 ff.) and the quick-add screen (QA1, QA3): both are
   at the next start (FE3).
 - **QS4:** idle with edits still queued (the last sync failed, e.g. offline): no new attempt, just
   "tcal: N changes stay queued for the next start".
+
+### Docs site (docs-site, user request)
+
+- **DS1:** `site/` is a VitePress site in todooit's style (base `/tcal/`, deployed to GitHub Pages by
+  `.github/workflows/docs.yml` on a push to main). The key table (`scripts/keys_table.py`) moved from
+  README.md to `site/docs/guide/keybindings.md`; `tests/test_docs_keys.py` (was `test_readme.py`)
+  checks it there.
+- **DS2:** `site/scripts/screenshots.py` and `demo.py` run the demo data through Textual's pilot at
+  a fixed time (time-machine; fonttools and Pillow too only via `uv run --with`), with `HOME`
+  in a temp dir rather than `TCAL_HOME`, so the paths shown are the default ones.

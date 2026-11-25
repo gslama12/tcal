@@ -50,6 +50,8 @@ uv run ruff check && uv run ruff format --check && uv run mypy
   `state.resize`, `app.set_resize`).
 - `tcal/ui/widgets/` — one widget per module; subclass `TcalWidget`/`CalendarView`
   from `base.py` and redraw in `on_state`.
+- `site/` — VitePress docs site; screenshots and demo GIF: `site/scripts/` (see its Development page).
+  After changing keys or help texts: `scripts/keys_table.py` into `guide/keybindings.md`.
 
 ## Conventions
 
