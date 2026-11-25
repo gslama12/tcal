@@ -134,14 +134,6 @@ def _parse_date(text: str, today: date) -> date | None:
     return None
 
 
-def date_text(day: date, today: date) -> str:
-    """``day`` as ``parse_date`` reads it back: "wed 18 nov", with the year if it isn't
-    ``today``'s."""
-    month = MONTHS[day.month - 1][:3]
-    year = "" if day.year == today.year else f" {day.year}"
-    return f"{WEEKDAYS[day.weekday()][:3]} {day.day} {month}{year}"
-
-
 def parse_jump(text: str, today: date) -> date | None:
     """``parse_date`` plus the forms only goto takes (in the event prompt they would eat title
     words like "may" or "2027"): a month ``dec`` / ``jan 2027`` (its first day, in today's

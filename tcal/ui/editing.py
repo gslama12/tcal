@@ -1,5 +1,5 @@
-"""Event editing flows behind TcalApp's keys: the event prompt (new, edit
-"this/all events"), the yank/paste/duplicate clipboard (one event, or the
+"""Event editing flows behind TcalApp's keys: the event prompt (new), the event
+form (edit "this/all events"), the yank/paste/duplicate clipboard (one event, or the
 tab-marked ones as a batch), moving and resizing events.
 
 ``Editor(app)`` only opens screens and calls the app's data seam
@@ -22,6 +22,7 @@ from tcal.ui.screens.event_detail import (
     short_when,
     time_range,
 )
+from tcal.ui.screens.event_form import EventForm
 from tcal.ui.screens.event_prompt import EventPrompt
 from tcal.ui.state import Edge
 from tcal.ui.widgets.timegrid import TimeGrid
@@ -35,7 +36,7 @@ class Editor:
         self.app = app
         self.yanked: list[Occurrence] = []  # the yank key's copy, by start
 
-    # ----- event prompt ---------------------------------------------------
+    # ----- event prompt & form --------------------------------------------
 
     def new_event(self, start: date | datetime) -> None:
         """Open the prompt for a new event at a time slot (1 h) or on a day (all-day)."""
@@ -46,16 +47,14 @@ class Editor:
         if not (writable := self._writable()):
             return
         draft = Event(f"{uuid4()}@tcal", self._default(writable).id, "", begin, end, all_day)
-        self._open(draft, new=True)
+        prompt = EventPrompt(draft, self.app.calendars(), date.today())
+        self.app.push_screen(prompt, self.edited)
 
     def edit_event(self, event: Event) -> None:
-        """Open the prompt for an existing event (a master edits the whole series)."""
+        """Open the form for an existing event (a master edits the whole series)."""
         if self.app.check_writable(event.calendar_id):
-            self._open(event, new=False)
-
-    def _open(self, event: Event, new: bool) -> None:
-        prompt = EventPrompt(event, self.app.calendars(), date.today(), new)
-        self.app.push_screen(prompt, self.prompt_done)
+            form = EventForm(event, self._writable(), date.today())
+            self.app.push_screen(form, self.edited)
 
     def edit_occurrence(self, occurrence: Occurrence) -> None:
         """Edit ``occurrence``; for a series ask "this event" (an override with a
@@ -74,7 +73,7 @@ class Editor:
 
         self.app.push_screen(scope_prompt("Edit", occurrence), done)
 
-    def prompt_done(self, event: Event | None) -> None:
+    def edited(self, event: Event | None) -> None:
         """Save a new/edited event and toast "Saved “X” · u undo"; a hidden calendar
         it lands in is shown again. The event is selected (unless all events of a
         series were edited)."""

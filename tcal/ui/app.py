@@ -14,12 +14,12 @@ Public API for widgets/screens: ``state``, ``config``, ``palette``,
 ``calendars()``, ``calendar()``, ``calendar_color()``, ``occurrences()``, ``select_date()``,
 ``set_view()``, ``set_grid_mode()``, ``set_resize()``, ``toggle_calendar()``, ``refresh_data()``, ``current_occurrence()``, ``save_event()``,
 ``delete_event()``, ``undo()``, ``redo()``, ``request_sync()``, ``show_occurrence()``, ``sync_status``, ``sync_log``,
-``new_event()``, ``edit_event()``, ``edit_occurrence()`` (open the event prompt),
+``new_event()`` (opens the event prompt), ``edit_event()``, ``edit_occurrence()`` (the form),
 ``check_writable()``, ``focus_view()``, ``selected_occurrence()``, ``select_in_view()``,
 ``save_events()`` (several as one undo step), ``toggle_mark()``, ``clear_marks()``,
 ``marked_occurrences()`` (the tab-marked events for a batch yank).
 
-Editing flows (event prompt, clipboard, moving, resizing) live in ``tcal.ui.editing.Editor``
+Editing flows (event prompt and form, clipboard, moving, resizing) live in ``tcal.ui.editing.Editor``
 (``app.editor``), the undo stack in ``tcal.ui.undo`` (``app.history``).
 
 The sidebar hides itself below ``SIDEBAR_MIN_WIDTH`` columns (and again when focus
@@ -325,14 +325,14 @@ class TcalApp(App[None]):
         self.request_sync()
         return inverse
 
-    # ----- event prompt (``Editor``) -------------------------------------
+    # ----- event prompt and form (``Editor``) ----------------------------
 
     def new_event(self, start: date | datetime) -> None:
         """Open the prompt for a new event at a time slot (1 h) or on a day (all-day)."""
         self.editor.new_event(start)
 
     def edit_event(self, event: Event) -> None:
-        """Open the prompt for an existing event (a master edits the whole series)."""
+        """Open the form for an existing event (a master edits the whole series)."""
         self.editor.edit_event(event)
 
     def edit_occurrence(self, occurrence: Occurrence) -> None:

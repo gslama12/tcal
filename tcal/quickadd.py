@@ -1,9 +1,8 @@
-"""The event prompt's language: one line of text <-> an event.
+"""The event prompt's language: one line of text for a new event.
 
 ``parse("Lunch with Anna tomorrow 12:30-13:30 @Cafe Central #Personal", today, names)``
 -> ``QuickAdd(summary="Lunch with Anna", start=..12:30, end=..13:30, all_day=False,
-location="Cafe Central", calendar="Personal")``. ``to_text(event, today)`` writes such a
-line for an event (``parse`` reads it back); ``apply`` puts a parsed line into an event.
+location="Cafe Central", calendar="Personal")``; ``apply`` puts a parsed line into an event.
 
 Rules (case-insensitive; the pieces may come in any order):
 - ``"..."`` is taken literally (quotes around the whole title or location are dropped);
@@ -23,7 +22,7 @@ Rules (case-insensitive; the pieces may come in any order):
   ``weekdays`` (Mon–Fri) and ``every <weekday>`` (also a list: ``every mon and wed``, ``every
   tue, thu``, ``every mo, we``); the first one is on or after the date. A repeat word that
   starts the line is part of the title ("Weekly review fri"). Ends: ``until 24.12.`` /
-  ``until dec`` (through that month), ``10 times``. ``no repeat``: none.
+  ``until dec`` (through that month), ``10 times``.
 - a date in any of goto's forms (``fri``, ``next fri``, ``in 2 days``, ``24.12.``, ``dec 24``,
   ``+2w``, ``in 3d``, ``1.1.27``, ``tonight``, ``tmr``), optionally after ``on``. A range
   ``dec 3 - dec 5`` / ``dec 3-5`` / ``1.12.-3.12.`` / ``mon-fri`` spans several days (with a
@@ -37,19 +36,17 @@ Rules (case-insensitive; the pieces may come in any order):
   location only before a time; a slash date never is one there ("Main St 14/3").
 - `` @``: everything after it (at a word start) (once the pieces above are taken out) is the location.
 
-What the line leaves out comes from ``draft`` (a new event's slot, an edited event): the date,
-the time of day and duration, notes, and a repeat rule the prompt has no words for. Without a
-``draft``: today, all day (a duration is then ignored).
+What the line leaves out comes from ``draft`` (the slot of the new event): the date, the time
+of day and the duration. Without a ``draft``: today, all day (a duration is then ignored).
 """
 
 import re
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
-from itertools import product
 
-from tcal.dates import WEEKDAYS, add_months, date_text, month_number, parse_date
+from tcal.dates import WEEKDAYS, add_months, month_number, parse_date
 from tcal.model import Calendar, Event
-from tcal.repeat import end_phrase, repeat_phrase, until_part, without_end
+from tcal.repeat import until_part
 from tcal.tz import local_midnight, local_zone
 
 DEFAULT_DURATION = timedelta(hours=1)
@@ -96,7 +93,6 @@ _REPEAT = re.compile(
     r"|(daily|weekly|monthly|yearly)|(?:(?:every|on)\s+)?weekdays|every\s+weekday)\b",
     re.IGNORECASE,
 )
-_NO_REPEAT = re.compile(r"\bno\s+repeat\b", re.IGNORECASE)
 _TIMES = re.compile(r"(?:\bfor\s+)?(?<![\d.:/-])\b([1-9]\d{0,3})\s+times\b", re.IGNORECASE)
 _UNTIL = re.compile(r"\b(?:until|till?)\s+", re.IGNORECASE)
 _UNTIL_MONTH = re.compile(r"([a-z]+)\.?(?:\s+(\d{4}))?", re.IGNORECASE)
@@ -172,10 +168,6 @@ def _unmask(text: str, literals: dict[str, str]) -> str:
     if text in literals:
         return re.sub(r"\\(.)", r"\1", literals[text][1:-1])
     return "".join(literals.get(c, c) for c in text)
-
-
-def _quote(text: str) -> str:
-    return '"' + re.sub(r'(["\\])', r"\\\1", text) + '"'
 
 
 def _half(suffix: str | None) -> str:
@@ -461,16 +453,6 @@ def _take_duration(text: str) -> tuple[timedelta | None, str]:
     return None, text
 
 
-def _days_of(event: Event) -> tuple[date, date]:
-    """The first and last day of ``event`` as written (local): the same day if it ends
-    within a day, at an earlier time."""
-    start, end = event.start.astimezone(local_zone()), event.end.astimezone(local_zone())
-    if event.all_day:
-        return start.date(), max((end - timedelta(days=1)).date(), start.date())
-    overnight = end.date() == start.date() + timedelta(days=1) and end.time() <= start.time()
-    return start.date(), start.date() if overnight else end.date()
-
-
 def parse(text: str, today: date, calendars: list[str], draft: Event | None = None) -> QuickAdd:
     """Parse a prompt line; see the module docstring for the rules."""
     masked, literals, notes = _mask(text)
@@ -478,11 +460,8 @@ def parse(text: str, today: date, calendars: list[str], draft: Event | None = No
     warnings: list[str] = []
     error = f"No calendar “{unknown}”" if unknown else ""
 
-    no_repeat, rest = _take(_NO_REPEAT, rest)
     repeat, rest = _take_repeat(rest)
     rule, weekdays = repeat or (None, None)
-    if not repeat and not no_repeat and draft and draft.rrule and not repeat_phrase(draft.rrule):
-        rule = without_end(draft.rrule)  # no words for it: kept
     series_end = ""
     if rule:
         series_end, rest = _take_end(rest, today)
@@ -503,7 +482,8 @@ def parse(text: str, today: date, calendars: list[str], draft: Event | None = No
         times = None if start is None else (start, None)
     has_time = times is not None or all_day is not None
 
-    day, last = days or (_days_of(draft) if draft else (today, today))
+    first = draft.start.astimezone(local_zone()).date() if draft else today
+    day, last = days or (first, first)
     offset = _first_on(day, weekdays) - day  # "every mon" from a Wednesday: next Monday
     day, last = day + offset, last + offset
 
@@ -513,10 +493,9 @@ def parse(text: str, today: date, calendars: list[str], draft: Event | None = No
         if times or duration:
             warnings.append("All day: the time is ignored")
         times = None
-    elif times is None and timed_draft and (not days or day == last):
+    elif times is None and timed_draft and day == last:
         local = timed_draft.start.astimezone(local_zone())
         times = local.time(), None
-        last = day
         has_time = duration is not None
     elif times is None and duration:
         warnings.append("All day: a duration needs a start time")
@@ -526,8 +505,6 @@ def parse(text: str, today: date, calendars: list[str], draft: Event | None = No
     else:
         start_dt = datetime.combine(day, times[0], local_zone())
         if times[1] is None:
-            if not days:
-                last = day
             if duration is None:  # the draft's, unless the days span more
                 duration = default if last == day else DEFAULT_DURATION
             end_dt = datetime.combine(last, times[0], local_zone()) + duration
@@ -561,76 +538,23 @@ def parse(text: str, today: date, calendars: list[str], draft: Event | None = No
         notes,
         has_date=days is not None,
         has_time=has_time,
-        has_repeat=bool(repeat or no_repeat),
+        has_repeat=repeat is not None,
         warnings=tuple(warnings),
         error=error,
     )
 
 
-def _flat(text: str) -> str:
-    """``text`` on one line, as the prompt shows it."""
-    return ", ".join(line.strip() for line in text.splitlines() if line.strip())
-
-
-def to_text(event: Event, today: date, calendar: str = "") -> str:
-    """``event`` as a prompt line that ``parse`` reads back (title and location are quoted if
-    they'd be misread). Left out: notes of several lines, a repeat rule without words for it
-    (not its end); ``parse`` keeps both with ``event`` as its draft."""
-    first, last = _days_of(event)
-    start, end = event.start.astimezone(local_zone()), event.end.astimezone(local_zone())
-    when = [date_text(first, today)]
-    if last > first:
-        when.append(f"- {date_text(last, today)}")
-    if event.all_day:
-        when.append("all day")
-    else:
-        when.append(f"{start:%H:%M}" + (f"-{end:%H:%M}" if end > start else ""))
-    if event.rrule:
-        when += [repeat_phrase(event.rrule) or "", end_phrase(event.rrule, first)]
-    if calendar:
-        when.append(f"#{calendar}")
-    title, location = _flat(event.summary), _flat(event.location)
-    notes = event.description.strip()
-    tail = [f"// {notes}"] if notes and "\n" not in notes else []
-    line = ""
-    for quote_title, quote_location in product((False, True), repeat=2):
-        place = _quote(location) if quote_location else location
-        pieces = [_quote(title) if quote_title and title else title, *when]
-        line = " ".join(p for p in [*pieces, f"@{place}" if place else "", *tail] if p)
-        q = parse(line, today, [calendar] if calendar else [], event)
-        if (q.summary, q.location, q.warnings) == (title, location, ()) and (
-            (q.start, q.end, q.error) == (start, end, "")
-        ):
-            break
-    return line
-
-
-def title_end(text: str, event: Event) -> int:
-    """Where the title ends in ``to_text``'s line for ``event`` (inside its quotes)."""
-    title = _flat(event.summary)
-    quoted = None if text.startswith(title) else _QUOTED.match(text)
-    return quoted.end() - 1 if quoted else len(title)
-
-
-def apply(event: Event, q: QuickAdd, shown: QuickAdd, calendars: list[Calendar]) -> Event:
-    """``event`` with ``q`` put into it. What ``q`` has in common with ``shown`` (the line the
-    prompt was opened with) keeps the event's own values: time zones, line breaks, an exact
-    repeat rule. An instance of a series keeps its calendar and has no repeat rule."""
-    calendar_id, rrule = event.calendar_id, event.rrule
-    if event.recurrence_id is None:
-        if q.calendar not in (None, shown.calendar):
-            calendar_id = next(c.id for c in calendars if c.name == q.calendar)
-        if q.rrule != shown.rrule:
-            rrule = q.rrule
-    same_kind = q.all_day == shown.all_day
+def apply(event: Event, q: QuickAdd, calendars: list[Calendar]) -> Event:
+    """``event`` (a draft) with ``q`` put into it."""
+    calendar_id = next((c.id for c in calendars if c.name == q.calendar), event.calendar_id)
     return replace(
         event,
-        summary=event.summary if q.summary == shown.summary else q.summary,
+        summary=q.summary,
         calendar_id=calendar_id,
-        start=event.start if same_kind and q.start == shown.start else q.start,
-        end=event.end if same_kind and q.end == shown.end else q.end,
+        start=q.start,
+        end=q.end,
         all_day=q.all_day,
-        location=event.location if q.location == shown.location else q.location,
-        description=event.description if q.notes == shown.notes else q.notes or "",
-        rrule=rrule,
+        location=q.location,
+        description=q.notes or "",
+        rrule=q.rrule,
     )
