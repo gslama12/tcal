@@ -101,7 +101,9 @@ class AllDay(Checkbox, inherit_bindings=False):
 
 
 class Choice(Select[str], inherit_bindings=False):
-    """A Select for the cursor keys: left/right change it, up/down move in its open list."""
+    """A Select for the cursor keys: left/right change it, up/down move in its open list.
+    Shift+tab goes to the previous field from the open list too (Textual's goes to the Select).
+    """
 
     BINDINGS = [
         Binding("space", "show_overlay", show=False),
@@ -109,6 +111,7 @@ class Choice(Select[str], inherit_bindings=False):
         binding("cursor_right", action="change(1)"),
         binding("cursor_down", action="move(1)"),
         binding("cursor_up", action="move(-1)"),
+        Binding("shift+tab", "previous_field", show=False),
     ]
 
     def __init__(self, labels: dict[str, str], value: str, id: str, disabled: bool = False) -> None:
@@ -137,6 +140,10 @@ class Choice(Select[str], inherit_bindings=False):
             options.action_cursor_down()
         else:
             options.action_cursor_up()
+
+    def action_previous_field(self) -> None:
+        self.screen.set_focus(self)  # (the open list has it)
+        self.screen.focus_previous()
 
 
 class EventForm(ModalScreen[Event | None]):

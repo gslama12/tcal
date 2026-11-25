@@ -352,6 +352,38 @@ async def test_custom_cursor_keys(make_app, write_config) -> None:
         assert saved.all_day and saved.calendar_id == "personal"
 
 
+async def test_tab_and_shift_tab_go_through_all_fields(make_app) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 50)) as pilot:
+        await open_form(app, pilot, "Standup", "s")  # with the "Ends" row
+        there = [app.focused]
+        while app.focused is not there[0] or len(there) == 1:
+            await pilot.press("tab")
+            there.append(app.focused)
+        assert {type(w) for w in there} == {Input, Choice, AllDay, TextArea}
+        back = [app.focused]
+        for _ in there[1:]:
+            await pilot.press("shift+tab")
+            back.append(app.focused)
+        assert back == there[::-1]
+
+
+@pytest.mark.parametrize(
+    ("key", "target"), [("tab", "start_date"), ("shift+tab", "title")], ids=["tab", "shift+tab"]
+)
+async def test_leaving_an_open_list(make_app, key: str, target: str) -> None:
+    app = make_app()
+    async with app.run_test(size=(120, 50)) as pilot:
+        form = await open_form(app, pilot)
+        await pilot.press("tab", "space")
+        await pilot.pause()
+        calendar = form.query_one("#calendar", Choice)
+        assert calendar.expanded
+        await pilot.press(key)
+        await pilot.pause()
+        assert field(app, target).has_focus and not calendar.expanded
+
+
 async def test_enter_is_a_new_line_in_the_notes(make_app) -> None:
     app = make_app()
     async with app.run_test(size=(120, 50)) as pilot:
