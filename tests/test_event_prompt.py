@@ -47,16 +47,6 @@ async def open_new(app, pilot, start) -> Input:
     return app.screen.query_one(Input)
 
 
-async def open_edit(app, pilot, occ, scope: str = "") -> Input:
-    app.edit_occurrence(occ)
-    await pilot.pause()
-    if scope:
-        await pilot.press(scope)
-        await pilot.pause()
-    assert isinstance(app.screen, EventPrompt)
-    return app.screen.query_one(Input)
-
-
 def test_when_texts() -> None:
     assert when_texts(at(10), at(11, 30), False) == ("Wed 18 Nov 2026", "10:00 – 11:30")
     assert when_texts(at(22), at(1, day=TODAY + DAY), False) == (
@@ -189,80 +179,11 @@ async def test_new_events_default_to_a_shown_calendar_and_show_a_hidden_one(make
         assert find(app, "Meeting").calendar_id == "work"
 
 
-async def test_edit_round_trip(make_app) -> None:
-    app = make_app()
-    async with app.run_test(size=(120, 40)) as pilot:
-        dentist = find(app, "Dentist")
-        line = await open_edit(app, pilot, dentist)
-        assert line.value.startswith("Dentist wed 18 nov")
-        await pilot.press("enter")  # unchanged
-        unchanged = find(app, "Dentist").event
-        assert (unchanged.start, unchanged.location) == (
-            dentist.start,
-            dentist.event.location,
-        )
-        line = await open_edit(app, pilot, find(app, "Dentist"))
-        await pilot.press("X")  # typing appends to the title
-        assert line.value.startswith("DentistX wed 18 nov")
-        line.value = line.value.replace("@Dr. Huber", "@Main St 1")
-        await pilot.press("enter")
-        assert find(app, "DentistX").event.location == "Main St 1"
-
-
-async def test_edit_key_and_read_only(make_app) -> None:
-    app = make_app()
-    async with app.run_test(size=(120, 40)) as pilot:
-        await pilot.press("j")
-        occ = app.query_one(TimeGrid).selected
-        assert occ is not None
-        await pilot.press("e")
-        if occ.event.rrule:
-            await pilot.press("s")
-        assert app.screen.query_one(Input).value.startswith(occ.summary)
-        await pilot.press("escape")
-        year = app.source.occurrences(TODAY, TODAY + 400 * DAY)
-        app.edit_event(next(o for o in year if o.calendar_id == "holidays").event)
-        await pilot.pause()
-        assert not isinstance(app.screen, EventPrompt)
-        assert any(n.message == "Holidays is read-only" for n in app._notifications)
-
-
-async def test_edit_this_event_of_a_series_writes_an_override(make_app) -> None:
-    app = make_app()
-    async with app.run_test(size=(120, 40)) as pilot:
-        line = await open_edit(app, pilot, find(app), "o")
-        assert line.border_title == "Edit this event"
-        assert line.value == "Standup wed 18 nov 09:00-09:15"
-        line.value = "Standup (late) 11:00 daily"
-        await pilot.press("enter")
-        assert "can't change its repeat" in warning(app)
-        line.value = "Standup (late) 11:00"
-        await pilot.press("enter")
-        moved = find(app, "Standup (late)")
-        assert (moved.start, moved.end) == (at(11), at(11, 15))
-        assert moved.event.recurrence_id == at(9)
-        assert find(app, day=TODAY + DAY).start == at(9, day=TODAY + DAY)
-
-
-async def test_edit_all_events(make_app) -> None:
-    app = make_app()
-    async with app.run_test(size=(120, 40)) as pilot:
-        line = await open_edit(app, pilot, find(app), "s")
-        assert line.border_title == "Edit all events"
-        assert "every weekday" in line.value
-        assert any("first event" in str(w.render()) for w in app.screen.query("#card > Static"))
-        line.value = line.value.replace("09:00-09:15", "10:00-10:30")
-        await pilot.press("enter")
-        for day in (TODAY, TODAY + DAY):
-            occ = find(app, day=day)
-            assert (occ.start, occ.end) == (at(10, day=day), at(10, 30, day=day))
-
-
 async def test_fits_80x24(make_app) -> None:
     app = make_app()
     async with app.run_test(size=(80, 24)) as pilot:
-        line = await open_edit(app, pilot, find(app), "s")
-        line.value += " #nope"
+        line = await open_new(app, pilot, at(14))
+        line.value = "Gym #nope"
         await pilot.pause()
         for selector in ("Input", "#card", "#hints"):
             assert app.screen.region.contains_region(app.screen.query_one(selector).region)

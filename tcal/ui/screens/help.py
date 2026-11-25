@@ -60,8 +60,8 @@ GROUPS: dict[str, list[tuple[str, str]]] = {
         ("resize_mode", "Resize mode: up/down move the end, again: the start (esc: back)"),
         ("search", "Search events"),
     ],
-    "Event prompt": [
-        ("save", "Save (as enter)"),
+    "Event prompt / form": [
+        ("save", "Save (as enter; in the form's notes enter is a new line)"),
         ("cancel", "Cancel / close dialog / leave resize, grid mode / clear marks"),
     ],
     "App": [

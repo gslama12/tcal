@@ -5,7 +5,7 @@ import pytest
 from conftest import TODAY
 
 from tcal.model import Calendar, Event
-from tcal.quickadd import apply, parse, title_end, to_text
+from tcal.quickadd import apply, parse
 from tcal.tz import local_midnight, local_zone
 
 # TODAY is Wednesday 2026-11-18
@@ -227,10 +227,9 @@ def until(day: date) -> str:
         ("x 9:00 every week until dec", f"FREQ=WEEKLY;{until(date(2026, 12, 31))}"),
         ("x 9:00 every week until mar 3", f"FREQ=WEEKLY;{until(date(2027, 3, 3))}"),
         ("x every year until 1.1.2030", "FREQ=YEARLY;UNTIL=20300101"),
-        ("x 9:00 no repeat", None),
     ],
 )
-def test_intervals_and_ends(text: str, rrule: str | None) -> None:
+def test_intervals_and_ends(text: str, rrule: str) -> None:
     q = parse(text, TODAY, NAMES)
     assert (q.summary, q.rrule, q.error) == ("x", rrule, "")
 
@@ -303,88 +302,25 @@ def test_the_draft_fills_in_what_is_left_out() -> None:
     assert parse("x dec 3-5", TODAY, NAMES, draft).all_day
 
 
-MIDNIGHT = local_midnight(TODAY)
-
-
-@pytest.mark.parametrize(
-    "changes",
-    [
-        {},
-        {"summary": "Issue #12 at 12:30"},
-        {"summary": '"Dune"'},
-        {"summary": 'a "b" c fri'},
-        {"summary": "Weekly review every day"},
-        {"location": "Cafe Central"},
-        {"location": "Room 10:30"},
-        {"description": "one line // two"},
-        {"end": at(TODAY + timedelta(1), 2)},
-        {"end": at(TODAY + timedelta(2), 12)},
-        {"end": at(TODAY, 10)},
-        {"start": at(date(2027, 1, 2), 9), "end": local_midnight(date(2027, 1, 3))},
-        {"start": MIDNIGHT, "end": MIDNIGHT + timedelta(1), "all_day": True},
-        {"start": MIDNIGHT, "end": MIDNIGHT + timedelta(3), "all_day": True},
-        {"rrule": f"FREQ=WEEKLY;BYDAY=MO,WE;{until(date(2026, 12, 31))}"},
-        {"rrule": f"FREQ=DAILY;{until(date(2027, 3, 1))}"},
-        {"rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"},
-        {"rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=WE"},
-        {"rrule": "FREQ=YEARLY"},
-        {"rrule": "FREQ=MONTHLY;BYDAY=3WE;COUNT=4"},  # no words for it: the draft's
-    ],
-)
-def test_to_text_round_trips(changes: dict) -> None:
-    ev = event(**changes)
-    text = to_text(ev, TODAY, "Work")
-    q = parse(text, TODAY, NAMES, ev)
-    assert (q.summary, q.location, q.calendar) == (ev.summary, ev.location, "Work"), text
-    assert (q.start, q.end, q.all_day) == (ev.start, ev.end, ev.all_day), text
-    assert (q.rrule, q.notes or "") == (ev.rrule, ev.description), text
-    assert (q.warnings, q.error) == ((), "")
-
-
-def test_to_text_wording() -> None:
-    ev = event(location="Cafe", rrule="FREQ=WEEKLY;BYDAY=WE;COUNT=5", description="hi")
-    line = "Meet wed 18 nov 10:00-11:30 every wed 5 times #Work @Cafe // hi"
-    assert to_text(ev, TODAY, "Work") == line
-    assert title_end(line, ev) == 4
-    quoted = event(summary="Issue #12")
-    assert title_end(to_text(quoted, TODAY), quoted) == len('"Issue #12')
-
-
-def test_apply_keeps_what_the_text_did_not_change() -> None:
+def test_apply_puts_the_line_into_the_draft() -> None:
     calendars = [Calendar("work", "Work", "#000000"), Calendar("p", "Personal", "#000000")]
-    ev = event(
-        start=datetime(2026, 11, 18, 9, tzinfo=UTC),
-        end=datetime(2026, 11, 18, 10, tzinfo=UTC),
-        location="Cafe\nMain St 1",
-        description="two\nlines",
-        rrule="FREQ=MONTHLY;BYDAY=3WE",
-        raw="raw",
+    draft = event()
+
+    def typed(line: str) -> Event:
+        return apply(draft, parse(line, TODAY, NAMES, draft), calendars)
+
+    assert typed("Vet") == replace(draft, summary="Vet")
+    line = "Vet fri 12-13 weekly 3 times #pers @Clinic // cat"
+    assert typed(line) == replace(
+        draft,
+        summary="Vet",
+        calendar_id="p",
+        start=at(date(2026, 11, 20), 12),
+        end=at(date(2026, 11, 20), 13),
+        location="Clinic",
+        description="cat",
+        rrule="FREQ=WEEKLY;COUNT=3",
     )
-    text = to_text(ev, TODAY, "Work")
-    shown = parse(text, TODAY, NAMES, ev)
-    assert apply(ev, shown, shown, calendars) == ev
-
-    def edit(line: str) -> Event:
-        return apply(ev, parse(line, TODAY, NAMES, ev), shown, calendars)
-
-    renamed = edit(text.replace("Meet", "Met"))
-    assert renamed == replace(ev, summary="Met") and renamed.start.tzinfo is UTC
-    assert renamed.raw == "raw"
-    assert edit(text.replace("#Work", "#pers")).calendar_id == "p"
-    assert edit(text.replace("#Work", "")).calendar_id == "work"
-    assert edit(text + " // one").description == "one"
-    assert edit(text + " //").description == ""
-    assert edit(text.replace("#Work", "no repeat")).rrule is None
-    assert edit(text.replace("#Work", "3 times")).rrule == "FREQ=MONTHLY;BYDAY=3WE;COUNT=3"
-    assert edit("Meet").location == ""
-
-
-def test_an_instance_keeps_its_calendar_and_has_no_rule() -> None:
-    ev = event(recurrence_id=at(TODAY, 10))
-    shown = parse(to_text(ev, TODAY), TODAY, NAMES, ev)
-    q = parse("Meet 12:00 every day #pers", TODAY, NAMES, ev)
-    changed = apply(ev, q, shown, [Calendar("p", "Personal", "#000000")])
-    assert (changed.calendar_id, changed.rrule, changed.start) == ("work", None, at(TODAY, 12))
 
 
 @pytest.mark.parametrize(
@@ -571,13 +507,3 @@ def test_short_dates_in_a_location(place: str) -> None:
     assert (q.location, q.start) == (place, at(TODAY, 13))
     q = parse(f"Lunch @{place} #work", TODAY, NAMES)
     assert (q.location, q.has_date) == (place, False)
-
-
-@pytest.mark.parametrize("title", ["Dentist tom", "Tom", "Meet at 13", "Lunch 1p", "mo-fr", "9.00"])
-@pytest.mark.parametrize("all_day", [False, True])
-def test_short_forms_in_a_title_round_trip(title: str, all_day: bool) -> None:
-    ev = event(summary=title, location="Bar Mo")
-    if all_day:
-        ev = replace(ev, start=MIDNIGHT, end=MIDNIGHT + timedelta(1), all_day=True)
-    q = parse(to_text(ev, TODAY), TODAY, NAMES, ev)
-    assert (q.summary, q.location, q.start, q.end) == (title, "Bar Mo", ev.start, ev.end)

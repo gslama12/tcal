@@ -207,7 +207,6 @@ EventPrompt {
         border-title-background: $background2;
     }
 
-    #card > Static { color: $foreground1; }
     #card > #warning {
         color: $yellow;
         text-style: dim;
@@ -233,7 +232,7 @@ SearchScreen OptionList {
 
 /* ----- modals (tcal/ui/screens/) ----- */
 
-EventDetail, Prompt {
+EventDetail, EventForm, Prompt {
     align: center middle;
     background: $background1 60%;
 }
@@ -297,4 +296,48 @@ EventDetail #dialog {
 
     #choices > Hint.-default, #choices > Hint:hover { color: $foreground3; text-style: bold; }
     #choices > .separator { color: $foreground1; }
+}
+
+/* event form (tcal/ui/screens/event_form.py) */
+
+#form {
+    width: 64;
+    max-width: 95%;
+    height: auto;
+    max-height: 100%;
+    background: $background2;
+    border: $border_type $primary;
+    border-title-color: $foreground3;
+    border-title-background: $background2;
+    border-subtitle-color: $foreground1;
+    border-subtitle-background: $background2;
+    padding: 0 1;
+    scrollbar-size-vertical: 1;
+
+    Input, SelectCurrent, TextArea, Checkbox {
+        background: $background2;
+        background-tint: $background2;
+        border: $border_type $background3;
+        &:focus { border: $border_type $primary; }
+        &.-invalid { border: $border_type $red; }
+    }
+    Checkbox { width: 100%; }
+    Checkbox > .toggle--button { color: $background3; background: $background3; }
+    Checkbox.-on > .toggle--button { color: $primary; }
+    Select:focus > SelectCurrent { border: $border_type $primary; }
+    SelectOverlay, SelectOverlay:focus {
+        background: $background2;
+        border: $border_type $primary;
+        padding: 0 1;
+    }
+    .row { height: auto; }
+    .label { width: 6; padding: 1 0 0 1; color: $foreground1; }
+    #start_date, #end_date { width: 1fr; }
+    .time { width: 12; }
+    #ends { width: 16; }
+    #ends_value { width: 1fr; }
+    #ends_unit { width: auto; padding: 1 1 0 1; color: $foreground1; }
+    #notes { height: 5; }
+    #error { color: $red; height: auto; padding: 0 1; }
+    #note { color: $foreground1; padding: 0 1; }
 }
