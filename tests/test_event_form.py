@@ -320,7 +320,6 @@ async def test_custom_cursor_keys(make_app, write_config) -> None:
         calendar = form.query_one("#calendar", Choice)
         assert calendar.has_focus
         assert hint(app) == "j/ö change · space list · enter save · tab next · esc cancel"
-        assert len(hint(app)) <= form.query_one("#form").size.width
         calendar.value = "work"
         await pilot.press("ö")
         assert calendar.value == "personal"
@@ -382,6 +381,28 @@ async def test_ends_row_shows_only_for_a_series(make_app) -> None:
         assert form.query_one("#ends_unit").display
         await pilot.press("enter")
         assert find(app, "Dentist").event.rrule == "FREQ=WEEKLY;COUNT=3"
+
+
+def bottom_border(app) -> str:
+    """The form's bottom border line as drawn."""
+    box = app.screen.query_one("#form").region
+    strip = app.screen._compositor.render_strips()[box.bottom - 1]
+    return strip.text[box.x : box.right]
+
+
+@pytest.mark.parametrize("size", [(80, 24), (100, 35), (160, 50)])
+@pytest.mark.parametrize("keys", ["", CURSOR_KEYS, '[keys]\ncancel = ["ctrl+g"]\n'])
+async def test_every_hint_fits(make_app, write_config, size: tuple[int, int], keys: str) -> None:
+    app = make_app(write_config(keys))
+    async with app.run_test(size=size) as pilot:
+        await open_form(app, pilot, "Standup", "s")  # with the "Ends" row
+        seen = set()
+        while (focused := app.focused) not in seen:
+            seen.add(focused)
+            assert f" {hint(app)} " in bottom_border(app)
+            await pilot.press("tab")
+            await pilot.pause()
+        assert {type(w) for w in seen} >= {Input, Choice, AllDay, TextArea}
 
 
 async def test_scrolls_at_80x24_with_the_hint_pinned(make_app) -> None:

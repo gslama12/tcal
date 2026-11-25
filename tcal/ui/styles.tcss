@@ -301,7 +301,7 @@ EventDetail #dialog {
 /* event form (tcal/ui/screens/event_form.py) */
 
 #form {
-    width: 64;
+    width: 72;
     max-width: 95%;
     height: auto;
     max-height: 100%;

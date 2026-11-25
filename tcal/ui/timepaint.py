@@ -138,7 +138,7 @@ def _edge(canvas: Canvas, f: GridFrame, bottom: int) -> None:
         for x in range(x0, x1):
             if canvas.styles[y][x].bgcolor == fill:
                 canvas.styles[y][x] = bright
-                if canvas.chars[y][x] in ("╌", "─"):
+                if canvas.chars[y][x] in (HOUR_LINE, "─"):
                     canvas.chars[y][x] = " "
         if canvas.styles[y][x1 - 1] == bright and canvas.chars[y][x1 - 1] == " ":
             canvas.text(y, x1 - 1, x1, "▲" if f.edge == "start" else "▼", bright)

@@ -321,3 +321,24 @@ async def test_the_active_edge_is_shown(make_app) -> None:
         await pilot.press("escape")
         assert "RESIZE" not in str(bar.render()) and "WEEK" in str(bar.render())
         assert bright() == {}
+
+
+@pytest.mark.parametrize("edge", ["end", "start"])
+async def test_the_arrow_is_on_an_hour_line_row_too(make_app, store, edge: str) -> None:
+    store.save_event(Event("hour@x", "family", "Hourly", at(15), at(17, 15)))
+    app = make_app()
+    async with app.run_test(size=SIZE) as pilot:
+        grid = app.query_one("#week", TimeGrid)
+        assert grid.rows_per_hour >= 2
+        grid.select(find(app, "Hourly"))
+        await pilot.press(*("o" if edge == "end" else "oo"))
+        await pilot.pause()
+        row = grid.scale.row_of(17 * 60 if edge == "end" else 15 * 60)  # hour-line rows
+        line = grid.render_line(grid._header_height() + row - grid._top_row())
+        fill = app.palette.foreground3.lower()
+        [text] = [
+            s.text
+            for s in line
+            if s.style and s.style.bgcolor and s.style.bgcolor.name.lower() == fill
+        ]
+        assert text.endswith("▼" if edge == "end" else "▲") and "▔" not in text
