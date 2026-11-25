@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from functools import partial
 from typing import Any, TypeVar
 from urllib.parse import quote, urljoin, urlsplit
+from xml.sax.saxutils import escape
 
 from caldav.davclient import DAVClient
 from caldav.lib.error import AuthorizationError, DAVError
@@ -59,6 +60,12 @@ REPORT_EVENTS = """<?xml version="1.0" encoding="utf-8"?>
     </c:comp-filter>
   </c:filter>
 </c:calendar-query>"""
+
+REPORT_EVENT = """<?xml version="1.0" encoding="utf-8"?>
+<c:calendar-multiget xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:prop><d:getetag/><c:calendar-data/></d:prop>
+  <d:href>{path}</d:href>
+</c:calendar-multiget>"""
 
 T = TypeVar("T")
 
@@ -134,21 +141,37 @@ class ICloudProvider:
             query = REPORT_EVENTS.format(start=utc_stamp(lo), end=utc_stamp(hi))
             response = _call("REPORT", partial(self.client.report, calendar.id, query, 1))
             _check(response, "REPORT", calendar.id, ok=(207,))
-            for resp in response.tree.iterfind("d:response", NS):
-                href = self._url(resp.findtext("d:href", "", NS))
-                prop = _props(resp)
-                data = prop.findtext("c:calendar-data", "", NS)
-                if href in seen or not data or not data.strip():
-                    continue  # already read, the collection itself, or a 404
+            for href, etag, data in self._resources(response):
+                if href in seen:
+                    continue
                 try:
-                    seen[href] = ics.from_ics(data, calendar.id, href, _etag(prop))
+                    seen[href] = ics.from_ics(data, calendar.id, href, etag)
                 except Exception as e:  # one unreadable resource must not stop the sync
                     log.warning("skipping unreadable event %s: %s", href, e)
         return [event for events in seen.values() for event in events]
 
+    def fetch_event(self, event: Event) -> Event | None:
+        query = REPORT_EVENT.format(path=escape(urlsplit(event.href or _new_href(event)).path))
+        calendar_id = event.calendar_id
+        response = _call("REPORT", lambda: self.client.report(calendar_id, query, 1))
+        _check(response, "REPORT", calendar_id, ok=(207,))
+        for href, etag, data in self._resources(response):
+            try:
+                return ics.from_ics(data, calendar_id, href, etag)[0]
+            except Exception as e:
+                raise ConflictError(f"unreadable event {href}: {e}") from e
+        return None
+
+    def _resources(self, response: Any) -> Iterator[tuple[str, str | None, str]]:
+        """(href, etag, iCalendar text) of each calendar resource in a REPORT's answer."""
+        for resp in response.tree.iterfind("d:response", NS):
+            prop = _props(resp)
+            data = prop.findtext("c:calendar-data", "", NS)
+            if data and data.strip():  # not the collection itself, or a 404
+                yield self._url(resp.findtext("d:href", "", NS)), _etag(prop), data
+
     def create_event(self, event: Event) -> Event:
-        href = urljoin(event.calendar_id.rstrip("/") + "/", quote(event.uid, safe="") + ".ics")
-        return self._put(replace(event, href=href), {"If-None-Match": "*"})
+        return self._put(replace(event, href=_new_href(event)), {"If-None-Match": "*"})
 
     def update_event(self, event: Event) -> Event:
         return self._put(event, {"If-Match": event.etag} if event.etag else {})
@@ -169,7 +192,7 @@ class ICloudProvider:
         headers = {"Content-Type": "text/calendar; charset=utf-8", **headers}
         response = _call("PUT", lambda: self.client.put(href, data, headers=headers))
         _check(response, "PUT", href, ok=(200, 201, 204))
-        etag = response.headers.get("ETag") or self._etag(href)
+        etag = _strong(response.headers.get("ETag")) or self._etag(href)
         return replace(event, etag=etag, raw=data)
 
     def _etag(self, href: str) -> str | None:
@@ -224,7 +247,17 @@ def _props(resp: Any) -> Any:
 
 
 def _etag(prop: Any) -> str | None:
-    return (prop.findtext("d:getetag", "", NS) or "").strip() or None
+    return _strong(prop.findtext("d:getetag", "", NS))
+
+
+def _strong(etag: str | None) -> str | None:
+    """Without the weak mark (a proxy's): If-Match never matches a weak etag."""
+    return (etag or "").strip().removeprefix("W/") or None
+
+
+def _new_href(event: Event) -> str:
+    """Where a new event is created."""
+    return urljoin(event.calendar_id.rstrip("/") + "/", quote(event.uid, safe="") + ".ics")
 
 
 def _color(text: str | None) -> str:

@@ -6,12 +6,19 @@ resource's iCalendar text (``raw``) for writing back. A local edit updates the
 rows and queues an op; ``SyncEngine`` pushes the queue, then replaces each
 calendar's rows with the server's, except events that still have ops pending.
 
+The rows' ``href``/``etag`` are the truth about the server's copy: the UI may hold an
+event read before a push that just ran, so a saved event takes them from its row.
+``bases`` remembers what we know of the server's copy, so that only changes by someone
+else count as conflicts. Every read-then-write runs in one transaction (``_write``):
+the UI and the sync worker write at the same time.
+
 Open one ``Store`` per thread (the sync worker opens its own).
 """
 
 import json
 import sqlite3
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -23,6 +30,7 @@ from tcal.model import Calendar, Event
 from tcal.tz import UTC_STAMP, local_midnight, utc_stamp
 
 OpKind = Literal["create", "update", "delete"]
+OWN_ETAGS = 20  # replaced etags remembered per event
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS calendars (
@@ -62,6 +70,12 @@ CREATE TABLE IF NOT EXISTS ops (
     etag TEXT,
     raw TEXT                      -- for deletes: the deleted resource
 );
+CREATE TABLE IF NOT EXISTS bases (
+    uid TEXT PRIMARY KEY,
+    raw TEXT,                     -- the server's copy the local edits build on
+    sent TEXT,                    -- a later one, if its push arrived but the answer didn't
+    own TEXT NOT NULL             -- JSON list of etags our own pushes replaced
+);
 """
 
 
@@ -90,6 +104,16 @@ class Store:
     def __exit__(self, *_: object) -> None:
         self.close()
 
+    @contextmanager
+    def _write(self) -> Iterator[None]:
+        """One write transaction, locked from the start (joins the one under way)."""
+        if self.db.in_transaction:
+            yield
+            return
+        with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            yield
+
     # ----- calendars ------------------------------------------------------
 
     def calendars(self) -> list[Calendar]:
@@ -103,7 +127,7 @@ class Store:
         calendars = list(calendars)
         ids = [c.id for c in calendars]
         marks = ",".join("?" * len(ids))
-        with self.db:
+        with self._write():
             self.db.execute(f"DELETE FROM calendars WHERE id NOT IN ({marks})", ids)
             self.db.execute(f"DELETE FROM events WHERE calendar_id NOT IN ({marks})", ids)
             self.db.executemany(
@@ -145,8 +169,10 @@ class Store:
 
         Events with pending ops keep their local version.
         """
-        with self.db:
+        events = list(events)
+        with self._write():
             pending = {r["uid"] for r in self.db.execute("SELECT uid FROM ops")}
+            self._check_bases(calendar_id, {e.uid: e for e in events})
             self.db.execute(
                 "DELETE FROM events WHERE calendar_id = ? AND uid NOT IN (SELECT uid FROM ops)",
                 (calendar_id,),
@@ -157,12 +183,16 @@ class Store:
 
     def save_event(self, event: Event) -> Event:
         """Write a new or edited event to the cache and queue it for the server."""
-        with self.db:
+        with self._write():
             old = self.get_event(event.uid)
-            if old and old.href and old.calendar_id != event.calendar_id:
-                # Moving between calendars is a delete there + a create here in CalDAV.
-                self._queue_delete(old)
-                event = replace(event, href=None, etag=None)
+            if old:
+                self._remember(old)
+                if old.calendar_id == event.calendar_id:
+                    event = self._rebased(event, old)
+                else:
+                    # Moving between calendars is a delete there + a create here in CalDAV.
+                    self._queue_delete(old)
+                    event = replace(event, href=None, etag=None)
             event = replace(event, raw=ics.to_ics(event))
             self._put(event)
             # Overrides share the resource: keep them in step.
@@ -170,7 +200,7 @@ class Store:
                 "UPDATE events SET raw = ?, calendar_id = ?, href = ?, etag = ? WHERE uid = ?",
                 (event.raw, event.calendar_id, event.href, event.etag, event.uid),
             )
-            self._queue("create" if event.href is None else "update", event)
+            self._queue(event)
         return event
 
     def delete_event(self, uid: str, occurrence: datetime | None = None) -> list[Event]:
@@ -183,7 +213,7 @@ class Store:
         if master is None:
             return before
         if occurrence is not None and master.rrule:
-            with self.db:
+            with self._write():
                 self.db.execute(
                     "DELETE FROM events WHERE uid = ? AND recurrence_id = ?",
                     (uid, utc_stamp(occurrence)),
@@ -191,7 +221,9 @@ class Store:
                 master = ics.without_instance(master, occurrence)
                 self.save_event(replace(master, exdates=(*master.exdates, occurrence)))
             return before
-        with self.db:
+        with self._write():
+            master = self.get_event(uid) or master
+            self._remember(master)
             self.db.execute("DELETE FROM events WHERE uid = ?", (uid,))
             self._queue_delete(master)
         return before
@@ -206,14 +238,19 @@ class Store:
         if not rows:
             return
         master, *overrides = rows
-        with self.db:
-            unpushed = self.db.execute(
-                "DELETE FROM ops WHERE uid = ? AND kind = 'delete'", (master.uid,)
-            ).rowcount
+        with self._write():
             current = self.get_event(master.uid)
+            if current is not None:
+                self._remember(current)
+            unpushed = self.db.execute(
+                "SELECT * FROM ops WHERE uid = ? AND calendar_id = ? AND kind = 'delete'",
+                (master.uid, master.calendar_id),
+            ).fetchone()
             if unpushed:  # the old resource is still on the server
-                self.db.execute("DELETE FROM ops WHERE uid = ? AND kind = 'create'", (master.uid,))
-                href, etag = master.href, master.etag
+                if current is not None and current.calendar_id != master.calendar_id:
+                    self._queue_delete(current)
+                self.db.execute("DELETE FROM ops WHERE id = ?", (unpushed["id"],))
+                href, etag = unpushed["href"], unpushed["etag"]
             elif current is not None and current.calendar_id == master.calendar_id:
                 href, etag = current.href, current.etag
             else:
@@ -225,10 +262,101 @@ class Store:
                 self._put(override)
             self.save_event(replace(master, href=href, etag=etag))
 
-    def set_remote(self, uid: str, href: str | None, etag: str | None) -> None:
-        """Record where the server stored ``uid`` after a push."""
-        with self.db:
-            self.db.execute("UPDATE events SET href = ?, etag = ? WHERE uid = ?", (href, etag, uid))
+    # ----- the server's copy ----------------------------------------------
+
+    def record_push(self, op: PendingOp, done: Event | None) -> None:
+        """``op`` reached the server, which now has ``done`` (None: deleted).
+
+        Clears the op; what was edited since it was read stays queued, on top of ``done``."""
+        with self._write():
+            self.clear_op(op.id)
+            if done is None:  # restored meanwhile: needs a new resource
+                self.db.execute(
+                    "UPDATE events SET href = NULL, etag = NULL WHERE uid = ? AND href = ?",
+                    (op.event.uid, op.event.href),
+                )
+            else:
+                self._stored(op.event, done)
+
+    def _stored(self, sent: Event, done: Event) -> None:
+        uid, current = sent.uid, self.get_event(sent.uid)
+        own = [*self._own(uid), sent.etag][-OWN_ETAGS:]
+        self.db.execute(
+            "INSERT OR REPLACE INTO bases VALUES (?, ?, NULL, ?)", (uid, done.raw, json.dumps(own))
+        )
+        deleting = self.db.execute(  # deleted or moved to another calendar meanwhile
+            "UPDATE ops SET etag = ? WHERE uid = ? AND kind = 'delete' AND href = ?",
+            (done.etag, uid, done.href),
+        ).rowcount
+        if deleting:
+            return
+        if current is not None and current.calendar_id == sent.calendar_id:
+            self.db.execute(
+                "UPDATE events SET href = ?, etag = ? WHERE uid = ?", (done.href, done.etag, uid)
+            )
+        elif sent.href is None:  # ... while it was being created: nothing is queued for it
+            self._queue_delete(done)
+            if current is not None:
+                self._queue(current)  # after the delete
+
+    def record_attempt(self, event: Event) -> None:
+        """``event`` is about to be sent; if no answer comes, the server may have it."""
+        with self._write():
+            self.db.execute(
+                """INSERT INTO bases VALUES (:uid, NULL, :raw, '[]')
+                   ON CONFLICT (uid) DO UPDATE SET sent = :raw""",
+                {"uid": event.uid, "raw": event.raw},
+            )
+
+    def bases(self, uid: str) -> list[str | None]:
+        """The iCalendar texts the server may have of ``uid`` if only we changed it."""
+        row = self.db.execute("SELECT raw, sent FROM bases WHERE uid = ?", (uid,)).fetchone()
+        return list(row) if row else []
+
+    def _own(self, uid: str) -> list[str | None]:
+        """The etags of ``uid`` that our own pushes replaced."""
+        row = self.db.execute("SELECT own FROM bases WHERE uid = ?", (uid,)).fetchone()
+        return json.loads(row["own"]) if row else []
+
+    def _remember(self, old: Event) -> None:
+        """Before the first edit since a push: ``old`` is the base (unless a pull brought
+        it back from before our push: then that push is)."""
+        pending = self.db.execute("SELECT 1 FROM ops WHERE uid = ?", (old.uid,)).fetchone()
+        if pending or old.href is None or old.etag in self._own(old.uid):
+            return
+        self.db.execute(
+            """INSERT INTO bases VALUES (:uid, :raw, NULL, '[]')
+               ON CONFLICT (uid) DO UPDATE SET raw = :raw""",
+            {"uid": old.uid, "raw": old.raw},
+        )
+
+    def _rebased(self, event: Event, old: Event) -> Event:
+        """``event``, perhaps read before our last pushes, with its row's current resource.
+
+        If the row has since been replaced by someone else's version it keeps its old
+        etag, and no base: pushing it is a conflict."""
+        ours = event.etag == old.etag or event.etag in self._own(event.uid)
+        if ours or ics.same_content(event.raw, old.raw):
+            return replace(event, href=old.href, etag=old.etag)
+        self.db.execute("UPDATE bases SET raw = NULL WHERE uid = ?", (event.uid,))
+        return event
+
+    def _check_bases(self, calendar_id: str, pulled: dict[str, Event]) -> None:
+        """Forget the bases of events changed by someone else, or gone."""
+        rows = self.db.execute(
+            """SELECT DISTINCT uid, events.etag, bases.raw, own FROM bases JOIN events USING (uid)
+               WHERE events.calendar_id = ? AND uid NOT IN (SELECT uid FROM ops)""",
+            (calendar_id,),
+        ).fetchall()
+        for row in rows:
+            uid, own, new = row["uid"], json.loads(row["own"]), pulled.get(row["uid"])
+            if new is not None and (new.etag == row["etag"] or new.etag in own):
+                continue
+            if new is not None and ics.same_content(new.raw, row["raw"]):
+                own = json.dumps([*own, row["etag"]][-OWN_ETAGS:])
+                self.db.execute("UPDATE bases SET own = ? WHERE uid = ?", (own, uid))
+            else:
+                self.db.execute("DELETE FROM bases WHERE uid = ?", (uid,))
 
     # ----- pending ops ----------------------------------------------------
 
@@ -241,7 +369,10 @@ class Store:
                 event = current
             else:  # deleted meanwhile; its delete op follows
                 continue
-            ops.append(PendingOp(row["id"], row["kind"], event))
+            kind: OpKind = row["kind"]
+            if kind != "delete":  # the event may have got its resource since it was queued
+                kind = "update" if event.href else "create"
+            ops.append(PendingOp(row["id"], kind, event))
         return ops
 
     def pending_count(self) -> int:
@@ -249,29 +380,21 @@ class Store:
         return int(self.db.execute("SELECT COUNT(*) FROM ops").fetchone()[0])
 
     def clear_op(self, op_id: int) -> None:
-        with self.db:
+        with self._write():
             self.db.execute("DELETE FROM ops WHERE id = ?", (op_id,))
 
-    def _queue(self, kind: OpKind, event: Event) -> None:
-        """Queue a create/update; a later edit supersedes an unpushed one (keeping 'create')."""
-        unpushed = self.db.execute(
-            "SELECT 1 FROM ops WHERE uid = ? AND kind = 'create'", (event.uid,)
-        ).fetchone()
-        if unpushed:
-            kind = "create"
+    def _queue(self, event: Event) -> None:
+        """Queue a create/update; a later edit supersedes an unpushed one."""
         self.db.execute("DELETE FROM ops WHERE uid = ? AND kind != 'delete'", (event.uid,))
         self.db.execute(
             "INSERT INTO ops (kind, uid, calendar_id) VALUES (?, ?, ?)",
-            (kind, event.uid, event.calendar_id),
+            ("update" if event.href else "create", event.uid, event.calendar_id),
         )
 
     def _queue_delete(self, event: Event) -> None:
-        unpushed = self.db.execute(
-            "DELETE FROM ops WHERE uid = ? AND kind = 'create'", (event.uid,)
-        ).rowcount
-        self.db.execute("DELETE FROM ops WHERE uid = ? AND kind = 'update'", (event.uid,))
-        if unpushed or not event.href:
-            return  # the server never saw it
+        self.db.execute("DELETE FROM ops WHERE uid = ? AND kind != 'delete'", (event.uid,))
+        if not event.href:
+            return  # the server never saw it (or is being sent it: see ``_stored``)
         self.db.execute(
             "INSERT INTO ops (kind, uid, calendar_id, href, etag, raw) VALUES (?, ?, ?, ?, ?, ?)",
             ("delete", event.uid, event.calendar_id, event.href, event.etag, ics.to_ics(event)),

@@ -806,3 +806,24 @@ Supersedes the event form (E3 ff.) and the quick-add screen (QA1, QA3): both are
 - **NP3:** "tom at 1pm" alone is an event called "tom" (a title must remain); it becomes
   tomorrow once a title follows. `at 9a` is a time anywhere, `9a` only right after a date ("Room
   5a"); `1p` also starting the line or where the title ends.
+
+### False etag conflicts (fix-etag)
+
+- **FE1 Cause:** the UI edits the event it last read. If a push ran in between (a pull of all
+  calendars takes seconds, the UI re-reads only after it), `Store.save_event` wrote the UI's old
+  etag over the pushed one, so the next PUT was a 412. Same for a create/delete/undo while a push
+  was under way (they kept the old or no href).
+- **FE2 Rows decide:** a saved event takes `href`/`etag` from its row (`Store._rebased`); create or
+  update is decided when pushing. `Store.record_push(op, done)` (replaces `set_remote`) also updates
+  a queued delete, deletes what was created meanwhile for a deleted/moved event, and un-hrefs
+  an event restored during its delete. Writes are `BEGIN IMMEDIATE` transactions (`Store._write`).
+- **FE3 Bases:** table `bases` = the server's copy the edits build on, the last one sent, and the
+  etags our pushes replaced. On a 412, or with no known etag (nothing is overwritten unchecked),
+  the sync reads the resource (new `Provider.fetch_event`): if it says what we know
+  (`ics.same_content`: bookkeeping properties and `X-` ignored, other properties not), the op is
+  sent again with its etag; else it is a real conflict (B3). An event someone else changed, pulled
+  before the UI re-read it, stays a conflict too.
+- **FE4:** edits made during a sync are pushed by another sync right after it (`_sync_again`), not
+  at the next interval. Weak etags lose their `W/` (If-Match never matches those).
+- **FE5 Tests:** `FakeProvider(put_etags=False)` sends no etag with a PUT, `touch(uid)` renews one
+  without a change; `tests/test_rapid_edits.py`.

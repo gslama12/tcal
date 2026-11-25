@@ -163,3 +163,24 @@ def test_home_url_is_discovered_lazily(client: FakeClient) -> None:
     provider.list_calendars()
     provider.list_calendars()
     assert calls == [1]
+
+
+def test_fetch_event_reads_one_resource(icloud: ICloudProvider, client: FakeClient) -> None:
+    start = datetime(2026, 11, 1, tzinfo=VIENNA)
+    master = icloud.fetch_events(WORK, start, start)[0]
+    current = icloud.fetch_event(master)
+    method, url, _, query = client.requests[-1]
+    assert (method, url) == ("REPORT", WORK.id)
+    assert "calendar-multiget" in query
+    assert "<d:href>/123/calendars/work/series-1.ics</d:href>" in query
+    assert current == master and current.raw == master.raw
+    icloud.fetch_event(replace(master, uid="a&b", href=None))  # where it would be created
+    assert "/123/calendars/work/a%26b.ics</d:href>" in client.requests[-1][3]
+
+
+def test_weak_put_etag_is_made_strong(icloud: ICloudProvider, client: FakeClient) -> None:
+    start = datetime(2026, 11, 1, tzinfo=VIENNA)
+    master = icloud.fetch_events(WORK, start, start)[0]
+    answer = SimpleNamespace(status=204, headers={"ETag": 'W/"new"'})
+    client.put = lambda *_, **__: answer  # type: ignore[method-assign]
+    assert icloud.update_event(master).etag == '"new"'

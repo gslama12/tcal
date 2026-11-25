@@ -134,6 +134,7 @@ class TcalApp(App[None]):
         self.source = source
         self._sync = sync
         self.sync_status = SyncStatus()  # shown in the status bar
+        self._sync_again = False  # asked for while a sync was running
         self._sync_by_key = False  # the running sync was asked for with the sync key
         self._error_shown = ""  # the sync error last toasted (not again until it changes)
         self._warnings_shown: list[str] = []  # the last sync's warnings (toasted when new)
@@ -349,9 +350,14 @@ class TcalApp(App[None]):
     # ----- sync -----------------------------------------------------------
 
     def request_sync(self) -> None:
-        """Start a background sync unless one is running (or syncing is off)."""
-        if self._sync is None or any(w.group == "sync" and w.is_running for w in self.workers):
+        """Start a background sync; while one is running, edits are pushed by another one
+        right after it. (Nothing happens if syncing is off.)"""
+        if self._sync is None:
             return
+        if any(w.group == "sync" and not w.is_finished for w in self.workers):
+            self._sync_again = True
+            return
+        self._sync_again = False
         self.sync_status = self.sync_status.started()
         self.refresh_data()
         self.run_worker(self._sync, group="sync", thread=True, exit_on_error=False)
@@ -377,6 +383,8 @@ class TcalApp(App[None]):
             self._toast_sync_error()
         self._sync_by_key = False
         self.refresh_data()
+        if event.state is WorkerState.SUCCESS and self._sync_again and self.source.pending_count():
+            self.request_sync()
 
     def _toast_warnings(self, warnings: list[str]) -> None:
         """One line: the count and the first warning; again only when they change

@@ -1,7 +1,9 @@
 """SyncEngine: push the store's pending ops to a provider, then pull a time window.
 
 Conflict policy: the server wins. An op rejected for an etag mismatch is
-dropped (and logged); the following pull brings in the server's version.
+dropped (and logged); the following pull brings in the server's version. It is no
+conflict if the server's copy still says what the edit was based on (or already says
+what it changes): then only the etag is new, and the op is sent again with that.
 Any other provider error aborts the sync and leaves the remaining ops queued.
 Subscribed feeds (``subscriptions``, read-only) are pulled after the account; a feed
 that fails keeps its cached events and is named in the summary.
@@ -11,15 +13,17 @@ Everything a sync logs as a warning (also from the provider) ends up in
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from pathlib import Path
 
 from dateutil.relativedelta import relativedelta
 
+from tcal import ics
 from tcal.config import SyncConfig
+from tcal.model import Event
 from tcal.providers.base import ConflictError, Provider, ProviderError
-from tcal.store import Store
+from tcal.store import OpKind, PendingOp, Store
 from tcal.synclog import collect
 from tcal.tz import local_midnight
 
@@ -82,16 +86,10 @@ class SyncEngine:
         for op in self.store.pending_ops():
             event = op.event
             try:
-                if op.kind == "delete":
-                    self.provider.delete_event(event)
-                else:
-                    if op.kind == "create":
-                        done = self.provider.create_event(event)
-                    else:
-                        done = self.provider.update_event(event)
-                    self.store.set_remote(event.uid, done.href, done.etag)
+                self.store.record_push(op, self._push_op(op))
                 summary.pushed += 1
             except ConflictError as e:
+                self.store.clear_op(op.id)
                 log.warning(
                     "“%s” changed on the server meanwhile: your %s was dropped"
                     " (conflict: %s; server version kept)",
@@ -100,7 +98,36 @@ class SyncEngine:
                     e,
                 )
                 summary.conflicts.append(event.summary)
-            self.store.clear_op(op.id)
+
+    def _push_op(self, op: PendingOp) -> Event | None:
+        """Send ``op``; returns the event as the server has it now (None: deleted)."""
+        event, bases = op.event, self.store.bases(op.event.uid)
+        if op.kind != "delete":
+            self.store.record_attempt(event)
+        try:
+            if op.kind != "create" and event.etag is None:
+                raise ConflictError("etag unknown")  # check before overwriting
+            return self._send(op.kind, event)
+        except ConflictError:
+            current = self.provider.fetch_event(event)
+            if current is None and op.kind == "delete":
+                return None
+            if current is None:
+                raise
+            if op.kind != "delete" and ics.same_content(current.raw, event.raw):
+                return replace(current, calendar_id=event.calendar_id)
+            if not any(ics.same_content(current.raw, b) for b in bases):
+                raise
+            kind: OpKind = "delete" if op.kind == "delete" else "update"
+            return self._send(kind, replace(event, href=current.href, etag=current.etag))
+
+    def _send(self, kind: OpKind, event: Event) -> Event | None:
+        if kind == "delete":
+            self.provider.delete_event(event)
+            return None
+        if kind == "create":
+            return self.provider.create_event(event)
+        return self.provider.update_event(event)
 
     def _pull(self, summary: SyncSummary) -> None:
         start, end = self.window()

@@ -192,8 +192,8 @@ def test_restore_redoes_a_move_to_another_calendar(db: Store) -> None:
 
 def test_restore_undoes_a_pushed_move_to_another_calendar(db: Store) -> None:
     before, _ = _moved(db)
-    for op in db.pending_ops():
-        db.clear_op(op.id)
-    db.set_remote("e1", "h2", "2")
+    delete, create = db.pending_ops()
+    db.record_push(delete, None)
+    db.record_push(create, replace(create.event, href="h2", etag="2"))
     db.restore(before)
     assert _ops(db) == [("delete", "other", "h2"), ("create", "cal", None)]

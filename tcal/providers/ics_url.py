@@ -57,6 +57,9 @@ class IcsUrlProvider:
                 events.extend(group)
         return events
 
+    def fetch_event(self, event: Event) -> Event | None:
+        raise ProviderError("subscribed calendars are read-only")
+
     def create_event(self, event: Event) -> Event:
         raise ProviderError("subscribed calendars are read-only")
 
