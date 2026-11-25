@@ -28,18 +28,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # Moves HOME to a throwaway directory, so before anything from tcal
-import screenshots as shots  # noqa: E402
-import time_machine  # noqa: E402
-from PIL import Image, ImageDraw, ImageFont  # noqa: E402
-from rich.cells import cell_len  # noqa: E402
-from rich.color import blend_rgb  # noqa: E402
-from rich.console import Console  # noqa: E402
-from rich.segment import Segment  # noqa: E402
-from rich.style import Style  # noqa: E402
-from rich.terminal_theme import SVG_EXPORT_THEME as THEME  # noqa: E402
-from textual.pilot import Pilot  # noqa: E402
+import screenshots as shots
+import time_machine
+from PIL import Image, ImageDraw, ImageFont
+from rich.cells import cell_len
+from rich.color import blend_rgb
+from rich.console import Console
+from rich.segment import Segment
+from rich.style import Style
+from rich.terminal_theme import SVG_EXPORT_THEME as THEME
+from textual.pilot import Pilot
 
-from tcal.ui.app import TcalApp  # noqa: E402
+from tcal.ui.app import TcalApp
 
 OUT_FILE = shots.REPO_ROOT / "site" / "docs" / "public" / "demo.gif"
 
