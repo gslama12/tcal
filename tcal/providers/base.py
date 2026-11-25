@@ -30,12 +30,18 @@ class Provider(Protocol):
         """
         ...
 
+    def fetch_event(self, event: Event) -> Event | None:
+        """The server's current copy of ``event``'s resource (its master, with ``etag`` and
+        ``raw``; for an event without ``href``: what is stored where it would be created)."""
+        ...
+
     def create_event(self, event: Event) -> Event:
         """Store a new event; returns it with ``href``/``etag`` filled in."""
         ...
 
     def update_event(self, event: Event) -> Event:
-        """Replace an existing event; returns it with the new ``etag``.
+        """Replace an existing event; returns it with the new ``etag``
+        (None if the server doesn't tell).
 
         Raises ConflictError if the server's etag is no longer ``event.etag``.
         """

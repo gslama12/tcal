@@ -26,9 +26,15 @@ FEED = Calendar(SUBSCRIPTION_PREFIX + "demo", "Team events", colors.BROWN, reado
 
 
 class FakeProvider:
-    """Behaves like a CalDAV server: events go through iCalendar text, etags are checked."""
+    """Behaves like a CalDAV server: events go through iCalendar text, etags are checked.
 
-    def __init__(self, today: date | None = None, demo: bool = True) -> None:
+    ``put_etags=False``: like a server whose PUT answers carry no (usable) ETag.
+    """
+
+    def __init__(
+        self, today: date | None = None, demo: bool = True, put_etags: bool = True
+    ) -> None:
+        self.put_etags = put_etags
         self.calendars = [replace(c) for c in CALENDARS]
         self.events: dict[str, Event] = {}
         self._etags = count(1)
@@ -48,14 +54,17 @@ class FakeProvider:
             for vevent in ics.from_ics(e.raw or ics.to_ics(e), e.calendar_id, e.href, e.etag)
         ]
 
+    def fetch_event(self, event: Event) -> Event | None:
+        return self.events.get(event.uid)
+
     def create_event(self, event: Event) -> Event:
         if event.uid in self.events:
             raise ConflictError(f"{event.uid} exists")
-        return self._store(event, f"fake://{event.uid}")
+        return self._put(event, f"fake://{event.uid}")
 
     def update_event(self, event: Event) -> Event:
         self._check_etag(event)
-        return self._store(event, self.events[event.uid].href)
+        return self._put(event, self.events[event.uid].href)
 
     def delete_event(self, event: Event) -> None:
         if event.uid in self.events:
@@ -66,6 +75,14 @@ class FakeProvider:
         current = self.events.get(event.uid)
         if current is None or (event.etag and event.etag != current.etag):
             raise ConflictError(f"{event.uid} changed on the server")
+
+    def touch(self, uid: str) -> None:
+        """Give the resource a new etag (iCloud rewrites what it stored now and then)."""
+        self._store(self.events[uid], self.events[uid].href)
+
+    def _put(self, event: Event, href: str | None) -> Event:
+        stored = self._store(event, href)
+        return stored if self.put_etags else replace(stored, etag=None)
 
     def _store(self, event: Event, href: str | None) -> Event:
         text = ics.to_ics(event)
