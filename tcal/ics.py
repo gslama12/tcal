@@ -31,6 +31,10 @@ MANAGED = (
     "EXDATE",
     "RECURRENCE-ID",
 )
+# For ``same_content``: what servers rewrite (MANAGED ones are compared as an Event), and
+# values that mean the same as none.
+IGNORED = {*MANAGED, "UID", "CREATED", "LAST-MODIFIED", "SEQUENCE"}
+DEFAULTS = {("TRANSP", "opaque"), ("CLASS", "public"), ("PRIORITY", "0")}
 
 
 def from_ics(
@@ -72,6 +76,41 @@ def to_ics(event: Event) -> str:
         comp.add("RECURRENCE-ID", value(event.recurrence_id, event.start))
     cal.add_missing_timezones()
     return cal.to_ical().decode()
+
+
+def same_content(a: str | None, b: str | None) -> bool:
+    """Whether two versions of a resource say the same, whatever a server rewrites when it
+    stores one (bookkeeping properties, the order and spelling of things)."""
+    return bool(a and b) and (a == b or _content(a) == _content(b))
+
+
+def _content(text: str | None) -> list[Any]:
+    """The VEVENTs of a resource in a comparable form, the master first."""
+    cal = icalendar.Calendar.from_ical(text or "")
+    contents = []
+    for comp in cal.walk("VEVENT"):
+        event = _event(comp, "", None, None, "")
+        rrule = sorted((event.rrule or "").upper().split(";"))
+        event = replace(event, rrule=None, exdates=tuple(sorted(event.exdates)))
+        alarms = sorted(
+            (_text(alarm.get("ACTION", "")), _text(alarm.get("TRIGGER", "")))
+            for alarm in comp.walk("VALARM")
+        )
+        others = sorted(
+            (name, _text(value), str(value.params.get("PARTSTAT", "")))
+            for name, values in comp.items()
+            if name not in IGNORED and not name.startswith("X-")
+            for value in _as_list(values)
+            if (name, _text(value)) not in DEFAULTS
+        )
+        contents.append((event, rrule, alarms, others))
+    return sorted(contents, key=lambda c: c[0].recurrence_id or datetime.min.replace(tzinfo=UTC))
+
+
+def _text(value: Any) -> str:
+    """A property's value as written, case-folded (``mailto:`` / ``MAILTO:``)."""
+    text = value.to_ical().decode() if hasattr(value, "to_ical") else str(value)
+    return str(text).lower()
 
 
 @dataclass(frozen=True)

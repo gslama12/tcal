@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from tcal.ics import from_ics, to_ics, without_instance
+from tcal.ics import from_ics, same_content, to_ics, without_instance
 from tcal.model import Event
 from tcal.tz import local_midnight
 
@@ -139,3 +139,18 @@ def test_timed_event_ending_before_its_start_is_instant() -> None:
     text = _one_event("DTSTART:20261119T100000Z\nDTEND:20261119T090000Z")
     (event,) = from_ics(text, "cal")
     assert event.end == event.start
+
+
+def test_same_content_ignores_what_servers_rewrite() -> None:
+    def change(old: str, new: str) -> str:
+        assert old in SERIES
+        return SERIES.replace(old, new, 1)
+
+    assert same_content(SERIES, to_ics(from_ics(SERIES, "cal")[0]))  # also a new DTSTAMP
+    rewritten = "SEQUENCE:3\r\nTRANSP:OPAQUE\r\nX-APPLE-TRAVEL-ADVISORY-BEHAVIOR:AUTOMATIC\r\n"
+    assert same_content(SERIES, change("SUMMARY:Weekly", rewritten + "SUMMARY:Weekly"))
+    assert not same_content(SERIES, change("SUMMARY:Weekly (moved)", "SUMMARY:Override"))
+    assert not same_content(SERIES, change("SUMMARY:Weekly", "STATUS:CANCELLED\r\nSUMMARY:Weekly"))
+    alarm = "BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT5M\r\nEND:VALARM\r\nEND:VEVENT"
+    assert not same_content(SERIES, change("END:VEVENT", alarm))
+    assert not same_content(SERIES, None) and not same_content(None, None)
