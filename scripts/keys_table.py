@@ -1,9 +1,10 @@
-"""Print the default keybindings as a Markdown table (for README.md).
+"""Print the default keybindings as a Markdown table, for the docs site's
+``site/docs/guide/keybindings.md`` (between its ``keys:`` marks).
 
     uv run python scripts/keys_table.py
 
 Keys come from ``tcal/default_config.toml``, groups and descriptions from the
-help screen (``tcal.ui.screens.help.GROUPS``), so the README matches ``?``.
+help screen (``tcal.ui.screens.help.GROUPS``), so the page matches ``?``.
 """
 
 from tcal.config import default_data

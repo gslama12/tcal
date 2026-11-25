@@ -1,4 +1,4 @@
-"""README.md's key table is the output of scripts/keys_table.py."""
+"""The docs site's key table is the output of scripts/keys_table.py."""
 
 import runpy
 from pathlib import Path
@@ -6,12 +6,12 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 
 
-def test_readme_key_table_is_up_to_date() -> None:
+def test_docs_key_table_is_up_to_date() -> None:
     table = runpy.run_path(str(ROOT / "scripts" / "keys_table.py"))["keys_table"]()
-    readme = (ROOT / "README.md").read_text()
-    start = readme.index("<!-- keys:start -->\n") + len("<!-- keys:start -->\n")
-    end = readme.index("<!-- keys:end -->")
-    assert readme[start:end].strip() == table, "run: uv run python scripts/keys_table.py"
+    page = (ROOT / "site" / "docs" / "guide" / "keybindings.md").read_text()
+    start = page.index("<!-- keys:start -->\n") + len("<!-- keys:start -->\n")
+    end = page.index("<!-- keys:end -->")
+    assert page[start:end].strip() == table, "run: uv run python scripts/keys_table.py"
 
 
 def test_key_table_lists_every_default_action() -> None:
