@@ -1,364 +1,96 @@
 # tcal
 
-A minimal, keyboard-based TUI calendar that syncs with iCloud.
+[![Docs](https://img.shields.io/badge/docs-tcal-7AA2F7?style=flat-square&logo=readthedocs&logoColor=white)](https://gslama12.github.io/tcal/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-9ECE6A?style=flat-square)](LICENSE)
 
-Built with [Textual](https://textual.textualize.io/), vim-style keys, a Google-Calendar-like
-layout and an offline-first SQLite cache: the UI only reads the cache, sync runs in the background
-and edits made offline are queued and pushed later.
+A keyboard-driven calendar for the terminal that syncs with iCloud: vim-like keys, events
+typed in words and a layout like Google Calendar's. It works offline too: edits are queued and
+synced in the background. Built with [Textual](https://textual.textualize.io/).
 
-```
-╭──────────────────────────╮╭──────────────────────────────────────────────────────────────────────────────────────────╮
-│ November 2026    ‹ ›     ││  Today    ‹  ›   16 – 22 November 2026                   Week │ Month │ Year │ Schedule  │
-│  M  T  W  T  F  S  S     │╰──────────────────────────────────────────────────────────────────────────────────────────╯
-│ 26 27 28 29 30 31  1     │╭──────────────────────────────────────────────────────────────────────────────────────────╮
-│  2  3  4  5  6  7  8     ││         Mon 16      Tue 17      Wed 18      Thu 19      Fri 20      Sat 21      Sun 22   │
-│  9 10 11 12 13 14 15     ││      │           │           │ Conference                        │ Anna's bi…│ Deadline:…│
-│ 16 17 18 19 20 21 22     ││──────┼───────────┼───────────┼───────────┼───────────┼───────────┼───────────┼───────────│
-│ 23 24 25 26 27 28 29     ││      │           │           │           │           │           │           │           │
-│ 30  1  2  3  4  5  6     ││07:00 │           │           │           │           │           │           │           │
-╰──────────────────────────╯│08:00 │           │           │           │           │           │           │           │
-╭─ My calendars ───────────╮│09:00 │ Standup   │ Standup   │ Standup   │ Standup   │ Standup   │           │           │
-│ ■ Work                   ││10:00 │           │           │           │           │           │ Design… +2│           │
-│ ■ Personal               ││11:00 │           │           │           │           │           │ 10:00     │ Call mum  │
-│ ■ Family                 ││      │           │           │           │           │           │           │           │
-│ ■ Sport                  ││12:00 │           │           │           │           │           │           │ Team lunch│
-│ ■ Holidays               ││13:00 │ Sprint pl…│           │           │           │           │           │           │
-│                          ││14:00 │ 13:00     │           │           │ Release   │           │           │           │
-│  Other calendars ─────── ││15:00 │           │           │           │ Interview │ Budget pl…│           │           │
-│ ■ Team events            ││16:00 │           │           │           │           │           │           │           │
-│                          ││      │           │           │           │           │           │           │           │
-│                          ││17:00 │ Kids' play│           │           │           │           │           │           │
-│                          ││18:00 │           │ Gym       │           │ Gym       │           │           │           │
-│                          ││19:00 │           │ 18:00     │           │ 18:00     │           │▌Dinner    │           │
-│                          ││20:00 │           │           │           │           │           ●▌19:00     │           │
-╰──────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────╯
- WEEK                                               Sat 21 Nov 2026                               ✓ synced 19:32   ? help
-```
+<p align="center">
+  <img src="site/docs/public/demo.gif" alt="tcal" width="900">
+</p>
 
 ## Features
 
-- **Views:** week (zoomable time grid, overlapping events stacked as translucent rounded blocks, now line), month (multi-day
-  bars, "+N more"), year (12 mini months) and schedule (a scrolling list of upcoming events).
-  Sidebar with mini month and a toggleable calendar list; mouse support.
-- **Events:** create, edit, delete, incl. recurring events ("this event" or "all events"),
-  repeat rules with an end (on a date / after N times), alarms and invitees kept on edit.
-  The detail view shows time zone, guests and their answers, alerts and URL.
-- **Event prompt** (`a` / `i`): type a new event as one line, like
-  `Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal`, and watch it fill in below as you type
-  (what you leave out — dim — comes from the cursor slot). See [Typing events](#typing-events).
-- **Event form** (`e`): edit an event field by field; see [Editing events](#editing-events).
-- **Yank / paste / duplicate / move / resize** events with the keyboard (`y` `p` `D`, `J` `K`
-  `<` `>`) and an **undo** stack (`u`, the last 20 changes; `ctrl+r` redoes).
-- **Resize mode** (`o` on a timed event in the week view; the status bar shows `RESIZE · END`): `j`/`k`
-  move its end by 15 min (to the quarter hours), `o` again switches to its start and back, esc
-  leaves. The edge being moved is marked; each step can be undone.
-- **Event navigation** (week view): the cursor keys jump between events — `j`/`k` the
-  previous/next event of the day, `h`/`l` the nearest one on the previous/next day; `a` adds
-  a new event right after the selected one, `p` pastes at its time. **Grid mode** (`v`, back
-  with `v` or esc; the status bar shows `WEEK · GRID`) moves a 1-hour slot cursor instead
-  (`[view] grid_step`: 15, 30 or 60 minutes), starting at the selected event's end.
-- **Flash jump** (`f`, week view): red labels on every event and every `grid_step` slot
-  (default: each hour) on screen; type one to jump there (an event label selects it, a
-  slot label enters grid mode on that slot; nearest get single keys, any other key cancels).
+- **Four views** — week (`w`, zoom with `+` / `-`), month (`m`), year (`Y`) and schedule (`s`), next to a sidebar with a mini month (`M`) and your calendars (`c`, `space` shows or hides one).
+- **Events in words** — `a` types a new event in one line, like `Lunch with Anna tomorrow 12:30-13:30 @Cafe #personal` or `Gym every tue 18:00 for 1h`, with a live preview ([syntax](https://gslama12.github.io/tcal/guide/typing-events)).
+- **Event form** — `e` edits an event [field by field](https://gslama12.github.io/tcal/guide/editing-events); recurring events ask for "this event" or "all events", invitees and alerts are kept.
+- **Event navigation** — in the week, `h` `j` `k` `l` jump from event to event; `v` switches to a grid cursor for empty slots.
+- **Flash jumps** — `f` labels every event and slot of the week on screen; type a label and the cursor is there.
+- **Move and resize** — `J` / `K` move a timed event by 15 minutes, `<` / `>` by a day; `o` resizes it.
+- **Copy and paste** — `y` / `p` copy and paste, `D` duplicates to the next day; mark several events with `tab` to copy them together.
+- **Undo** — `u` / `ctrl+r` undo and redo the last 20 changes, on iCloud too.
+- **Go to and search** — `g` jumps to `fri`, `+2w`, `24.12.` or `dec`; `/` searches your events.
+- **Subscriptions** — holidays, sports and other read-only calendars from any iCalendar URL.
 
-- **Batch copy:** mark events with `tab` (✓; marks stay while you browse), `y` copies them all,
-  then `p` on another day pastes them with the same day offsets and times; `u` undoes the paste.
-- **Go to date** (`g`: `tom`, `fri`, `next fri`, `+2w`, `in 3 days`, `24.12.`, `dec 24`, `dec`, `2027`, `2026-12-24`)
-  and **search** (`/`).
-- **iCloud sync** in the background, offline edits queued, server wins on conflicts;
-  read-only **subscriptions** (holidays, sports, …) from any iCalendar URL.
-- **Config** in TOML: every key rebindable, five themes, `tcal config check`, `tcal doctor`.
+> [!TIP]
+> **Press `?` for a list of every key**, always matching your config. More in the [documentation](https://gslama12.github.io/tcal/).
 
-## Install & run
 
-Needs Python ≥ 3.11 and [uv](https://docs.astral.sh/uv/).
+## Install
 
-```sh
-uv sync
-uv run tcal --demo     # try it with sample data, no account needed
-uv run tcal login      # set up your iCloud account (see below)
-uv run tcal            # start the calendar
+Needs Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+
+```bash
+git clone https://github.com/gslama12/tcal
+cd tcal
+uv tool install .
+tcal --demo  # sample data, no account needed
 ```
 
-For a global `tcal` command: `uv tool install .` (then just `tcal`, `tcal login`, …).
+Also check out the [installation guide](https://gslama12.github.io/tcal/guide/installation) and
+[getting started](https://gslama12.github.io/tcal/guide/getting-started).
 
-| Command | |
-|---|---|
-| `tcal` | start the calendar (`--demo`: sample data in a throwaway cache) |
-| `tcal login` | check and store your Apple ID + app-specific password |
-| `tcal sync` | sync once and print a summary |
-| `tcal calendars` | list the account's calendars (colour, read-only marks) |
-| `tcal doctor` | check the iCloud setup step by step (reads only) |
-| `tcal config path` / `edit` / `check` | where the config is / open it in `$VISUAL`/`$EDITOR` / validate it |
 
 ## iCloud setup
 
-1. Create an **app-specific password** at [appleid.apple.com](https://appleid.apple.com)
-   → *Sign-In and Security* → *App-Specific Passwords*. Your normal Apple ID password won't work
-   (and is never needed; no 2FA prompt).
-2. Run `tcal login` and enter your Apple ID e-mail and the app-specific password. tcal checks
-   them against `https://caldav.icloud.com`, saves the Apple ID to the config file and the
-   password in the system keyring (macOS Keychain, service `tcal`).
+1. Create an **app-specific password** at [appleid.apple.com](https://appleid.apple.com) →
+   *Sign-In and Security* → *App-Specific Passwords* (your normal Apple ID password won't work).
+2. Run `tcal login` and enter your Apple ID e-mail and that password, which is kept in the
+   system keyring (macOS Keychain).
+3. Start `tcal`.
 
-The password is looked up in this order:
+If something doesn't work, `tcal doctor` checks the setup step by step. See
+[iCloud](https://gslama12.github.io/tcal/guide/icloud) and
+[Troubleshooting](https://gslama12.github.io/tcal/reference/troubleshooting).
 
-1. the system keyring (written by `tcal login`)
-2. `password_cmd` in the config: a shell command that prints the password, e.g.
-   ```toml
-   [account]
-   apple_id = "you@icloud.com"
-   password_cmd = "pass show icloud/tcal"    # or: op read op://Private/iCloud/tcal
-   ```
-3. the `TCAL_PASSWORD` environment variable
 
-The sync window is the last 3 and the next 12 months (`[sync] past_months` / `future_months`),
-synced every 5 minutes (`interval`), after each edit and on `r`.
+## Configuration
 
-## Subscribed calendars
-
-Read-only iCalendar feeds (holidays, sports fixtures, a shared team calendar, …) are added in
-the config file, one `[[subscription]]` block each. They are fetched on every sync, cached for
-offline use and listed under **Other calendars** in the sidebar (toggle them like the others;
-they cannot be edited). `webcal://` URLs work as they are. A feed that fails keeps its cached
-events and gets a ⚠ in the calendar list and the status bar.
+Keys, theme, views, sync and subscriptions are set in `~/.config/tcal/config.toml`, on top of the
+[defaults](tcal/default_config.toml). `tcal config edit` opens it, `tcal config check` validates it.
 
 ```toml
-[[subscription]]
-name = "US Holidays"
-url = "webcal://calendars.icloud.com/holidays/us_en.ics"
-color = "#FF2968"          # optional; default: one of Apple's calendar colours
+[theme]
+name = "nord"              # default: tokyo-night
+
+[keys]
+new_event = ["n"]          # replaces all default keys of that action
 
 [[subscription]]
 name = "Feiertage"
 url = "https://calendars.icloud.com/holidays/at_de.ics"
 ```
 
-Apple's holiday calendars follow the pattern
-`https://calendars.icloud.com/holidays/<country>_<language>.ics` (e.g. `us_en`, `gb_en`,
-`de_de`, `at_de`). To copy the URL of any subscription you already have in Calendar.app:
-right-click the calendar → *Get Info* → *Subscribed to*.
+Every setting is listed in [Configuration](https://gslama12.github.io/tcal/reference/configuration),
+every key in [Keybindings](https://gslama12.github.io/tcal/guide/keybindings).
 
-## Configuration
+> Setting `TCAL_HOME` keeps config and data in that one directory instead, giving a fully isolated instance.
 
-The config file is `~/.config/tcal/config.toml` (`$XDG_CONFIG_HOME/tcal/config.toml`, also on
-macOS). It is merged over the [defaults](tcal/default_config.toml), so only write what you
-change. Unknown settings are errors. `tcal config edit` creates the file with every default
-commented out; `tcal config check` reports unknown settings/actions, bad values, an unknown theme
-and keys bound to more than one action.
-
-```toml
-[view]
-day_start = "08:00"        # first time shown in week view (scroll for earlier)
-day_end = "20:00"          # last time shown
-rows_per_hour = 4          # zoom 1..8; 0 = fit the terminal height (default)
-grid_step = 30             # grid mode: minutes per cursor slot, 15 | 30 | 60 (default)
-week_start = "sunday"
-default_view = "schedule"  # week | month | year | schedule
-
-[sync]
-interval = 120             # seconds between background syncs
-
-[theme]
-name = "tokyo-night"
-
-[keys]                     # action = list of keys; replaces that action's defaults
-quit = ["q", "ctrl+q"]
-new_event = ["n"]
-```
-
-**Themes:** `tokyo-night` (default, same palette as todooit), `nord`, `gruvbox`,
-`catppuccin-mocha` (dark) and `catppuccin-latte` (light). An unknown name falls back to
-`tokyo-night` with a warning.
-
-**Keys** use Textual key names: `"plus"`, `"minus"`, `"slash"`, `"question_mark"`,
-`"less_than_sign"`, `"ctrl+s"`, `"H"` for shift+h, … Overriding an action replaces its whole
-key list. A key bound to two actions only triggers one of them: tcal warns at startup and
-`tcal config check` lists the conflicts.
-
-### Default keys
-
-`?` in the app shows the same list with your own bindings. This table is the output of
-`uv run python scripts/keys_table.py`.
-
-<!-- keys:start -->
-| Keys | Action |
-|---|---|
-| **Navigation** | |
-| `h` `←` | Previous day (time grid: its nearest event) / move left |
-| `l` `→` | Next day (time grid: its nearest event) / move right |
-| `k` `↑` | Up (time grid: previous event, grid mode: earlier slot) |
-| `j` `↓` | Down (time grid: next event, grid mode: later slot) |
-| `v` | Grid mode: cursor keys move a slot cursor (again / esc: back) |
-| `H` | Previous week/month/year (schedule: 2 weeks) |
-| `L` | Next week/month/year (schedule: 2 weeks) |
-| `t` | Jump to today |
-| `g` | Go to date |
-| `f` | Flash jump: type a label to jump to an event or slot (time grid) |
-| **Views** | |
-| `w` | Week view |
-| `m` | Month view |
-| `Y` | Year view |
-| `s` | Schedule view (upcoming events) |
-| `+` | Zoom in (time grid) |
-| `-` | Zoom out (time grid) |
-| `c` | Focus the calendar list |
-| `M` | Focus the mini month (enter jumps to the day) |
-| `space` | Show/hide calendar (in the list) |
-| `b` | Show/hide the sidebar |
-| **Events** | |
-| `⏎` | Open event / else a new event |
-| `a` `i` | New event (time grid: after the selected event / at the grid slot) |
-| `A` | New event (same) |
-| `e` | Edit event |
-| `d` | Delete event |
-| `u` | Undo the last change |
-| `ctrl+r` | Redo the last undone change |
-| `tab` | Mark / unmark event (several: y copies all, esc clears) |
-| `y` | Copy (yank) event, or all marked events |
-| `p` | Paste at the selected event / grid slot / day (several: from that day on) |
-| `D` | Duplicate event to the next day |
-| `K` `ctrl+k` | Move event 15 min earlier (time grid) |
-| `J` `ctrl+j` | Move event 15 min later (time grid) |
-| `<` `ctrl+h` | Move event one day earlier |
-| `>` `ctrl+l` | Move event one day later |
-| `o` | Resize mode: up/down move the end, again: the start (esc: back) |
-| `/` | Search events |
-| **Event prompt / form** | |
-| `ctrl+s` | Save (as enter; in the form's notes enter is a new line) |
-| `esc` | Cancel / close dialog / leave resize, grid mode / clear marks |
-| **App** | |
-| `r` | Sync now |
-| `R` | Sync log (recent warnings and errors) |
-| `?` | This help |
-| `q` | Quit |
-<!-- keys:end -->
-
-`j`/`k` scroll the event detail; in the sidebar (`c` calendar list, `M` mini month) the cursor
-keys move its own cursor, esc or a view key returns to the main view. `J`/`K` move and
-`o` resizes timed events in the week grid only. ctrl+h/j/k/l are extra move keys
-(tmux often takes them); ctrl with a letter like `ö` needs a terminal with the kitty keyboard
-protocol.
-The sidebar hides itself below 120 columns (`b` pins your choice).
-
-## Typing events
-
-One line; the pieces may come in any order, the rest is the title. Enter saves, esc cancels.
-
-| | |
-|---|---|
-| Date | `today`/`tod` `tomorrow`/`tom`/`tmr` `yest` `fri`/`fr` `next mon` `in 3d` `in 2 weeks` `+3d` `24.12.` `24/12` `1.1.27` `dec 24` `24 dec` `2026-12-24`, ranges `dec 3-5` `mo-fr` |
-| Time | `at 1pm` `1p` `1:30pm` `13h` `13.30` `14:00` `noon` `midnight`, right after a date also `tom 9` `fri 1330`, ranges `12:30-13:30` `10-11:30` `1-2pm` `1pm-3`; length `for 2h` `2h` `90m` `1h30`; `all day` |
-| Repeat | `daily` `every week` `every 2 weeks on mon, wed` `every weekday` `every tue, thu`, ending `until 24.12.` / `until dec` / `10 times` |
-| Place | `@Cafe Central` |
-| Calendar | `#personal` (the start of its name is enough; tab completes, again for the next) |
-| Notes | `// everything after it` |
-| As typed | `"Issue #12 at 9:00"` is not read as a calendar or time |
-
-Short forms that could be a word, a name or a fraction (`tom`, `tod`, `mo` … `su`, `24/12`) are
-dates only in a date position: before a time (`tom at 1pm lunch`), where the title ends
-(`Dentist fr @Praxis`), before "with" (`Lunch tom with Anna`) or after `on`; `24/12` also first in
-the line. So "Meeting with Tom", "Call Tom 1pm", "Tom 1pm" (a title must remain), "How are we" and
-"Support 24/7" stay titles; another date in the line (`Tom fri 1pm`) wins too. `tmr`, `mon`
-and `24.12.` are always dates, quotes never. `1p` and a number after `at` (`at 13`) are times
-where the title ends, as in `Lunch at 13 @Cafe`; slash dates are day/month, the day above 12.
-
-## Editing events
-
-`e` (also in the event detail) opens the form: title, calendar, from / to, all day, repeat and its
-end, location, notes. `tab` / `shift+tab` and up / down go between the fields; on a calendar or
-repeat field the cursor keys left / right (`h` / `l`) change the choice and `space` opens its list
-(`j` / `k` move, enter chooses); `space` ticks "All day". Enter saves (in the notes it is a new
-line: `ctrl+s` saves there), esc cancels and asks before it discards changes. The keys of the
-focused field are shown at the bottom. Dates are typed as for goto (`fri`, `24.12.`,
-`2026-12-24`); the end follows the start. What the form doesn't show or you don't change (time
-zone, rules like "every third Wednesday", invitees, alarms) is kept.
-
-## Files
-
-| | default | with `TCAL_HOME=dir` |
-|---|---|---|
-| config | `~/.config/tcal/config.toml` | `dir/config.toml` |
-| cache (SQLite, incl. queued edits) | `~/.local/share/tcal/tcal.db` | `dir/data/tcal.db` |
-| log (sync warnings and errors) | `~/.local/share/tcal/tcal.log` | `dir/data/tcal.log` |
-| demo cache (recreated each run) | `~/.local/share/tcal/demo.db` | `dir/data/demo.db` |
-
-`XDG_CONFIG_HOME` / `XDG_DATA_HOME` are respected. `TCAL_HOME` gives a fully isolated
-instance, e.g. `TCAL_HOME=.tcal uv run tcal`. Deleting the cache is safe once nothing is
-pending (`↑N pending` in the status bar); it is rebuilt by the next sync.
-
-## Troubleshooting
-
-- **`tcal doctor`** checks account → password source → sign-in → calendar home → calendars →
-  this week's events → write access, stops at the first failing step and says what to fix
-  (exit code 1). It never writes and prints no password.
-- **Status bar:** `✓ synced 14:02`, `offline` (no network; edits stay queued as `↑N pending`),
-  `⚠ … failed` (a subscription feed). `r` syncs now and reports the result as a toast.
-- **Quitting during a sync:** tcal says `syncing…` in the terminal and waits for it; ctrl+c leaves
-  at once (unsynced edits stay queued for the next start).
-- **`tcal sync`** runs one sync in the terminal and prints the error, if any.
-- **Sync log:** `R` lists this session's sync warnings and errors (e.g. an unreadable event
-  that was skipped, a feed that failed); warnings are also toasted once. Conflicts (the server
-  version kept) are named in a toast and counted in `tcal sync`'s summary.
-- **Log file:** `tcal` and `tcal sync` also append warnings and errors to `tcal.log` in the
-  data directory (see [Files](#files); the sync log dialog prints its path). It rotates at
-  256 kB (one backup kept), so it is safe to leave alone and to attach to a bug report.
-- **Fresh start:** prefix any command with `TCAL_HOME=.tcal` for a separate config and cache.
 
 ## Development
 
-```sh
+```bash
+uv sync
+uv run tcal --demo
 uv run pytest -q
 uv run ruff check && uv run ruff format --check && uv run mypy
-uv run python scripts/keys_table.py   # key table above (a test checks it is up to date)
-uv run python scripts/bench.py        # ms per keypress with ~5000 events
 ```
 
-Tests need no network or keyring. Architecture and design decisions: [docs/PLAN.md](docs/PLAN.md).
+Tests need no network or keyring. Architecture and decisions are in [docs/PLAN.md](docs/PLAN.md).
 
-## What I need you to test
 
-Everything iCloud-specific is only tested against a fake server; please check with a real
-account (ideally `TCAL_HOME=.tcal` first, so a fresh cache is used):
+## License
 
-- [ ] **First** `tcal login`, then `tcal doctor`: every step shows ✓ (account, password source,
-      sign-in, calendar home on `pNN-caldav.icloud.com`, your calendars with colors and
-      read-only marks, this week's event count per calendar, write access). It only reads.
-      If a step fails, please send me its whole output (it contains no password).
-- [ ] `tcal login` succeeds and prints the right number of calendars; the password lands in the
-      Keychain (`security find-generic-password -s tcal -a you@icloud.com`); a wrong password
-      gives a clean error.
-- [ ] `tcal calendars`: names, colors and order match Calendar.app; Reminders lists are
-      not shown; shared/subscribed calendars you can't edit are marked read-only.
-- [ ] `tcal sync` / starting `tcal`: events from the last 3 and next 12 months appear at the
-      right local times, incl. all-day, multi-day and events created in another time zone.
-- [ ] Recurring events (weekly, with a deleted instance, with one instance moved on the iPhone)
-      show correctly.
-- [ ] Create, edit and delete an event in tcal → shows up on the iPhone / iCloud.com, and edits
-      there show up in tcal after `r`. Then edit the same event again in tcal (this relies on the
-      ETag iCloud returns after a PUT).
-- [ ] Delete "this event" and "all events" of a recurring event; edit a series, incl. an end
-      date / count (`until dec`, `10 times`) → the iPhone shows the same instances.
-- [ ] Add (`a`) a repeating event (`Gym every tue 18:00 for 1h #home`) → right calendar,
-      time and repeat on the iPhone.
-- [ ] Move events with `J`/`K`/`<`/`>`: a one-off, one instance of a series ("this event") and a
-      whole series ("all events", incl. a weekly one on Tue/Thu moved by one day) → same on
-      the iPhone. Then `u` repeatedly undoes each step on the server too.
-- [ ] Resize events (`,` `.` `;` `:`): a one-off, one instance and a whole series → same times on
-      the iPhone; `u` restores them.
-- [ ] Delete an event, sync (`r`), then `u` → it comes back on the iPhone.
-- [ ] Yank/paste (`y`, `p`) and duplicate (`D`) → plain copies on the iPhone.
-- [ ] Batch copy: mark a week's events with `tab`, `y`, go to the next week, `p` → all copies on the
-  iPhone; `u` removes them all again.
-- [ ] Move an event to another calendar (edit → another calendar), sync, then undo it, sync,
-      and redo it (`ctrl+r`) → one copy, in the right calendar, each time.
-- [ ] Conflict: change an event on the iPhone, then change it in tcal before syncing → the
-      iPhone version wins and tcal doesn't get stuck. With the event form open while the
-      iPhone change syncs in, saving asks "overwrite / discard".
-- [ ] Offline: disable Wi-Fi, create/edit an event (`↑N pending`, status *offline*), reconnect,
-      `r` → pushed. Starting tcal for the first time without network explains why it's empty.
-- [ ] Events with alarms or invitees keep them after editing in tcal; the detail shows guests
-      with their answers and the alerts like Calendar.app.
-- [ ] Editing in a read-only calendar is refused.
-- [ ] A `[[subscription]]` to an Apple holiday feed (e.g. `at_de`) shows under *Other
-      calendars*; a wrong URL shows ⚠ and doesn't break the sync.
-- [ ] `password_cmd` and `TCAL_PASSWORD` work when the keyring entry is absent.
+[MIT](LICENSE)
