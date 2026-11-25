@@ -27,6 +27,7 @@ uv run ruff check && uv run ruff format --check && uv run mypy
 - `tcal/ics.py` — iCalendar text <-> `Event` (edits are written into `Event.raw`).
 - `tcal/recurrence.py` — `expand(events, start, end)` -> `Occurrence`s; `tcal/tz.py` local zone.
 - `tcal/store.py` — SQLite cache + pending-ops queue; `tcal/sync.py` — `SyncEngine`, `sync_job`.
+- `tcal/background.py` — `SyncRunner` (daemon threads), `finish_sync` (after the TUI closed).
 - `tcal/credentials.py` — password: keyring -> `password_cmd` -> `$TCAL_PASSWORD`.
 - `tcal/source.py` — `EventSource`/`StoreSource`: the only way the UI gets data
   (`calendars()`, `occurrences(start_day, end_day)`, `save_event`, `delete_event`).
